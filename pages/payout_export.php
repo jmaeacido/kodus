@@ -2,8 +2,26 @@
 require '../vendor/autoload.php';
 include('../config.php');
 require_once __DIR__ . '/../export_style_helpers.php';
+require_once __DIR__ . '/../project_variable_helpers.php';
+session_start();
 
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
+
+if (!isset($_SESSION['selected_year'])) {
+    http_response_code(400);
+    exit('Fiscal year not selected.');
+}
+
+$year = (int) $_SESSION['selected_year'];
+$dailyWageRate = project_variable_get_number($conn, 'daily_wage_rate', $year, 0);
+$payoutDays = (int) round(project_variable_get_number($conn, 'working_days', $year, 20));
+$payoutDays = $payoutDays > 0 ? $payoutDays : 20;
+$beneficiaryPayoutRate = $dailyWageRate * $payoutDays;
+
+if ($dailyWageRate <= 0) {
+    http_response_code(400);
+    exit('Missing project variable for daily wage rate in the selected fiscal year.');
+}
 
 $spreadsheet = new Spreadsheet();
 $sheet = $spreadsheet->getActiveSheet();
@@ -15,20 +33,23 @@ $headers = [
     'Paid', 'Amount Paid', 'Unpaid', 'Amount Unpaid'
 ];
 
-$query = "
+$stmt = $conn->prepare("
     SELECT province, lgu, barangay, benesNumber, amount, paid, payoutDate 
     FROM breakdown 
+    WHERE YEAR(payoutDate) = ?
     ORDER BY province, lgu, barangay;
-";
-$result = mysqli_query($conn, $query);
+");
+$stmt->bind_param('i', $year);
+$stmt->execute();
+$result = $stmt->get_result();
 
 $totalBenes = $totalAmount = $totalPaid = $totalUnpaid = 0;
 $dataRows = [];
 
 while ($row = mysqli_fetch_assoc($result)) {
     $unpaid = $row['benesNumber'] - $row['paid'];
-    $amountPaid = $row['paid'] * 7700;
-    $amountUnpaid = $unpaid * 7700;
+    $amountPaid = $row['paid'] * $beneficiaryPayoutRate;
+    $amountUnpaid = $unpaid * $beneficiaryPayoutRate;
 
     $totalBenes += $row['benesNumber'];
     $totalAmount += $row['amount'];
@@ -49,12 +70,12 @@ while ($row = mysqli_fetch_assoc($result)) {
     ];
 }
 
-$totalAmountPaid = $totalPaid * 7700;
-$totalAmountUnpaid = $totalUnpaid * 7700;
+$totalAmountPaid = $totalPaid * $beneficiaryPayoutRate;
+$totalAmountUnpaid = $totalUnpaid * $beneficiaryPayoutRate;
 
 $sheet->setCellValue('A1', 'Payout Details');
 $sheet->mergeCells('A1:J1');
-$sheet->setCellValue('A2', 'Generated on ' . date('F d, Y h:i A'));
+$sheet->setCellValue('A2', 'Generated on ' . date('F d, Y h:i A') . ' | Fiscal Year ' . $year . ' | Daily Wage Rate PHP ' . number_format($dailyWageRate, 2) . ' | Payout Days ' . $payoutDays);
 $sheet->mergeCells('A2:J2');
 $sheet->fromArray([
     'Total', '', '', $totalBenes, $totalAmount, '', $totalPaid, $totalAmountPaid, $totalUnpaid, $totalAmountUnpaid

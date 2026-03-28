@@ -1,6 +1,7 @@
 <?php
     include('../header.php');
     include('../sidenav.php');
+    require_once __DIR__ . '/../project_variable_helpers.php';
 
     // Ensure a fiscal year is selected
     if (!isset($_SESSION['selected_year'])) {
@@ -10,6 +11,10 @@
 
     $year = (int) $_SESSION['selected_year'];
     $userType = $_SESSION['user_type'] ?? 'user';
+    $dailyWageRate = project_variable_get_number($conn, 'daily_wage_rate', $year, 0);
+    $payoutDays = (int) round(project_variable_get_number($conn, 'working_days', $year, 20));
+    $payoutDays = $payoutDays > 0 ? $payoutDays : 20;
+    $beneficiaryPayoutRate = $dailyWageRate * $payoutDays;
 
     // Use prepared statement (safer)
     $stmt = $conn->prepare("
@@ -49,14 +54,18 @@
     }
 
     // Calculate final totals AFTER loop
-    $totalAmountPaid = $totalPaid * 7700;
-    $totalAmountUnpaid = $totalUnpaid * 7700;
+    $totalAmountPaid = $totalPaid * $beneficiaryPayoutRate;
+    $totalAmountUnpaid = $totalUnpaid * $beneficiaryPayoutRate;
 
     $stmt->close();
 ?>
 
 <script>
 const userType = '<?php echo $userType; ?>';
+const selectedYear = <?php echo json_encode($year); ?>;
+const dailyWageRate = <?php echo json_encode($dailyWageRate); ?>;
+const payoutDays = <?php echo json_encode($payoutDays); ?>;
+const beneficiaryPayoutRate = <?php echo json_encode($beneficiaryPayoutRate); ?>;
 </script>
 
 <!DOCTYPE html>
@@ -85,6 +94,18 @@ const userType = '<?php echo $userType; ?>';
 </div>
 
 <div class="card-body">
+<?php if ($dailyWageRate <= 0): ?>
+  <div class="alert alert-warning">
+    No project variable is configured yet for <strong>daily_wage_rate</strong> in fiscal year <?= htmlspecialchars((string) $year, ENT_QUOTES, 'UTF-8') ?>.
+    Ask an administrator to update <a href="<?= htmlspecialchars($base_url, ENT_QUOTES, 'UTF-8') ?>kodus/admin/project_variables">Project Variables</a>.
+  </div>
+<?php endif; ?>
+<?php if ($payoutDays <= 0): ?>
+  <div class="alert alert-warning">
+    No project variable is configured yet for <strong>working_days</strong> in fiscal year <?= htmlspecialchars((string) $year, ENT_QUOTES, 'UTF-8') ?>.
+    Ask an administrator to update <a href="<?= htmlspecialchars($base_url, ENT_QUOTES, 'UTF-8') ?>kodus/admin/project_variables">Project Variables</a>.
+  </div>
+<?php endif; ?>
 <div class="table-container">
 
 <table id="sectoralTable" class="table table-bordered table-striped" style="text-align:center; width:100%;">
@@ -126,10 +147,11 @@ data-province="<?= htmlspecialchars($row['province']); ?>"
 data-lgu="<?= htmlspecialchars($row['lgu']); ?>"
 data-barangay="<?= htmlspecialchars($row['barangay']); ?>"
 data-benes="<?= $row['benesNumber']; ?>"
-data-amount="<?= number_format($row['amount'], 2); ?>"
+data-amount="<?= htmlspecialchars((string) $row['amount'], ENT_QUOTES, 'UTF-8'); ?>"
 data-paid="<?= $row['paid']; ?>"
 data-unpaid="<?= $row['unpaid']; ?>"
-data-date="<?= !empty($row['payoutDate']) ? date("F d, Y", strtotime($row['payoutDate'])) : ''; ?>"
+data-date-display="<?= !empty($row['payoutDate']) ? date("F d, Y", strtotime($row['payoutDate'])) : ''; ?>"
+data-date-iso="<?= !empty($row['payoutDate']) ? htmlspecialchars($row['payoutDate'], ENT_QUOTES, 'UTF-8') : ''; ?>"
 >
 <i class="nav-icon fas fa-eye" aria-hidden="true"></i>
 </button></span>
@@ -142,9 +164,9 @@ data-date="<?= !empty($row['payoutDate']) ? date("F d, Y", strtotime($row['payou
 <td><?= number_format($row['amount'], 2); ?></td>
 <td><?= !empty($row['payoutDate']) ? date("F d, Y", strtotime($row['payoutDate'])) : ''; ?></td>
 <td><?= $row['paid']; ?></td>
-<td><?= number_format($row['paid'] * 7700, 2); ?></td>
+<td><?= number_format($row['paid'] * $beneficiaryPayoutRate, 2); ?></td>
 <td><?= $row['unpaid']; ?></td>
-<td><?= number_format($row['unpaid'] * 7700, 2); ?></td>
+<td><?= number_format($row['unpaid'] * $beneficiaryPayoutRate, 2); ?></td>
 </tr>
 <?php endforeach; ?>
 </tbody>
@@ -205,17 +227,18 @@ $(document).on("click", ".details-btn", function () {
     const province = $(this).data("province");
     const lgu = $(this).data("lgu");
     const barangay = $(this).data("barangay");
-    const benes = $(this).data("benes");
-    const amount = $(this).data("amount");
-    const paid = $(this).data("paid");
-    const unpaid = $(this).data("unpaid");
-    const payoutDate = $(this).data("date");
-    const formatCurrency = (value) => `&#8369;${Number(String(value).replace(/,/g, '')).toLocaleString(undefined, {
+    const benes = Number($(this).data("benes")) || 0;
+    const amount = Number($(this).data("amount")) || 0;
+    const paid = Number($(this).data("paid")) || 0;
+    const unpaid = Number($(this).data("unpaid")) || 0;
+    const payoutDateDisplay = $(this).data("date-display");
+    const payoutDateIso = $(this).data("date-iso");
+    const formatCurrency = (value) => `&#8369;${Number(value || 0).toLocaleString(undefined, {
         minimumFractionDigits: 2,
         maximumFractionDigits: 2
     })}`;
-    const paidAmount = paid * 7700;
-    const unpaidAmount = unpaid * 7700;
+    const paidAmount = paid * beneficiaryPayoutRate;
+    const unpaidAmount = unpaid * beneficiaryPayoutRate;
 
     Swal.fire({
         title: 'Payout Breakdown Details',
@@ -230,7 +253,7 @@ $(document).on("click", ".details-btn", function () {
                         <h3 class="kodus-detail-title">${barangay}, ${lgu}</h3>
                         <p class="kodus-detail-subtitle">${province}</p>
                     </div>
-                    <div class="kodus-detail-pill">${payoutDate || 'No payout date set'}</div>
+                    <div class="kodus-detail-pill">${payoutDateDisplay || 'No payout date set'}</div>
                 </div>
 
                 <div class="kodus-detail-grid">
@@ -260,7 +283,8 @@ $(document).on("click", ".details-btn", function () {
                     <tr><th>Total Amount</th><td>${formatCurrency(amount)}</td></tr>
                     <tr><th>Paid Amount</th><td>${Number(paid).toLocaleString()} beneficiaries (${formatCurrency(paidAmount)})</td></tr>
                     <tr><th>Unpaid Amount</th><td>${Number(unpaid).toLocaleString()} beneficiaries (${formatCurrency(unpaidAmount)})</td></tr>
-                    <tr><th>Payout Date</th><td>${payoutDate || 'No payout date set'}</td></tr>
+                    <tr><th>Computation Rule</th><td>${formatCurrency(dailyWageRate)} x ${Number(payoutDays).toLocaleString()} days</td></tr>
+                    <tr><th>Payout Date</th><td>${payoutDateDisplay || 'No payout date set'}</td></tr>
                 </table>
             </div>
         `,
@@ -271,13 +295,14 @@ $(document).on("click", ".details-btn", function () {
         cancelButtonText: '<i class="fas fa-times"></i>'
     }).then((result) => {
         if (result.isConfirmed && (userType === 'admin' || userType === 'aa')) {
-            showEditForm(id, province, lgu, barangay, benes, amount, paid, payoutDate);
+            showEditForm(id, province, lgu, barangay, benes, amount, paid, payoutDateIso);
         }
     });
 });
 </script>
 <script>
   function showEditForm(id, province, lgu, barangay, benes, amount, paid, payoutDate) {
+    const safeAmount = Number(amount) || 0;
     Swal.fire({
         title: 'Edit Payout Details',
         customClass: {
@@ -287,7 +312,7 @@ $(document).on("click", ".details-btn", function () {
             <form id="editForm" class="kodus-edit-shell">
               <div class="kodus-edit-header">
                 <h3 class="kodus-edit-header-title">${barangay}, ${lgu}</h3>
-                <p class="kodus-edit-header-note">Adjust the payout location, beneficiary count, and payment totals for this record.</p>
+                <p class="kodus-edit-header-note">Adjust the payout location and counts. Totals are computed automatically for ${selectedYear} using project variables: &#8369;${dailyWageRate.toFixed(2)} for ${payoutDays} days.</p>
               </div>
 
               <div class="kodus-edit-section">
@@ -317,15 +342,44 @@ $(document).on("click", ".details-btn", function () {
                 <div class="kodus-edit-grid kodus-edit-grid--compact">
                   <div class="kodus-edit-field">
                     <label>No. of Partner-Beneficiaries</label>
-                    <input id="edit-benes" type="number" class="form-control" value="${benes}">
+                    <input id="edit-benes" type="number" min="0" class="form-control" value="${benes}">
                   </div>
                   <div class="kodus-edit-field">
-                    <label>Amount</label>
-                    <input id="edit-amount" type="number" step="0.01" class="form-control" value="${parseFloat(amount.toString().replace(/,/g, ''))}">
+                    <label>Amount (Auto-calculated)</label>
+                    <input id="edit-amount" type="number" step="0.01" class="form-control" value="${safeAmount.toFixed(2)}" readonly>
                   </div>
                   <div class="kodus-edit-field">
                     <label>Paid</label>
-                    <input id="edit-paid" type="number" class="form-control" value="${paid}">
+                    <input id="edit-paid" type="number" min="0" class="form-control" value="${paid}">
+                  </div>
+                  <div class="kodus-edit-field">
+                    <label>Unpaid (Auto-calculated)</label>
+                    <input id="edit-unpaid" type="number" class="form-control" value="${Math.max(Number(benes) - Number(paid), 0)}" readonly>
+                  </div>
+                </div>
+              </div>
+
+              <div class="kodus-edit-section">
+                <h6 class="kodus-edit-section-title">Calculated Summary</h6>
+                <div class="kodus-detail-grid">
+                  <div class="kodus-detail-stat">
+                    <span class="kodus-detail-label">Daily Wage Rate</span>
+                    <span class="kodus-detail-value kodus-detail-value--strong">&#8369;${dailyWageRate.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                  </div>
+                  <div class="kodus-detail-stat">
+                    <span class="kodus-detail-label">Payout Days</span>
+                    <span class="kodus-detail-value kodus-detail-value--strong">${Number(payoutDays).toLocaleString()}</span>
+                  </div>
+                  <div class="kodus-detail-stat">
+                    <span class="kodus-detail-label">Amount Paid</span>
+                    <span id="edit-amount-paid" class="kodus-detail-value kodus-detail-value--strong kodus-detail-value--positive">&#8369;0.00</span>
+                  </div>
+                  <div class="kodus-detail-stat">
+                    <span class="kodus-detail-label">Amount Unpaid</span>
+                    <span id="edit-amount-unpaid" class="kodus-detail-value kodus-detail-value--strong kodus-detail-value--warning">&#8369;0.00</span>
+                  </div>
+                  <div class="kodus-edit-field" style="grid-column: 1 / -1;">
+                    <small id="edit-calculation-note" class="text-muted d-block">Amounts update automatically from the beneficiary and paid counts.</small>
                   </div>
                 </div>
               </div>
@@ -337,16 +391,86 @@ $(document).on("click", ".details-btn", function () {
         focusConfirm: false,
         confirmButtonText: '<i class="fas fa-save"></i>',
         cancelButtonText: '<i class="fas fa-times"></i>',
+        didOpen: () => {
+            const benesInput = document.getElementById('edit-benes');
+            const paidInput = document.getElementById('edit-paid');
+            const amountInput = document.getElementById('edit-amount');
+            const unpaidInput = document.getElementById('edit-unpaid');
+            const amountPaidNode = document.getElementById('edit-amount-paid');
+            const amountUnpaidNode = document.getElementById('edit-amount-unpaid');
+            const noteNode = document.getElementById('edit-calculation-note');
+
+            function normalizeWholeNumber(value) {
+                const parsed = parseInt(value, 10);
+                return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+            }
+
+            function syncComputedFields() {
+                const benesValue = normalizeWholeNumber(benesInput.value);
+                let paidValue = normalizeWholeNumber(paidInput.value);
+
+                if (paidValue > benesValue) {
+                    paidValue = benesValue;
+                    paidInput.value = String(paidValue);
+                }
+
+                const unpaidValue = Math.max(benesValue - paidValue, 0);
+                const totalAmount = benesValue * beneficiaryPayoutRate;
+                const paidAmount = paidValue * beneficiaryPayoutRate;
+                const unpaidAmount = unpaidValue * beneficiaryPayoutRate;
+
+                amountInput.value = totalAmount.toFixed(2);
+                unpaidInput.value = String(unpaidValue);
+                amountPaidNode.innerHTML = `&#8369;${paidAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+                amountUnpaidNode.innerHTML = `&#8369;${unpaidAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+                if (benesValue === 0) {
+                    noteNode.textContent = `Enter the number of beneficiaries to calculate the ${selectedYear} payout totals.`;
+                } else {
+                    noteNode.textContent = `${benesValue.toLocaleString()} beneficiaries x PHP ${dailyWageRate.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} x ${Number(payoutDays).toLocaleString()} days = PHP ${totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}.`;
+                }
+            }
+
+            benesInput.addEventListener('input', syncComputedFields);
+            paidInput.addEventListener('input', syncComputedFields);
+            syncComputedFields();
+        },
         preConfirm: () => {
-            // Collect values manually
+            const provinceValue = $('#edit-province').val().trim();
+            const lguValue = $('#edit-lgu').val().trim();
+            const barangayValue = $('#edit-barangay').val().trim();
+            const benesValue = Number.parseInt($('#edit-benes').val(), 10);
+            const paidValue = Number.parseInt($('#edit-paid').val(), 10);
+            const amountValue = Number.parseFloat($('#edit-amount').val());
+
+            if (!provinceValue || !lguValue || !barangayValue) {
+                Swal.showValidationMessage('Province, city / municipality, and barangay are required.');
+                return false;
+            }
+
+            if (!Number.isFinite(benesValue) || benesValue < 0) {
+                Swal.showValidationMessage('No. of Partner-Beneficiaries must be 0 or greater.');
+                return false;
+            }
+
+            if (!Number.isFinite(paidValue) || paidValue < 0) {
+                Swal.showValidationMessage('Paid must be 0 or greater.');
+                return false;
+            }
+
+            if (paidValue > benesValue) {
+                Swal.showValidationMessage('Paid cannot be greater than the total number of beneficiaries.');
+                return false;
+            }
+
             const payload = {
                 id: id,
-                province: $('#edit-province').val(),
-                lgu: $('#edit-lgu').val(),
-                barangay: $('#edit-barangay').val(),
-                benesNumber: $('#edit-benes').val(),
-                amount: $('#edit-amount').val(),
-                paid: $('#edit-paid').val(),
+                province: provinceValue,
+                lgu: lguValue,
+                barangay: barangayValue,
+                benesNumber: benesValue,
+                amount: amountValue,
+                paid: paidValue,
                 payoutDate: $('#edit-date').val()
             };
 

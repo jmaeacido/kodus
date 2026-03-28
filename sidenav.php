@@ -656,11 +656,11 @@ if (isset($_SESSION['user_id'])) {
           <?php endif; ?> -->
           <?php if ($_SESSION['user_type'] == 'admin'): ?>
           <li class="nav-header">Administration</li>
-          <li class="nav-item <?= in_array($current_page, ['restore_users.php', 'classify_users.php', 'deactivate_users.php', 'users_management.php']) ? 'menu-open' : ''; ?>">
-            <a href="#" class="nav-link <?= in_array($current_page, ['restore_users.php', 'classify_users.php', 'deactivate_users.php', 'users_management.php']) ? 'active' : ''; ?>">
+          <li class="nav-item <?= in_array($current_page, ['restore_users.php', 'classify_users.php', 'deactivate_users.php', 'users_management.php', 'project_variables.php', 'payout_variables.php']) ? 'menu-open' : ''; ?>">
+            <a href="#" class="nav-link <?= in_array($current_page, ['restore_users.php', 'classify_users.php', 'deactivate_users.php', 'users_management.php', 'project_variables.php', 'payout_variables.php']) ? 'active' : ''; ?>">
               <i class="fas fa-users nav-icon"></i>
               <p>
-                Users Management
+                Administration
                 <i class="right fas fa-angle-left"></i>
               </p>
             </a>
@@ -669,6 +669,12 @@ if (isset($_SESSION['user_id'])) {
                 <a href="<?= $base_url; ?>kodus/admin/users_management" class="nav-link <?= in_array($current_page, ['restore_users.php', 'classify_users.php', 'deactivate_users.php', 'users_management.php']) ? 'active' : ''; ?>">
                   <i class="fas fa-user-cog nav-icon"></i>
                   <p>Users Management</p>
+                </a>
+              </li>
+              <li class="nav-item">
+                <a href="<?= $base_url; ?>kodus/admin/project_variables" class="nav-link <?= in_array($current_page, ['project_variables.php', 'payout_variables.php']) ? 'active' : ''; ?>">
+                  <i class="fas fa-sliders-h nav-icon"></i>
+                  <p>Project Variables</p>
                 </a>
               </li>
             </ul>

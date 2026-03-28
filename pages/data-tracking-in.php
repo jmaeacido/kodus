@@ -594,6 +594,7 @@ $(document).on("click", ".edit-btn", function () {
     // Show SweetAlert2 modal with details
     Swal.fire({
         title: "Document Details",
+        kodusHeroHeader: false,
         width: 920,
         customClass: {
             popup: 'kodus-detail-popup'
@@ -644,6 +645,7 @@ function openPopup(url) {
 function showEditForm(rowData, date_received, focal) {
     Swal.fire({
         title: "Edit Document",
+        kodusHeroHeader: false,
         customClass: {
             popup: 'kodus-edit-popup'
         },
@@ -749,7 +751,8 @@ $(document).on("click", ".forward-btn", function() {
     const rowData = table.row($(this).parents("tr")).data();
     
     Swal.fire({
-        title: "Forward Document",
+        //title: "Forward Document",
+        kodusHeroHeader: false,
         customClass: {
             popup: 'kodus-form-popup',
             confirmButton: 'kodus-form-confirm',
@@ -840,7 +843,7 @@ document.getElementById("track-documents").addEventListener("click", function ()
     const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
     
     Swal.fire({
-        title: "Track Incoming Document",
+        kodusHeroHeader: false,
         customClass: {
             popup: 'kodus-form-popup',
             confirmButton: 'kodus-form-confirm',

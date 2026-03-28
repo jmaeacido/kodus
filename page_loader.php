@@ -565,6 +565,11 @@ if (isset($themePreference) && is_string($themePreference) && $themePreference !
           return typeof config.confirmButtonText === 'string' && config.confirmButtonText.indexOf('fa-pen') !== -1;
         }
 
+        function isDismissText(value) {
+          var text = String(value || '').toLowerCase().trim();
+          return text === 'cancel' || text === 'close' || text === 'dismiss';
+        }
+
         function isIconOnlyCloseCancel(config) {
           return typeof config.cancelButtonText === 'string' && config.cancelButtonText.indexOf('fa-times') !== -1;
         }
@@ -582,14 +587,117 @@ if (isset($themePreference) && is_string($themePreference) && $themePreference !
           actions.style.display = visibleButtons.length > 0 ? '' : 'none';
         }
 
+        function escapeHtml(value) {
+          return String(value == null ? '' : value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+        }
+
+        function getSwalIconMeta(icon) {
+          switch (String(icon || '').toLowerCase()) {
+            case 'success':
+              return { label: 'Success', iconClass: 'fas fa-check-circle' };
+            case 'error':
+              return { label: 'Alert', iconClass: 'fas fa-exclamation-circle' };
+            case 'warning':
+              return { label: 'Attention', iconClass: 'fas fa-exclamation-triangle' };
+            case 'info':
+              return { label: 'Information', iconClass: 'fas fa-info-circle' };
+            case 'question':
+              return { label: 'Question', iconClass: 'fas fa-question-circle' };
+            default:
+              return { label: 'Dialog', iconClass: 'fas fa-window-maximize' };
+          }
+        }
+
+        function resolveSwalPageLabel() {
+          var rawTitle = document.title || 'KODUS';
+          var parts = rawTitle.split('|').map(function (part) { return part.trim(); }).filter(Boolean);
+          return parts.length > 1 ? parts[1] : parts[0];
+        }
+
+        function shouldDecorateSwalHeader(config, popup) {
+          if (!popup || config.toast) {
+            return false;
+          }
+
+          if (config.kodusHeroHeader === false) {
+            return false;
+          }
+
+          var icon = String(config.icon || '').toLowerCase();
+          if (icon === 'success' || icon === 'error') {
+            return false;
+          }
+
+          if (popup.classList.contains('kodus-swal-hero-ready') || popup.querySelector('.kodus-swal-hero')) {
+            return false;
+          }
+
+          if (
+            popup.classList.contains('verify-swal-popup') ||
+            popup.querySelector('.kodus-detail-modal, .activity-edit-shell, .kodus-edit-shell, .verify-swal-popup')
+          ) {
+            return false;
+          }
+
+          var titleEl = window.Swal.getTitle && window.Swal.getTitle();
+          var titleText = titleEl ? String(titleEl.textContent || '').trim() : String(config.title || '').trim();
+          return titleText !== '';
+        }
+
+        function enhanceSwalHeader(config, popup) {
+          if (!shouldDecorateSwalHeader(config, popup)) {
+            return;
+          }
+
+          var titleEl = window.Swal.getTitle && window.Swal.getTitle();
+          var iconEl = popup.querySelector('.swal2-icon');
+          var titleText = titleEl ? String(titleEl.textContent || '').trim() : String(config.title || '').trim();
+          var pageLabel = resolveSwalPageLabel();
+          var iconMeta = getSwalIconMeta(config.icon);
+          var pageText = pageLabel && pageLabel !== titleText ? pageLabel : 'KODUS Workspace';
+          var hero = document.createElement('div');
+
+          hero.className = 'kodus-swal-hero';
+          hero.innerHTML =
+            '<div class="kodus-swal-hero-copy">' +
+              '<span class="kodus-swal-hero-eyebrow"><i class="' + escapeHtml(iconMeta.iconClass) + '"></i>' + escapeHtml(pageText) + '</span>' +
+              '<h3 class="kodus-swal-hero-title">' + escapeHtml(titleText) + '</h3>' +
+              '<p class="kodus-swal-hero-subtitle">Review the details below and continue when you are ready.</p>' +
+            '</div>' +
+            '<div class="kodus-swal-hero-badge"><i class="' + escapeHtml(iconMeta.iconClass) + '"></i>' + escapeHtml(iconMeta.label) + '</div>';
+
+          popup.insertBefore(hero, popup.firstChild);
+          popup.classList.add('kodus-swal-hero-ready');
+
+          if (titleEl) {
+            titleEl.setAttribute('aria-hidden', 'true');
+          }
+
+          if (iconEl) {
+            iconEl.setAttribute('aria-hidden', 'true');
+          }
+        }
+
         function enhanceSwalChrome(config, popup) {
-          if (!popup || config.toast || !isEditActionConfig(config)) {
+          if (!popup || config.toast) {
             return;
           }
 
           var closeButton = window.Swal.getCloseButton && window.Swal.getCloseButton();
           var confirmButton = window.Swal.getConfirmButton && window.Swal.getConfirmButton();
-          if (!closeButton || !confirmButton) {
+          var cancelButton = window.Swal.getCancelButton && window.Swal.getCancelButton();
+          var shouldMoveConfirm = isEditActionConfig(config) && !!confirmButton;
+          var shouldHideDuplicateCancel = !!cancelButton && isIconOnlyCloseCancel(config);
+          var shouldMoveCancel = !!cancelButton && !shouldHideDuplicateCancel && isDismissText(config.cancelButtonText);
+          var shouldUseCloseButton = !!closeButton && !shouldMoveCancel;
+          var shouldDecorateActions = shouldUseCloseButton || shouldMoveConfirm || shouldMoveCancel;
+
+          if (!shouldDecorateActions) {
             return;
           }
 
@@ -602,17 +710,30 @@ if (isset($themePreference) && is_string($themePreference) && $themePreference !
             popup.insertBefore(topActions, popup.firstChild);
           }
 
-          confirmButton.classList.add('kodus-swal-top-action-button');
-          closeButton.classList.add('kodus-swal-top-action-button');
+          if (closeButton) {
+            closeButton.style.display = shouldUseCloseButton ? '' : 'none';
+          }
 
-          topActions.appendChild(confirmButton);
-          topActions.appendChild(closeButton);
+          if (cancelButton) {
+            cancelButton.style.display = shouldHideDuplicateCancel ? 'none' : '';
+          }
 
-          if (isIconOnlyCloseCancel(config)) {
-            var cancelButton = window.Swal.getCancelButton && window.Swal.getCancelButton();
-            if (cancelButton) {
-              cancelButton.style.display = 'none';
-            }
+          if (shouldMoveConfirm) {
+            confirmButton.classList.add('kodus-swal-top-action-button');
+            topActions.appendChild(confirmButton);
+          }
+
+          if (shouldUseCloseButton) {
+            closeButton.classList.add('kodus-swal-top-action-button');
+            topActions.appendChild(closeButton);
+          }
+
+          if (shouldMoveCancel) {
+            cancelButton.classList.add('kodus-swal-top-action-button');
+            cancelButton.innerHTML = '<i class="fas fa-times"></i>';
+            cancelButton.setAttribute('aria-label', 'Cancel');
+            cancelButton.setAttribute('title', 'Cancel');
+            topActions.appendChild(cancelButton);
           }
 
           syncSwalActionsVisibility();
@@ -623,7 +744,9 @@ if (isset($themePreference) && is_string($themePreference) && $themePreference !
           var config = normalizedArgs[0] || {};
           var originalDidOpen = config.didOpen;
 
-          hideModalLoader();
+          if (config.kodusKeepPageLoader !== true) {
+            hideModalLoader();
+          }
 
           if (typeof config.showCloseButton === 'undefined' && !config.toast) {
             config.showCloseButton = true;
@@ -634,6 +757,7 @@ if (isset($themePreference) && is_string($themePreference) && $themePreference !
           }
 
           config.didOpen = function (popup) {
+            enhanceSwalHeader(config, popup);
             enhanceSwalChrome(config, popup);
 
             if (typeof originalDidOpen === 'function') {

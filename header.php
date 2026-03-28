@@ -222,6 +222,92 @@ if (isset($_SESSION['user_id']) && is_numeric($_SESSION['user_id'])) {
         margin-top: 0.75rem;
       }
 
+      .swal2-popup.kodus-swal-hero-ready .swal2-title,
+      .swal2-popup.kodus-swal-hero-ready .swal2-icon {
+        display: none !important;
+      }
+
+      .swal2-popup.kodus-swal-hero-ready .swal2-html-container {
+        margin-top: 0.8rem;
+      }
+
+      .kodus-swal-hero {
+        position: relative;
+        overflow: hidden;
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 1rem;
+        padding: 1rem 4.8rem 1rem 1.05rem;
+        margin-bottom: 0.85rem;
+        border-radius: 18px;
+        border: 1px solid var(--kodus-detail-border);
+        background: linear-gradient(135deg, var(--kodus-detail-hero-start), var(--kodus-detail-hero-end));
+      }
+
+      .kodus-swal-hero::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0));
+        pointer-events: none;
+      }
+
+      .kodus-swal-hero-copy,
+      .kodus-swal-hero-badge {
+        position: relative;
+        z-index: 1;
+      }
+
+      .kodus-swal-hero-eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.45rem;
+        margin-bottom: 0.35rem;
+        font-size: 0.72rem;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--kodus-detail-muted);
+      }
+
+      .kodus-swal-hero-title {
+        margin: 0;
+        font-size: 1.18rem;
+        font-weight: 700;
+        line-height: 1.3;
+        color: var(--kodus-detail-text);
+      }
+
+      .kodus-swal-hero-subtitle {
+        margin: 0.3rem 0 0;
+        color: var(--kodus-detail-muted);
+        line-height: 1.45;
+        font-size: 0.9rem;
+      }
+
+      .kodus-swal-hero-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.45rem;
+        min-height: 2.2rem;
+        padding: 0.45rem 0.8rem;
+        border-radius: 999px;
+        border: 1px solid var(--kodus-detail-border);
+        background: var(--kodus-detail-panel);
+        color: var(--kodus-detail-text);
+        font-size: 0.8rem;
+        font-weight: 700;
+        white-space: nowrap;
+      }
+
+      @media (max-width: 576px) {
+        .kodus-swal-hero {
+          padding-right: 1.05rem;
+          flex-direction: column;
+        }
+      }
+
       .swal2-popup .swal2-close {
         color: var(--kodus-detail-text);
         opacity: 0.78;

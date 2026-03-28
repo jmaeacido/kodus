@@ -160,6 +160,8 @@ $loginBodyClass = $isDarkTheme ? 'hold-transition dark-mode login-page' : 'hold-
     Swal.fire({
       icon: 'info',
       title: 'Signing in...',
+      kodusHeroHeader: false,
+      kodusKeepPageLoader: true,
       text: 'Please wait while we verify your credentials.',
       allowOutsideClick: false,
       allowEscapeKey: false,

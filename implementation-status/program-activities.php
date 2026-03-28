@@ -26,20 +26,13 @@ $userType = $_SESSION['user_type'] ?? 'user';
       vertical-align: middle;
     }
     .edit-grid-row {
-      display: grid;
-      grid-template-columns: minmax(180px, 1fr) minmax(180px, 1fr) minmax(180px, 1fr);
-      gap: 12px;
+      display: block;
       margin-bottom: 12px;
-      align-items: start;
       padding: 14px;
       border: 1px solid rgba(255, 255, 255, 0.1);
       border-radius: 14px;
       background: rgba(255, 255, 255, 0.05);
-    }
-    @media (max-width: 768px) {
-      .edit-grid-row {
-        grid-template-columns: 1fr;
-      }
+      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.16);
     }
     .project-item {
       display: flex;
@@ -138,6 +131,115 @@ $userType = $_SESSION['user_type'] ?? 'user';
     .activity-edit-shell {
       text-align: left;
       color: inherit;
+    }
+    .activity-edit-hero {
+      position: relative;
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 18px;
+      padding: 18px 20px;
+      margin-bottom: 16px;
+      background:
+        radial-gradient(circle at top right, rgba(255, 193, 7, 0.18), transparent 34%),
+        linear-gradient(135deg, rgba(13, 110, 253, 0.22), rgba(32, 201, 151, 0.12));
+      box-shadow: 0 16px 36px rgba(0, 0, 0, 0.2);
+    }
+    .activity-edit-hero::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0));
+      pointer-events: none;
+    }
+    .activity-edit-hero-top {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 14px;
+    }
+    .activity-edit-eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 8px;
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: rgba(255, 255, 255, 0.78);
+    }
+    .activity-edit-title {
+      margin: 0;
+      font-size: 1.5rem;
+      font-weight: 800;
+      line-height: 1.1;
+      color: #fff;
+    }
+    .activity-edit-subtitle {
+      margin: 6px 0 0;
+      color: rgba(255, 255, 255, 0.76);
+      font-size: 0.92rem;
+      line-height: 1.45;
+    }
+    .activity-edit-badge {
+      position: relative;
+      z-index: 1;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 132px;
+      padding: 0.6rem 0.9rem;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.12);
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      color: #fff;
+      font-size: 0.78rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      backdrop-filter: blur(6px);
+    }
+    .activity-edit-meta {
+      position: relative;
+      z-index: 1;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 10px;
+    }
+    .activity-edit-meta-card {
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 14px;
+      padding: 11px 12px;
+      background: rgba(255, 255, 255, 0.08);
+      backdrop-filter: blur(6px);
+    }
+    .activity-edit-meta-label {
+      display: block;
+      margin-bottom: 4px;
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: rgba(255, 255, 255, 0.7);
+    }
+    .activity-edit-meta-value {
+      display: block;
+      color: #fff;
+      font-size: 0.98rem;
+      font-weight: 700;
+      line-height: 1.35;
+      word-break: break-word;
+    }
+    @media (max-width: 768px) {
+      .activity-edit-hero-top {
+        flex-direction: column;
+      }
+      .activity-edit-badge {
+        min-width: 0;
+      }
     }
     .activity-edit-section {
       border: 1px solid rgba(255, 255, 255, 0.1);
@@ -280,6 +382,152 @@ $userType = $_SESSION['user_type'] ?? 'user';
     .barangay-edit-header span {
       color: rgba(255, 255, 255, 0.68);
       font-size: 0.84rem;
+    }
+    .barangay-pane-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 14px;
+      padding: 14px 16px;
+      margin: -2px -2px 4px;
+      border-radius: 14px;
+      background: linear-gradient(135deg, rgba(13, 110, 253, 0.16), rgba(32, 201, 151, 0.09));
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .barangay-pane-eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 6px;
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: rgba(255, 255, 255, 0.72);
+    }
+    .barangay-pane-title {
+      margin: 0;
+      font-size: 1.08rem;
+      font-weight: 800;
+      color: #fff;
+      line-height: 1.2;
+    }
+    .barangay-pane-subtitle {
+      margin: 4px 0 0;
+      font-size: 0.84rem;
+      color: rgba(255, 255, 255, 0.74);
+      line-height: 1.45;
+    }
+    .barangay-pane-meta {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+    .barangay-pane-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-left: 8px;
+    }
+    .barangay-pane-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 0.45rem 0.7rem;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      color: #fff;
+      font-size: 0.76rem;
+      font-weight: 700;
+      line-height: 1;
+      white-space: nowrap;
+    }
+    .barangay-pane-toggle {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 2.2rem;
+      height: 2.2rem;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.08);
+      color: #fff;
+      cursor: pointer;
+      transition: transform 0.18s ease, background 0.18s ease;
+    }
+    .edit-grid-row.is-collapsed .barangay-pane-toggle i {
+      transform: rotate(-90deg);
+    }
+    .barangay-pane-toggle:hover {
+      background: rgba(255, 255, 255, 0.14);
+    }
+    .barangay-pane-body {
+      margin-top: 14px;
+    }
+    .edit-grid-row.is-collapsed .barangay-pane-body {
+      display: none;
+    }
+    .barangay-tab-nav {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+    .barangay-tab {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 0.58rem 0.9rem;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      background: rgba(255, 255, 255, 0.05);
+      color: rgba(255, 255, 255, 0.82);
+      font-size: 0.78rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease;
+    }
+    .barangay-tab.is-active {
+      background: rgba(13, 110, 253, 0.18);
+      border-color: rgba(13, 110, 253, 0.38);
+      color: #fff;
+    }
+    .barangay-tab-panel {
+      display: none;
+    }
+    .barangay-tab-panel.is-active {
+      display: grid;
+      gap: 14px;
+    }
+    .barangay-panel-section {
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 14px;
+      padding: 14px;
+      background: rgba(255, 255, 255, 0.03);
+    }
+    .barangay-panel-section-title {
+      display: block;
+      margin-bottom: 10px;
+      font-size: 0.8rem;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: rgba(255, 255, 255, 0.82);
+    }
+    .barangay-panel-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 12px;
+    }
+    @media (max-width: 768px) {
+      .barangay-pane-header {
+        flex-direction: column;
+      }
+      .barangay-pane-meta {
+        justify-content: flex-start;
+      }
     }
     .project-item .btn {
       flex: 0 0 auto;
@@ -425,6 +673,44 @@ $userType = $_SESSION['user_type'] ?? 'user';
     body[data-theme="light"] .activity-edit-section .section-note,
     body[data-theme="light"] .barangay-edit-header span {
       color: #6c757d;
+    }
+    body[data-theme="light"] .barangay-pane-header {
+      background: linear-gradient(135deg, rgba(13, 110, 253, 0.1), rgba(32, 201, 151, 0.08));
+      border-color: rgba(13, 110, 253, 0.1);
+    }
+    body[data-theme="light"] .barangay-pane-eyebrow,
+    body[data-theme="light"] .barangay-pane-subtitle {
+      color: #5c6b7a;
+    }
+    body[data-theme="light"] .barangay-pane-title,
+    body[data-theme="light"] .barangay-pane-pill {
+      color: #1f2d3d;
+    }
+    body[data-theme="light"] .barangay-pane-pill {
+      background: rgba(255, 255, 255, 0.72);
+      border-color: rgba(13, 110, 253, 0.12);
+    }
+    body[data-theme="light"] .barangay-tab {
+      background: rgba(255, 255, 255, 0.72);
+      border-color: rgba(13, 110, 253, 0.1);
+      color: #405261;
+    }
+    body[data-theme="light"] .barangay-tab.is-active {
+      background: rgba(13, 110, 253, 0.12);
+      border-color: rgba(13, 110, 253, 0.24);
+      color: #16324f;
+    }
+    body[data-theme="light"] .barangay-panel-section {
+      background: rgba(255, 255, 255, 0.84);
+      border-color: rgba(13, 110, 253, 0.1);
+    }
+    body[data-theme="light"] .barangay-panel-section-title {
+      color: #405261;
+    }
+    body[data-theme="light"] .barangay-pane-toggle {
+      color: #1f2d3d;
+      background: rgba(255, 255, 255, 0.74);
+      border-color: rgba(13, 110, 253, 0.12);
     }
     body[data-theme="light"] .forum-card {
       background: linear-gradient(180deg, rgba(248, 250, 252, 0.95), rgba(255,255,255,0.98));
@@ -866,6 +1152,63 @@ $(document).ready(function() {
         return Number.isFinite(parsed) ? parsed : 0;
     }
 
+    function calculateDayDifference(fromDate, toDate) {
+        if (!fromDate || !toDate) {
+            return '';
+        }
+
+        const start = new Date(`${fromDate}T00:00:00`);
+        const end = new Date(`${toDate}T00:00:00`);
+
+        if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+            return '';
+        }
+
+        return String(Math.round((end.getTime() - start.getTime()) / 86400000));
+    }
+
+    function renderEditModalHeader(data, rows) {
+        const municipality = data.municipality || 'Unspecified municipality';
+        const province = rows[0]?.province || data.province || 'Unspecified province';
+        const barangayCount = Array.isArray(rows) ? rows.length : 0;
+        const totalTarget = Array.isArray(rows)
+            ? rows.reduce((sum, row) => sum + toInt(row.target_partner_beneficiaries), 0)
+            : 0;
+        const projectCount = Array.isArray(rows)
+            ? rows.reduce((sum, row) => {
+                const projects = Array.isArray(row.projects) ? row.projects.length : 0;
+                return sum + projects;
+            }, 0)
+            : 0;
+
+        return `
+            <div class="activity-edit-hero">
+                <div class="activity-edit-hero-top">
+                    <div>
+                        <span class="activity-edit-eyebrow"><i class="fas fa-pen-nib"></i>Program Activities Editor</span>
+                        <h3 class="activity-edit-title">${escapeHtml(municipality)}</h3>
+                        <p class="activity-edit-subtitle">${escapeHtml(province)}<br>Review coverage, implementation, post-implementation, and performance rating in one place.</p>
+                    </div>
+                    <div class="activity-edit-badge">Edit Session</div>
+                </div>
+                <div class="activity-edit-meta">
+                    <div class="activity-edit-meta-card">
+                        <span class="activity-edit-meta-label">Barangays</span>
+                        <span class="activity-edit-meta-value">${escapeHtml(String(barangayCount))}</span>
+                    </div>
+                    <div class="activity-edit-meta-card">
+                        <span class="activity-edit-meta-label">Target Beneficiaries</span>
+                        <span class="activity-edit-meta-value">${escapeHtml(String(totalTarget))}</span>
+                    </div>
+                    <div class="activity-edit-meta-card">
+                        <span class="activity-edit-meta-label">Recorded Projects</span>
+                        <span class="activity-edit-meta-value">${escapeHtml(String(projectCount))}</span>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
     function calculatePostImplementationMetrics(rowData) {
         const targetPartnerBeneficiaries = toInt(rowData.target_partner_beneficiaries);
         const obligatedPartnerBeneficiaries = Math.max(toInt(rowData.fund_obligation_partner_beneficiaries), 0);
@@ -895,6 +1238,9 @@ $(document).ready(function() {
 
     function renderPostImplementationInputs(row) {
         const metrics = calculatePostImplementationMetrics(row);
+        const payoutReferenceDate = row.payout_schedule_to || row.payout_schedule_from || '';
+        const payoutToCompletionAging = calculateDayDifference(row.last_day_project_implementation || '', payoutReferenceDate);
+        const checkToLiquidationAging = calculateDayDifference(row.check_issuance_date || '', row.liquidation_date || '');
 
         return `
             <div class="activity-edit-section mt-3 mb-0">
@@ -999,6 +1345,37 @@ $(document).ready(function() {
                             </div>
                         </div>
                     </div>
+
+                    <div class="forum-card full-width">
+                        <div class="forum-card-title"><i class="fas fa-star"></i><span>Performance Rating</span></div>
+                        <div class="section-note mb-0">MOVs for Timeliness (CCEF and DPC Purposes)</div>
+                        <div class="stage-phase-grid mt-2">
+                            <div>
+                                <label>Last Day of Project Implementation</label>
+                                <input type="date" class="form-control form-control-sm last-day-project-implementation" value="${escapeHtml(row.last_day_project_implementation || '')}">
+                            </div>
+                            <div>
+                                <label>Difference from Completion to Payout Date</label>
+                                <input type="text" class="form-control form-control-sm payout-to-completion-aging" value="${escapeHtml(payoutToCompletionAging !== '' ? `${payoutToCompletionAging} day(s)` : '')}" placeholder="Calculated from completion and payout dates" readonly>
+                            </div>
+                            <div>
+                                <label>Check Issuance Date</label>
+                                <input type="date" class="form-control form-control-sm check-issuance-date" value="${escapeHtml(row.check_issuance_date || '')}">
+                            </div>
+                            <div>
+                                <label>Difference from Check Issuance to Liquidation (Aging)</label>
+                                <input type="text" class="form-control form-control-sm check-to-liquidation-aging" value="${escapeHtml(checkToLiquidationAging !== '' ? `${checkToLiquidationAging} day(s)` : '')}" placeholder="Calculated from check issuance and liquidation" readonly>
+                            </div>
+                            <div>
+                                <label>Status of Work Accomplishment Report</label>
+                                <input type="text" class="form-control form-control-sm work-accomplishment-report-status" value="${escapeHtml(row.work_accomplishment_report_status || '')}" placeholder="Enter status">
+                            </div>
+                            <div style="grid-column: 1 / -1;">
+                                <label>Remarks</label>
+                                <textarea class="form-control form-control-sm performance-rating-remarks" rows="2" placeholder="Enter remarks">${escapeHtml(row.performance_rating_remarks || '')}</textarea>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         `;
@@ -1027,6 +1404,13 @@ $(document).ready(function() {
         $row.find('.fund-unserved-partner-beneficiaries').val(metrics.unservedPartnerBeneficiaries);
         $row.find('.fund-undisbursed-amount').val(numberFormatter.format(metrics.undisbursedAmount));
         $row.find('.fund-disbursement-percentage').val(`${metrics.disbursementPercentage.toFixed(2)}%`);
+
+        const payoutReferenceDate = $row.find('.payout-schedule-to').val() || $row.find('.payout-schedule-from').val();
+        const payoutToCompletionAging = calculateDayDifference($row.find('.last-day-project-implementation').val(), payoutReferenceDate);
+        const checkToLiquidationAging = calculateDayDifference($row.find('.check-issuance-date').val(), $row.find('.liquidation-date').val());
+
+        $row.find('.payout-to-completion-aging').val(payoutToCompletionAging !== '' ? `${payoutToCompletionAging} day(s)` : '');
+        $row.find('.check-to-liquidation-aging').val(checkToLiquidationAging !== '' ? `${checkToLiquidationAging} day(s)` : '');
     }
 
     function renderActivityDetails(data) {
@@ -1198,6 +1582,36 @@ $(document).ready(function() {
                     </div>
                 </div>
 
+                <div class="kodus-detail-section">
+                    <h6 class="kodus-detail-section-title">Performance Rating</h6>
+                    <div class="kodus-detail-section-grid">
+                        <div>
+                            <span class="kodus-detail-label">Timeliness (CCEF and DPC Purposes) - Last Day of Project Implementation</span>
+                            <span class="kodus-detail-value">${formatFallback(data.last_day_project_implementation_dates, 'Not set')}</span>
+                        </div>
+                        <div>
+                            <span class="kodus-detail-label">Difference from Completion to Payout Date</span>
+                            <span class="kodus-detail-value">${formatFallback(data.payout_to_completion_aging, 'Not set')}</span>
+                        </div>
+                        <div>
+                            <span class="kodus-detail-label">Check Issuance Date</span>
+                            <span class="kodus-detail-value">${formatFallback(data.check_issuance_dates, 'Not set')}</span>
+                        </div>
+                        <div>
+                            <span class="kodus-detail-label">Difference from Check Issuance to Liquidation (Aging)</span>
+                            <span class="kodus-detail-value">${formatFallback(data.check_to_liquidation_aging, 'Not set')}</span>
+                        </div>
+                        <div>
+                            <span class="kodus-detail-label">Status of Work Accomplishment Report</span>
+                            <span class="kodus-detail-value">${formatFallback(data.work_accomplishment_report_statuses, 'Not set')}</span>
+                        </div>
+                        <div>
+                            <span class="kodus-detail-label">Remarks</span>
+                            <span class="kodus-detail-value">${formatFallback(data.performance_rating_remarks, 'Not set')}</span>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="kodus-detail-section mb-0">
                     <h6 class="kodus-detail-section-title">Project Portfolio</h6>
                     <span class="kodus-detail-label">Project Names</span>
@@ -1280,70 +1694,93 @@ $(document).ready(function() {
 
                 const rows = response.rows || [];
                 const first = rows[0] || {};
+                const editHeaderHtml = renderEditModalHeader(data, rows);
                 const rowHtml = rows.map((row, index) => `
-                        <div class="edit-grid-row">
+                        <div class="edit-grid-row${index === 0 ? '' : ' is-collapsed'}" data-pane-index="${index}">
                         <input type="hidden" class="row-barangay" value="${escapeHtml(row.barangay)}">
-                        <div>
-                            <label class="mb-1">Barangay</label>
-                            <div class="readonly-display">${escapeHtml(row.barangay)}</div>
-                        </div>
-                        <div>
-                            <label class="mb-1">Beneficiaries</label>
-                            <div class="readonly-display">Target: ${escapeHtml(row.target_partner_beneficiaries ?? 0)} | LAWA: ${escapeHtml(row.lawa_target ?? 0)} | BINHI: ${escapeHtml(row.binhi_target ?? 0)} | CapBuild: ${escapeHtml(row.capbuild_target ?? 0)} | Community Action Plan: ${escapeHtml(row.community_action_plan_target ?? 0)} | Actual: ${escapeHtml(row.actual_beneficiaries ?? 0)}</div>
-                        </div>
-                        <div style="grid-column: 1 / -1;">
-                            <label class="mb-1">Barangay Target Counts</label>
-                            <div class="stage-phase-grid">
-                                <div>
-                                    <label class="mb-1">LAWA Target</label>
-                                    <input type="number" min="0" class="form-control form-control-sm row-lawa-target" value="${escapeHtml(row.lawa_target ?? 0)}">
+                        <div class="barangay-pane-header">
+                            <div>
+                                <span class="barangay-pane-eyebrow"><i class="fas fa-map-marker-alt"></i>Barangay Entry ${index + 1}</span>
+                                <h6 class="barangay-pane-title">${escapeHtml(row.barangay || `Barangay ${index + 1}`)}</h6>
+                                <p class="barangay-pane-subtitle">Update targets, schedules, disbursement details, and performance data for this barangay.</p>
+                            </div>
+                            <div class="barangay-pane-actions">
+                                <div class="barangay-pane-meta">
+                                    <span class="barangay-pane-pill"><i class="fas fa-users"></i>Target ${escapeHtml(String(row.target_partner_beneficiaries ?? 0))}</span>
+                                    <span class="barangay-pane-pill"><i class="fas fa-diagram-project"></i>Projects ${escapeHtml(String(Array.isArray(row.projects) ? row.projects.length : 0))}</span>
                                 </div>
-                                <div>
-                                    <label class="mb-1">BINHI Target</label>
-                                    <input type="number" min="0" class="form-control form-control-sm row-binhi-target" value="${escapeHtml(row.binhi_target ?? 0)}">
-                                </div>
-                                <div>
-                                    <label class="mb-1">CapBuild Target</label>
-                                    <input type="number" min="0" class="form-control form-control-sm row-capbuild-target" value="${escapeHtml(row.capbuild_target ?? 0)}">
-                                </div>
-                                <div>
-                                    <label class="mb-1">Community Action Plan Target</label>
-                                    <input type="number" min="0" class="form-control form-control-sm row-community-action-plan-target" value="${escapeHtml(row.community_action_plan_target ?? 0)}">
-                                </div>
-                                <div>
-                                    <label class="mb-1">Total Target Partner-Beneficiaries</label>
-                                    <input type="number" min="0" class="form-control form-control-sm row-total-target" value="${escapeHtml(row.target_partner_beneficiaries ?? 0)}">
-                                </div>
+                                <button type="button" class="barangay-pane-toggle" aria-label="Toggle barangay pane">
+                                    <i class="fas fa-chevron-down"></i>
+                                </button>
                             </div>
                         </div>
-                        <div style="grid-column: 1 / -1;">
-                            <label class="mb-1">Target Coverage</label>
-                            <div class="coverage-list">
-                                ${renderCoverageInputs(row.puroks || [], row.target_project_names || [], row.project_classifications || [])}
+                        <div class="barangay-pane-body">
+                            <div class="barangay-tab-nav">
+                                <button type="button" class="barangay-tab is-active" data-tab="targets"><i class="fas fa-bullseye"></i>Targets</button>
+                                <button type="button" class="barangay-tab" data-tab="implementation"><i class="fas fa-layer-group"></i>Implementation</button>
+                                <button type="button" class="barangay-tab" data-tab="post"><i class="fas fa-chart-line"></i>Post-Implementation</button>
                             </div>
-                        </div>
-                        <div style="grid-column: 1 / -1;">
-                            <label class="mb-1">Site Validation</label>
-                            <div class="site-validation-list row-site-validation-list">${renderSiteValidationInputs(row.site_validation || '')}</div>
-                        </div>
-                        <div style="grid-column: 1 / -1;">
-                            <label class="mb-1">Implementation Phases</label>
-                            ${renderStagePhaseInputs(row)}
-                        </div>
-                        <div style="grid-column: 1 / -1;">
-                            ${renderPostImplementationInputs(row)}
+
+                            <div class="barangay-tab-panel is-active" data-tab-panel="targets">
+                                <div class="barangay-panel-section">
+                                    <span class="barangay-panel-section-title">Barangay Target Counts</span>
+                                    <div class="stage-phase-grid">
+                                        <div>
+                                            <label class="mb-1">LAWA Target</label>
+                                            <input type="number" min="0" class="form-control form-control-sm row-lawa-target" value="${escapeHtml(row.lawa_target ?? 0)}">
+                                        </div>
+                                        <div>
+                                            <label class="mb-1">BINHI Target</label>
+                                            <input type="number" min="0" class="form-control form-control-sm row-binhi-target" value="${escapeHtml(row.binhi_target ?? 0)}">
+                                        </div>
+                                        <div>
+                                            <label class="mb-1">CapBuild Target</label>
+                                            <input type="number" min="0" class="form-control form-control-sm row-capbuild-target" value="${escapeHtml(row.capbuild_target ?? 0)}">
+                                        </div>
+                                        <div>
+                                            <label class="mb-1">Community Action Plan Target</label>
+                                            <input type="number" min="0" class="form-control form-control-sm row-community-action-plan-target" value="${escapeHtml(row.community_action_plan_target ?? 0)}">
+                                        </div>
+                                        <div>
+                                            <label class="mb-1">Total Target Partner-Beneficiaries</label>
+                                            <input type="number" min="0" class="form-control form-control-sm row-total-target" value="${escapeHtml(row.target_partner_beneficiaries ?? 0)}">
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="barangay-panel-section">
+                                    <span class="barangay-panel-section-title">Target Coverage</span>
+                                    <div class="coverage-list">
+                                        ${renderCoverageInputs(row.puroks || [], row.target_project_names || [], row.project_classifications || [])}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="barangay-tab-panel" data-tab-panel="implementation">
+                                <div class="barangay-panel-section">
+                                    <span class="barangay-panel-section-title">Site Validation</span>
+                                    <div class="site-validation-list row-site-validation-list">${renderSiteValidationInputs(row.site_validation || '')}</div>
+                                </div>
+                                <div class="barangay-panel-section">
+                                    <span class="barangay-panel-section-title">Implementation Phases</span>
+                                    ${renderStagePhaseInputs(row)}
+                                </div>
+                            </div>
+
+                            <div class="barangay-tab-panel" data-tab-panel="post">
+                                ${renderPostImplementationInputs(row)}
+                            </div>
                         </div>
                     </div>
                 `).join('');
 
                 Swal.fire({
-                    title: `Edit ${escapeHtml(data.municipality)}`,
                     width: 1180,
                     customClass: {
                         popup: 'kodus-edit-popup'
                     },
                     html: `
                         <div class="activity-edit-shell">
+                            ${editHeaderHtml}
                             <div class="activity-edit-section">
                                 <h6>Coverage</h6>
                                 <div class="form-row mb-0">
@@ -1524,6 +1961,10 @@ $(document).ready(function() {
                                 fund_obligation_partner_beneficiaries: toInt($(this).find('.fund-obligation-partner-beneficiaries').val()),
                                 fund_disbursement_served_partner_beneficiaries: toInt($(this).find('.fund-disbursement-served-partner-beneficiaries').val()),
                                 liquidation_date: $(this).find('.liquidation-date').val(),
+                                last_day_project_implementation: $(this).find('.last-day-project-implementation').val(),
+                                check_issuance_date: $(this).find('.check-issuance-date').val(),
+                                work_accomplishment_report_status: $(this).find('.work-accomplishment-report-status').val().trim(),
+                                performance_rating_remarks: $(this).find('.performance-rating-remarks').val().trim(),
                                 special_disbursing_officer: $(this).find('.special-disbursing-officer').val().trim()
                             };
 
@@ -1652,6 +2093,21 @@ $(document).ready(function() {
         list.append(renderCoverageInputs([''], [''], ['']));
     });
 
+    $(document).on('click', '.barangay-pane-toggle', function() {
+        $(this).closest('.edit-grid-row').toggleClass('is-collapsed');
+    });
+
+    $(document).on('click', '.barangay-tab', function() {
+        const $tab = $(this);
+        const tabKey = $tab.data('tab');
+        const $row = $tab.closest('.edit-grid-row');
+
+        $row.find('.barangay-tab').removeClass('is-active');
+        $tab.addClass('is-active');
+        $row.find('.barangay-tab-panel').removeClass('is-active');
+        $row.find(`.barangay-tab-panel[data-tab-panel="${tabKey}"]`).addClass('is-active');
+    });
+
     $(document).on('click', '.remove-coverage-btn', function() {
         const list = $(this).closest('.coverage-list');
         if (list.find('.coverage-entry-item').length === 1) {
@@ -1680,7 +2136,7 @@ $(document).ready(function() {
         $(this).closest('.site-validation-item').remove();
     });
 
-    $(document).on('input', '.row-total-target, .fund-obligation-partner-beneficiaries, .fund-disbursement-served-partner-beneficiaries', function() {
+    $(document).on('input change', '.row-total-target, .fund-obligation-partner-beneficiaries, .fund-disbursement-served-partner-beneficiaries, .last-day-project-implementation, .check-issuance-date, .liquidation-date', function() {
         updatePostImplementationMetrics($(this).closest('.edit-grid-row'));
     });
 
@@ -1721,12 +2177,14 @@ $(document).ready(function() {
                 $start.val(start);
                 $end.val(end);
                 $input.val(start === end ? start : `${start} - ${end}`);
+                updatePostImplementationMetrics($input.closest('.edit-grid-row'));
             });
 
             $input.on('cancel.daterangepicker', function() {
                 $start.val('');
                 $end.val('');
                 $input.val('');
+                updatePostImplementationMetrics($input.closest('.edit-grid-row'));
             });
         });
     }

@@ -112,9 +112,13 @@ $stmt = $conn->prepare("
         fund_obligation_partner_beneficiaries,
         fund_disbursement_served_partner_beneficiaries,
         liquidation_date,
+        last_day_project_implementation,
+        check_issuance_date,
+        work_accomplishment_report_status,
+        performance_rating_remarks,
         special_disbursing_officer,
         project_names
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON DUPLICATE KEY UPDATE
         plgu_forum = VALUES(plgu_forum),
         mlgu_forum = VALUES(mlgu_forum),
@@ -143,6 +147,10 @@ $stmt = $conn->prepare("
         fund_obligation_partner_beneficiaries = VALUES(fund_obligation_partner_beneficiaries),
         fund_disbursement_served_partner_beneficiaries = VALUES(fund_disbursement_served_partner_beneficiaries),
         liquidation_date = VALUES(liquidation_date),
+        last_day_project_implementation = VALUES(last_day_project_implementation),
+        check_issuance_date = VALUES(check_issuance_date),
+        work_accomplishment_report_status = VALUES(work_accomplishment_report_status),
+        performance_rating_remarks = VALUES(performance_rating_remarks),
         special_disbursing_officer = VALUES(special_disbursing_officer),
         project_names = VALUES(project_names),
         updated_at = CURRENT_TIMESTAMP
@@ -221,6 +229,10 @@ foreach ($rows as $row) {
     $fundObligationPartnerBeneficiaries = isset($row['fund_obligation_partner_beneficiaries']) ? (int) $row['fund_obligation_partner_beneficiaries'] : 0;
     $fundDisbursementServedPartnerBeneficiaries = isset($row['fund_disbursement_served_partner_beneficiaries']) ? (int) $row['fund_disbursement_served_partner_beneficiaries'] : 0;
     $liquidationDate = trim((string) ($row['liquidation_date'] ?? ''));
+    $lastDayProjectImplementation = trim((string) ($row['last_day_project_implementation'] ?? ''));
+    $checkIssuanceDate = trim((string) ($row['check_issuance_date'] ?? ''));
+    $workAccomplishmentReportStatus = preg_replace('/\s+/', ' ', trim((string) ($row['work_accomplishment_report_status'] ?? '')));
+    $performanceRatingRemarks = preg_replace('/\s+/', ' ', trim((string) ($row['performance_rating_remarks'] ?? '')));
     $specialDisbursingOfficer = preg_replace('/\s+/', ' ', trim((string) ($row['special_disbursing_officer'] ?? '')));
     $siteValidationRaw = trim((string) ($row['site_validation'] ?? ''));
 
@@ -325,6 +337,8 @@ foreach ($rows as $row) {
     $payoutScheduleFrom = $payoutScheduleFrom !== '' ? $payoutScheduleFrom : null;
     $payoutScheduleTo = $payoutScheduleTo !== '' ? $payoutScheduleTo : null;
     $liquidationDate = $liquidationDate !== '' ? $liquidationDate : null;
+    $lastDayProjectImplementation = $lastDayProjectImplementation !== '' ? $lastDayProjectImplementation : null;
+    $checkIssuanceDate = $checkIssuanceDate !== '' ? $checkIssuanceDate : null;
 
     $siteValidation = '';
     if ($siteValidationRaw !== '') {
@@ -457,7 +471,7 @@ foreach ($rows as $row) {
     $targetSaveStmt->execute();
 
     $stmt->bind_param(
-        "ssssssssssssssssssssssssssiisss",
+        "ssssssssssssssssssssssssssiissssss",
         $province,
         $municipality,
         $barangay,
@@ -488,6 +502,10 @@ foreach ($rows as $row) {
         $fundObligationPartnerBeneficiaries,
         $fundDisbursementServedPartnerBeneficiaries,
         $liquidationDate,
+        $lastDayProjectImplementation,
+        $checkIssuanceDate,
+        $workAccomplishmentReportStatus,
+        $performanceRatingRemarks,
         $specialDisbursingOfficer,
         $projectNames
     );

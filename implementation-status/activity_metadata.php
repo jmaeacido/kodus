@@ -63,6 +63,10 @@ function ensureProgramActivityMetadata(mysqli $conn): void
             fund_obligation_partner_beneficiaries INT DEFAULT NULL,
             fund_disbursement_served_partner_beneficiaries INT DEFAULT NULL,
             liquidation_date DATE DEFAULT NULL,
+            last_day_project_implementation DATE DEFAULT NULL,
+            check_issuance_date DATE DEFAULT NULL,
+            work_accomplishment_report_status VARCHAR(255) DEFAULT NULL,
+            performance_rating_remarks TEXT DEFAULT NULL,
             special_disbursing_officer VARCHAR(255) DEFAULT NULL,
             project_names VARCHAR(1000) DEFAULT NULL,
             created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
@@ -96,6 +100,10 @@ function ensureProgramActivityMetadata(mysqli $conn): void
     ensureProgramActivityMetadataColumn($conn, 'fund_obligation_partner_beneficiaries', 'INT DEFAULT NULL');
     ensureProgramActivityMetadataColumn($conn, 'fund_disbursement_served_partner_beneficiaries', 'INT DEFAULT NULL');
     ensureProgramActivityMetadataColumn($conn, 'liquidation_date', 'DATE DEFAULT NULL');
+    ensureProgramActivityMetadataColumn($conn, 'last_day_project_implementation', 'DATE DEFAULT NULL');
+    ensureProgramActivityMetadataColumn($conn, 'check_issuance_date', 'DATE DEFAULT NULL');
+    ensureProgramActivityMetadataColumn($conn, 'work_accomplishment_report_status', 'VARCHAR(255) DEFAULT NULL');
+    ensureProgramActivityMetadataColumn($conn, 'performance_rating_remarks', 'TEXT DEFAULT NULL');
     ensureProgramActivityMetadataColumn($conn, 'special_disbursing_officer', 'VARCHAR(255) DEFAULT NULL');
 
     $conn->query("
@@ -161,6 +169,10 @@ function ensureProgramActivityMetadata(mysqli $conn): void
                 fund_obligation_partner_beneficiaries,
                 fund_disbursement_served_partner_beneficiaries,
                 liquidation_date,
+                last_day_project_implementation,
+                check_issuance_date,
+                work_accomplishment_report_status,
+                performance_rating_remarks,
                 special_disbursing_officer,
                 project_names,
                 created_at,
@@ -197,6 +209,10 @@ function ensureProgramActivityMetadata(mysqli $conn): void
                 NULL AS fund_obligation_partner_beneficiaries,
                 NULL AS fund_disbursement_served_partner_beneficiaries,
                 NULL AS liquidation_date,
+                NULL AS last_day_project_implementation,
+                NULL AS check_issuance_date,
+                NULL AS work_accomplishment_report_status,
+                NULL AS performance_rating_remarks,
                 NULL AS special_disbursing_officer,
                 GROUP_CONCAT(DISTINCT NULLIF(TRIM(project_names), '') SEPARATOR '||') AS project_names,
                 MIN(created_at) AS created_at,

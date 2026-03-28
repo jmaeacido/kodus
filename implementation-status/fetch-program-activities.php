@@ -154,6 +154,35 @@ function formatBarangayTextSummary(?string $rawValue): string
     return implode(' || ', $formatted);
 }
 
+function formatBarangayNumericSummary(?string $rawValue, string $suffix = ''): string
+{
+    $rawValue = trim((string) $rawValue);
+    if ($rawValue === '') {
+        return '';
+    }
+
+    $entries = preg_split('/\|\|/', $rawValue) ?: [];
+    $formatted = [];
+
+    foreach ($entries as $entry) {
+        $entry = trim($entry);
+        if ($entry === '') {
+            continue;
+        }
+
+        $parts = explode('::', $entry, 2);
+        $barangay = trim($parts[0] ?? '');
+        $value = trim($parts[1] ?? '');
+        if ($barangay === '' || $value === '') {
+            continue;
+        }
+
+        $formatted[] = $barangay . ': ' . $value . $suffix;
+    }
+
+    return implode(' || ', $formatted);
+}
+
 function buildValidationSnapshot(int $targetBeneficiaries, int $actualBeneficiaries): array
 {
     if ($targetBeneficiaries <= 0 && $actualBeneficiaries > 0) {
@@ -313,6 +342,73 @@ $sql = "
         ) AS liquidation_dates,
         GROUP_CONCAT(
             DISTINCT CASE
+                WHEN metadata.last_day_project_implementation IS NOT NULL
+                THEN CONCAT(locations.barangay, '::', metadata.last_day_project_implementation)
+                ELSE NULL
+            END
+            ORDER BY locations.barangay
+            SEPARATOR '||'
+        ) AS last_day_project_implementation_dates,
+        GROUP_CONCAT(
+            DISTINCT CASE
+                WHEN metadata.last_day_project_implementation IS NOT NULL
+                     AND COALESCE(metadata.payout_schedule_to, metadata.payout_schedule_from) IS NOT NULL
+                THEN CONCAT(
+                    locations.barangay,
+                    '::',
+                    DATEDIFF(
+                        COALESCE(metadata.payout_schedule_to, metadata.payout_schedule_from),
+                        metadata.last_day_project_implementation
+                    )
+                )
+                ELSE NULL
+            END
+            ORDER BY locations.barangay
+            SEPARATOR '||'
+        ) AS payout_to_completion_aging,
+        GROUP_CONCAT(
+            DISTINCT CASE
+                WHEN metadata.check_issuance_date IS NOT NULL
+                THEN CONCAT(locations.barangay, '::', metadata.check_issuance_date)
+                ELSE NULL
+            END
+            ORDER BY locations.barangay
+            SEPARATOR '||'
+        ) AS check_issuance_dates,
+        GROUP_CONCAT(
+            DISTINCT CASE
+                WHEN metadata.check_issuance_date IS NOT NULL
+                     AND metadata.liquidation_date IS NOT NULL
+                THEN CONCAT(
+                    locations.barangay,
+                    '::',
+                    DATEDIFF(metadata.liquidation_date, metadata.check_issuance_date)
+                )
+                ELSE NULL
+            END
+            ORDER BY locations.barangay
+            SEPARATOR '||'
+        ) AS check_to_liquidation_aging,
+        GROUP_CONCAT(
+            DISTINCT CASE
+                WHEN metadata.work_accomplishment_report_status IS NOT NULL AND TRIM(metadata.work_accomplishment_report_status) <> ''
+                THEN CONCAT(locations.barangay, '::', metadata.work_accomplishment_report_status)
+                ELSE NULL
+            END
+            ORDER BY locations.barangay
+            SEPARATOR '||'
+        ) AS work_accomplishment_report_statuses,
+        GROUP_CONCAT(
+            DISTINCT CASE
+                WHEN metadata.performance_rating_remarks IS NOT NULL AND TRIM(metadata.performance_rating_remarks) <> ''
+                THEN CONCAT(locations.barangay, '::', metadata.performance_rating_remarks)
+                ELSE NULL
+            END
+            ORDER BY locations.barangay
+            SEPARATOR '||'
+        ) AS performance_rating_remarks,
+        GROUP_CONCAT(
+            DISTINCT CASE
                 WHEN metadata.special_disbursing_officer IS NOT NULL AND TRIM(metadata.special_disbursing_officer) <> ''
                 THEN CONCAT(locations.barangay, '::', metadata.special_disbursing_officer)
                 ELSE NULL
@@ -421,6 +517,12 @@ if ($result) {
             'fund_disbursement_undisbursed_amount' => number_format($fundDisbursementUndisbursedAmount, 2, '.', ','),
             'fund_disbursement_percentage' => $fundDisbursementPercentage,
             'liquidation_dates' => formatBarangayDateSummary($row['liquidation_dates'] ?? ''),
+            'last_day_project_implementation_dates' => formatBarangayDateSummary($row['last_day_project_implementation_dates'] ?? ''),
+            'payout_to_completion_aging' => formatBarangayNumericSummary($row['payout_to_completion_aging'] ?? '', ' day(s)'),
+            'check_issuance_dates' => formatBarangayDateSummary($row['check_issuance_dates'] ?? ''),
+            'check_to_liquidation_aging' => formatBarangayNumericSummary($row['check_to_liquidation_aging'] ?? '', ' day(s)'),
+            'work_accomplishment_report_statuses' => formatBarangayTextSummary($row['work_accomplishment_report_statuses'] ?? ''),
+            'performance_rating_remarks' => formatBarangayTextSummary($row['performance_rating_remarks'] ?? ''),
             'special_disbursing_officers' => formatBarangayTextSummary($row['special_disbursing_officers'] ?? ''),
             'no_of_barangays' => (int) $row['target_barangay_count'],
             'actual_barangay_count' => (int) $row['actual_barangay_count'],

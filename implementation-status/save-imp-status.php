@@ -125,7 +125,7 @@ $stmt = $conn->prepare("
 ");
 
 $targetLookupStmt = $conn->prepare("
-    SELECT lawa_target, binhi_target, target_partner_beneficiaries
+    SELECT lawa_target, binhi_target, capbuild_target, community_action_plan_target, target_partner_beneficiaries
     FROM project_lawa_binhi_targets
     WHERE fiscal_year = ?
       AND province = ?
@@ -145,14 +145,18 @@ $targetSaveStmt = $conn->prepare("
         project_classifications,
         lawa_target,
         binhi_target,
+        capbuild_target,
+        community_action_plan_target,
         target_partner_beneficiaries
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON DUPLICATE KEY UPDATE
         puroks = VALUES(puroks),
         project_names = VALUES(project_names),
         project_classifications = VALUES(project_classifications),
         lawa_target = VALUES(lawa_target),
         binhi_target = VALUES(binhi_target),
+        capbuild_target = VALUES(capbuild_target),
+        community_action_plan_target = VALUES(community_action_plan_target),
         target_partner_beneficiaries = VALUES(target_partner_beneficiaries),
         updated_at = CURRENT_TIMESTAMP
 ");
@@ -171,6 +175,11 @@ foreach ($rows as $row) {
     $puroks = [];
     $projects = [];
     $classifications = [];
+    $lawaTarget = isset($row['lawa_target']) ? (int) $row['lawa_target'] : null;
+    $binhiTarget = isset($row['binhi_target']) ? (int) $row['binhi_target'] : null;
+    $capbuildTarget = isset($row['capbuild_target']) ? (int) $row['capbuild_target'] : null;
+    $communityActionPlanTarget = isset($row['community_action_plan_target']) ? (int) $row['community_action_plan_target'] : null;
+    $targetBeneficiaries = isset($row['target_partner_beneficiaries']) ? (int) $row['target_partner_beneficiaries'] : null;
     $stage1Start = trim((string) ($row['stage1_start_date'] ?? ''));
     $stage1End = trim((string) ($row['stage1_end_date'] ?? ''));
     $stage2Start = trim((string) ($row['stage2_start_date'] ?? ''));
@@ -202,6 +211,23 @@ foreach ($rows as $row) {
         if ($startDate > $endDate) {
             http_response_code(400);
             echo json_encode(['success' => false, 'message' => $barangay . ': ' . $label . ' Start date cannot be later than the End date.']);
+            $stmt->close();
+            $targetLookupStmt->close();
+            $targetSaveStmt->close();
+            exit;
+        }
+    }
+
+    foreach ([
+        'LAWA' => $lawaTarget,
+        'BINHI' => $binhiTarget,
+        'CapBuild' => $capbuildTarget,
+        'Community action plan' => $communityActionPlanTarget,
+        'Target partner-beneficiaries' => $targetBeneficiaries,
+    ] as $label => $targetValue) {
+        if ($targetValue !== null && $targetValue < 0) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'message' => $barangay . ': ' . $label . ' target cannot be negative.']);
             $stmt->close();
             $targetLookupStmt->close();
             $targetSaveStmt->close();
@@ -295,22 +321,42 @@ foreach ($rows as $row) {
     $puroksValue = implode('||', $puroks);
     $classificationsValue = implode('||', $classifications);
 
-    $existingLawaTarget = 0;
-    $existingBinhiTarget = 0;
-    $existingTargetBeneficiaries = 0;
+    $resolvedLawaTarget = 0;
+    $resolvedBinhiTarget = 0;
+    $resolvedCapbuildTarget = 0;
+    $resolvedCommunityActionPlanTarget = 0;
+    $resolvedTargetBeneficiaries = 0;
     $targetLookupStmt->bind_param('isss', $selectedYear, $normalizedProvince, $normalizedMunicipality, $normalizedBarangay);
     $targetLookupStmt->execute();
     $targetLookupResult = $targetLookupStmt->get_result();
     if ($targetLookupResult instanceof mysqli_result) {
         $targetRow = $targetLookupResult->fetch_assoc() ?: [];
-        $existingLawaTarget = (int) ($targetRow['lawa_target'] ?? 0);
-        $existingBinhiTarget = (int) ($targetRow['binhi_target'] ?? 0);
-        $existingTargetBeneficiaries = (int) ($targetRow['target_partner_beneficiaries'] ?? 0);
+        $resolvedLawaTarget = (int) ($targetRow['lawa_target'] ?? 0);
+        $resolvedBinhiTarget = (int) ($targetRow['binhi_target'] ?? 0);
+        $resolvedCapbuildTarget = (int) ($targetRow['capbuild_target'] ?? 0);
+        $resolvedCommunityActionPlanTarget = (int) ($targetRow['community_action_plan_target'] ?? 0);
+        $resolvedTargetBeneficiaries = (int) ($targetRow['target_partner_beneficiaries'] ?? 0);
         $targetLookupResult->free();
     }
 
+    if ($lawaTarget !== null) {
+        $resolvedLawaTarget = $lawaTarget;
+    }
+    if ($binhiTarget !== null) {
+        $resolvedBinhiTarget = $binhiTarget;
+    }
+    if ($capbuildTarget !== null) {
+        $resolvedCapbuildTarget = $capbuildTarget;
+    }
+    if ($communityActionPlanTarget !== null) {
+        $resolvedCommunityActionPlanTarget = $communityActionPlanTarget;
+    }
+    if ($targetBeneficiaries !== null) {
+        $resolvedTargetBeneficiaries = $targetBeneficiaries;
+    }
+
     $targetSaveStmt->bind_param(
-        'issssssiii',
+        'issssssiiiii',
         $selectedYear,
         $normalizedProvince,
         $normalizedMunicipality,
@@ -318,9 +364,11 @@ foreach ($rows as $row) {
         $puroksValue,
         $projectNames,
         $classificationsValue,
-        $existingLawaTarget,
-        $existingBinhiTarget,
-        $existingTargetBeneficiaries
+        $resolvedLawaTarget,
+        $resolvedBinhiTarget,
+        $resolvedCapbuildTarget,
+        $resolvedCommunityActionPlanTarget,
+        $resolvedTargetBeneficiaries
     );
     $targetSaveStmt->execute();
 

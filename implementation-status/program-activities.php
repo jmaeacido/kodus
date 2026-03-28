@@ -525,6 +525,10 @@ $userType = $_SESSION['user_type'] ?? 'user';
                     <th rowspan="2">Action</th>
                     <th rowspan="2" style="display:none;">Province</th>
                     <th rowspan="2">Municipality</th>
+                    <th rowspan="2">LAWA Target</th>
+                    <th rowspan="2">BINHI Target</th>
+                    <th rowspan="2">CapBuild Target</th>
+                    <th rowspan="2">Community Action Plan Target</th>
                     <th rowspan="2">Target Partner-Beneficiaries</th>
                     <th rowspan="2">Amount</th>
                     <th colspan="4">FORUM SCHEDULES</th>
@@ -849,6 +853,22 @@ $(document).ready(function() {
                         <span class="kodus-detail-value kodus-detail-value--strong">${formatFallback(data.province)}</span>
                     </div>
                     <div class="kodus-detail-stat">
+                        <span class="kodus-detail-label">LAWA Target</span>
+                        <span class="kodus-detail-value kodus-detail-value--strong">${formatNumber(data.lawa_target_beneficiaries)}</span>
+                    </div>
+                    <div class="kodus-detail-stat">
+                        <span class="kodus-detail-label">BINHI Target</span>
+                        <span class="kodus-detail-value kodus-detail-value--strong">${formatNumber(data.binhi_target_beneficiaries)}</span>
+                    </div>
+                    <div class="kodus-detail-stat">
+                        <span class="kodus-detail-label">CapBuild Target</span>
+                        <span class="kodus-detail-value kodus-detail-value--strong">${formatNumber(data.capbuild_target_beneficiaries)}</span>
+                    </div>
+                    <div class="kodus-detail-stat">
+                        <span class="kodus-detail-label">Community Action Plan Target</span>
+                        <span class="kodus-detail-value kodus-detail-value--strong">${formatNumber(data.community_action_plan_target_beneficiaries)}</span>
+                    </div>
+                    <div class="kodus-detail-stat">
                         <span class="kodus-detail-label">Target Beneficiaries</span>
                         <span class="kodus-detail-value kodus-detail-value--strong">${formatNumber(data.target_partner_beneficiaries)}</span>
                     </div>
@@ -966,6 +986,10 @@ $(document).ready(function() {
             { "data": "action", "orderable": false },
             { "data": "province", "visible": false }, // hidden column
             { "data": "municipality" },
+            { "data": "lawa_target_beneficiaries" },
+            { "data": "binhi_target_beneficiaries" },
+            { "data": "capbuild_target_beneficiaries" },
+            { "data": "community_action_plan_target_beneficiaries" },
             { "data": "target_partner_beneficiaries" },
             { "data": "amount" },
             { "data": "plgu_forum" },
@@ -1025,7 +1049,32 @@ $(document).ready(function() {
                         </div>
                         <div>
                             <label class="mb-1">Beneficiaries</label>
-                            <div class="readonly-display">Target: ${escapeHtml(row.target_partner_beneficiaries ?? 0)} | LAWA: ${escapeHtml(row.lawa_target ?? 0)} | BINHI: ${escapeHtml(row.binhi_target ?? 0)} | Actual: ${escapeHtml(row.actual_beneficiaries ?? 0)}</div>
+                            <div class="readonly-display">Target: ${escapeHtml(row.target_partner_beneficiaries ?? 0)} | LAWA: ${escapeHtml(row.lawa_target ?? 0)} | BINHI: ${escapeHtml(row.binhi_target ?? 0)} | CapBuild: ${escapeHtml(row.capbuild_target ?? 0)} | Community Action Plan: ${escapeHtml(row.community_action_plan_target ?? 0)} | Actual: ${escapeHtml(row.actual_beneficiaries ?? 0)}</div>
+                        </div>
+                        <div style="grid-column: 1 / -1;">
+                            <label class="mb-1">Barangay Target Counts</label>
+                            <div class="stage-phase-grid">
+                                <div>
+                                    <label class="mb-1">LAWA Target</label>
+                                    <input type="number" min="0" class="form-control form-control-sm row-lawa-target" value="${escapeHtml(row.lawa_target ?? 0)}">
+                                </div>
+                                <div>
+                                    <label class="mb-1">BINHI Target</label>
+                                    <input type="number" min="0" class="form-control form-control-sm row-binhi-target" value="${escapeHtml(row.binhi_target ?? 0)}">
+                                </div>
+                                <div>
+                                    <label class="mb-1">CapBuild Target</label>
+                                    <input type="number" min="0" class="form-control form-control-sm row-capbuild-target" value="${escapeHtml(row.capbuild_target ?? 0)}">
+                                </div>
+                                <div>
+                                    <label class="mb-1">Community Action Plan Target</label>
+                                    <input type="number" min="0" class="form-control form-control-sm row-community-action-plan-target" value="${escapeHtml(row.community_action_plan_target ?? 0)}">
+                                </div>
+                                <div>
+                                    <label class="mb-1">Total Target Partner-Beneficiaries</label>
+                                    <input type="number" min="0" class="form-control form-control-sm row-total-target" value="${escapeHtml(row.target_partner_beneficiaries ?? 0)}">
+                                </div>
+                            </div>
                         </div>
                         <div style="grid-column: 1 / -1;">
                             <label class="mb-1">Target Coverage</label>
@@ -1252,6 +1301,11 @@ $(document).ready(function() {
 
                             rowsPayload.push({
                                 barangay: $(this).find('.row-barangay').val(),
+                                lawa_target: parseInt($(this).find('.row-lawa-target').val(), 10) || 0,
+                                binhi_target: parseInt($(this).find('.row-binhi-target').val(), 10) || 0,
+                                capbuild_target: parseInt($(this).find('.row-capbuild-target').val(), 10) || 0,
+                                community_action_plan_target: parseInt($(this).find('.row-community-action-plan-target').val(), 10) || 0,
+                                target_partner_beneficiaries: parseInt($(this).find('.row-total-target').val(), 10) || 0,
                                 target_entries: targetEntries,
                                 ...stagePayload
                             });

@@ -34,6 +34,9 @@ $barangay = normalizeProjectTargetLocation((string) ($_POST['barangay'] ?? ''));
 $entriesInput = $_POST['entries'] ?? [];
 $lawaTarget = isset($_POST['lawa_target']) ? (int) $_POST['lawa_target'] : -1;
 $binhiTarget = isset($_POST['binhi_target']) ? (int) $_POST['binhi_target'] : -1;
+$capbuildTarget = isset($_POST['capbuild_target']) ? (int) $_POST['capbuild_target'] : -1;
+$communityActionPlanTarget = isset($_POST['community_action_plan_target']) ? (int) $_POST['community_action_plan_target'] : -1;
+$targetBeneficiaries = isset($_POST['target_partner_beneficiaries']) ? (int) $_POST['target_partner_beneficiaries'] : -1;
 
 $puroks = [];
 $projects = [];
@@ -68,21 +71,19 @@ if (is_array($entriesInput)) {
 $projectNames = implode('||', array_map(static fn($project) => $project['name'], $projects));
 $projectClassifications = implode('||', array_map(static fn($project) => $project['classification'], $projects));
 $puroksValue = implode('||', $puroks);
-$targetBeneficiaries = $lawaTarget + $binhiTarget;
-
-if ($province === '' || $municipality === '' || $barangay === '' || $lawaTarget < 0 || $binhiTarget < 0) {
+if ($province === '' || $municipality === '' || $barangay === '' || $lawaTarget < 0 || $binhiTarget < 0 || $capbuildTarget < 0 || $communityActionPlanTarget < 0 || $targetBeneficiaries < 0) {
     http_response_code(400);
-    echo json_encode(['success' => false, 'message' => 'Please complete all fields with valid LAWA and BINHI target counts.']);
+    echo json_encode(['success' => false, 'message' => 'Please complete all fields with valid target counts, including the barangay target partner-beneficiaries.']);
     exit;
 }
 
 if ($id > 0) {
     $stmt = $conn->prepare("
         UPDATE project_lawa_binhi_targets
-        SET province = ?, municipality = ?, barangay = ?, puroks = ?, project_names = ?, project_classifications = ?, lawa_target = ?, binhi_target = ?, target_partner_beneficiaries = ?
+        SET province = ?, municipality = ?, barangay = ?, puroks = ?, project_names = ?, project_classifications = ?, lawa_target = ?, binhi_target = ?, capbuild_target = ?, community_action_plan_target = ?, target_partner_beneficiaries = ?
         WHERE id = ? AND fiscal_year = ?
     ");
-    $stmt->bind_param('ssssssiiiii', $province, $municipality, $barangay, $puroksValue, $projectNames, $projectClassifications, $lawaTarget, $binhiTarget, $targetBeneficiaries, $id, $selectedYear);
+    $stmt->bind_param('ssssssiiiiiii', $province, $municipality, $barangay, $puroksValue, $projectNames, $projectClassifications, $lawaTarget, $binhiTarget, $capbuildTarget, $communityActionPlanTarget, $targetBeneficiaries, $id, $selectedYear);
     $stmt->execute();
 
     if ($stmt->errno) {
@@ -100,18 +101,20 @@ if ($id > 0) {
 }
 
 $stmt = $conn->prepare("
-    INSERT INTO project_lawa_binhi_targets (fiscal_year, province, municipality, barangay, puroks, project_names, project_classifications, lawa_target, binhi_target, target_partner_beneficiaries)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO project_lawa_binhi_targets (fiscal_year, province, municipality, barangay, puroks, project_names, project_classifications, lawa_target, binhi_target, capbuild_target, community_action_plan_target, target_partner_beneficiaries)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON DUPLICATE KEY UPDATE
         puroks = VALUES(puroks),
         project_names = VALUES(project_names),
         project_classifications = VALUES(project_classifications),
         lawa_target = VALUES(lawa_target),
         binhi_target = VALUES(binhi_target),
+        capbuild_target = VALUES(capbuild_target),
+        community_action_plan_target = VALUES(community_action_plan_target),
         target_partner_beneficiaries = VALUES(target_partner_beneficiaries),
         updated_at = CURRENT_TIMESTAMP
 ");
-$stmt->bind_param('issssssiii', $selectedYear, $province, $municipality, $barangay, $puroksValue, $projectNames, $projectClassifications, $lawaTarget, $binhiTarget, $targetBeneficiaries);
+$stmt->bind_param('issssssiiiii', $selectedYear, $province, $municipality, $barangay, $puroksValue, $projectNames, $projectClassifications, $lawaTarget, $binhiTarget, $capbuildTarget, $communityActionPlanTarget, $targetBeneficiaries);
 $stmt->execute();
 
 if ($stmt->errno) {

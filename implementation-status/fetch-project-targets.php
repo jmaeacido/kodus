@@ -20,7 +20,7 @@ $selectedYear = (int) $_SESSION['selected_year'];
 $isAdmin = isset($_SESSION['user_type']) && $_SESSION['user_type'] === 'admin';
 
 $stmt = $conn->prepare("
-    SELECT id, fiscal_year, province, municipality, barangay, puroks, project_names, project_classifications, lawa_target, binhi_target, target_partner_beneficiaries, updated_at
+    SELECT id, fiscal_year, province, municipality, barangay, puroks, project_names, project_classifications, lawa_target, binhi_target, capbuild_target, community_action_plan_target, target_partner_beneficiaries, updated_at
     FROM project_lawa_binhi_targets
     WHERE fiscal_year = ?
     ORDER BY province ASC, municipality ASC, barangay ASC
@@ -50,6 +50,8 @@ while ($row = $result->fetch_assoc()) {
         'project_classifications' => parseProjectTargetMultiValueCell($row['project_classifications'] ?? ''),
         'lawa_target' => (int) ($row['lawa_target'] ?? 0),
         'binhi_target' => (int) ($row['binhi_target'] ?? 0),
+        'capbuild_target' => (int) ($row['capbuild_target'] ?? 0),
+        'community_action_plan_target' => (int) ($row['community_action_plan_target'] ?? 0),
         'project_names_display' => implode(', ', parseProjectTargetMultiValueCell($row['project_names'] ?? '', false)),
         'project_classifications_display' => implode(', ', parseProjectTargetMultiValueCell($row['project_classifications'] ?? '')),
         'target_partner_beneficiaries' => (int) $row['target_partner_beneficiaries'],

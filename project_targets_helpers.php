@@ -20,6 +20,8 @@ function ensureProjectLawaBinhiTargets(mysqli $conn): void
             project_classifications TEXT DEFAULT NULL,
             lawa_target INT NOT NULL DEFAULT 0,
             binhi_target INT NOT NULL DEFAULT 0,
+            capbuild_target INT NOT NULL DEFAULT 0,
+            community_action_plan_target INT NOT NULL DEFAULT 0,
             target_partner_beneficiaries INT NOT NULL DEFAULT 0,
             created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -34,6 +36,8 @@ function ensureProjectLawaBinhiTargets(mysqli $conn): void
     projectTargetsEnsureColumn($conn, 'project_classifications', "ALTER TABLE project_lawa_binhi_targets ADD COLUMN project_classifications TEXT DEFAULT NULL");
     projectTargetsEnsureColumn($conn, 'lawa_target', "ALTER TABLE project_lawa_binhi_targets ADD COLUMN lawa_target INT NOT NULL DEFAULT 0 AFTER project_classifications");
     projectTargetsEnsureColumn($conn, 'binhi_target', "ALTER TABLE project_lawa_binhi_targets ADD COLUMN binhi_target INT NOT NULL DEFAULT 0 AFTER lawa_target");
+    projectTargetsEnsureColumn($conn, 'capbuild_target', "ALTER TABLE project_lawa_binhi_targets ADD COLUMN capbuild_target INT NOT NULL DEFAULT 0 AFTER binhi_target");
+    projectTargetsEnsureColumn($conn, 'community_action_plan_target', "ALTER TABLE project_lawa_binhi_targets ADD COLUMN community_action_plan_target INT NOT NULL DEFAULT 0 AFTER capbuild_target");
 
     $initialized = true;
 }

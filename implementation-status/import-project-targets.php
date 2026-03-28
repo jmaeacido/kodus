@@ -71,24 +71,28 @@ try {
         'PROJECT CLASSIFICATION',
         'LAWA TARGET',
         'BINHI TARGET',
+        'CAPBUILD TARGET',
+        'COMMUNITY ACTION PLAN TARGET',
         'TARGET PARTNER-BENEFICIARIES',
     ];
 
     foreach ($requiredHeaders as $requiredHeader) {
         if (!isset($normalizedHeaders[$requiredHeader])) {
-            throw new RuntimeException('Column mismatch. Expected headers: PROVINCE, MUNICIPALITY, BARANGAY, PUROK, PROJECT NAME, PROJECT CLASSIFICATION, LAWA TARGET, BINHI TARGET, TARGET PARTNER-BENEFICIARIES.');
+            throw new RuntimeException('Column mismatch. Expected headers: PROVINCE, MUNICIPALITY, BARANGAY, PUROK, PROJECT NAME, PROJECT CLASSIFICATION, LAWA TARGET, BINHI TARGET, CAPBUILD TARGET, COMMUNITY ACTION PLAN TARGET, TARGET PARTNER-BENEFICIARIES.');
         }
     }
 
     $stmt = $conn->prepare("
-        INSERT INTO project_lawa_binhi_targets (fiscal_year, province, municipality, barangay, puroks, project_names, project_classifications, lawa_target, binhi_target, target_partner_beneficiaries)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO project_lawa_binhi_targets (fiscal_year, province, municipality, barangay, puroks, project_names, project_classifications, lawa_target, binhi_target, capbuild_target, community_action_plan_target, target_partner_beneficiaries)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON DUPLICATE KEY UPDATE
             puroks = VALUES(puroks),
             project_names = VALUES(project_names),
             project_classifications = VALUES(project_classifications),
             lawa_target = VALUES(lawa_target),
             binhi_target = VALUES(binhi_target),
+            capbuild_target = VALUES(capbuild_target),
+            community_action_plan_target = VALUES(community_action_plan_target),
             target_partner_beneficiaries = VALUES(target_partner_beneficiaries),
             updated_at = CURRENT_TIMESTAMP
     ");
@@ -103,9 +107,11 @@ try {
         $projectClassifications = parseProjectTargetMultiValueCell((string) ($row[$normalizedHeaders['PROJECT CLASSIFICATION']] ?? ''));
         $lawaTargetRaw = trim((string) ($row[$normalizedHeaders['LAWA TARGET']] ?? ''));
         $binhiTargetRaw = trim((string) ($row[$normalizedHeaders['BINHI TARGET']] ?? ''));
+        $capbuildTargetRaw = trim((string) ($row[$normalizedHeaders['CAPBUILD TARGET']] ?? ''));
+        $communityActionPlanTargetRaw = trim((string) ($row[$normalizedHeaders['COMMUNITY ACTION PLAN TARGET']] ?? ''));
         $targetRaw = trim((string) ($row[$normalizedHeaders['TARGET PARTNER-BENEFICIARIES']] ?? ''));
 
-        if ($province === '' && $municipality === '' && $barangay === '' && empty($puroks) && empty($projectNames) && empty($projectClassifications) && $lawaTargetRaw === '' && $binhiTargetRaw === '' && $targetRaw === '') {
+        if ($province === '' && $municipality === '' && $barangay === '' && empty($puroks) && empty($projectNames) && empty($projectClassifications) && $lawaTargetRaw === '' && $binhiTargetRaw === '' && $capbuildTargetRaw === '' && $communityActionPlanTargetRaw === '' && $targetRaw === '') {
             continue;
         }
 
@@ -115,25 +121,30 @@ try {
             $barangay === '' ||
             $lawaTargetRaw === '' ||
             $binhiTargetRaw === '' ||
+            $capbuildTargetRaw === '' ||
+            $communityActionPlanTargetRaw === '' ||
             !is_numeric(str_replace(',', '', $lawaTargetRaw)) ||
-            !is_numeric(str_replace(',', '', $binhiTargetRaw))
+            !is_numeric(str_replace(',', '', $binhiTargetRaw)) ||
+            !is_numeric(str_replace(',', '', $capbuildTargetRaw)) ||
+            !is_numeric(str_replace(',', '', $communityActionPlanTargetRaw))
         ) {
-            throw new RuntimeException('Every row must include province, municipality, barangay, and numeric LAWA and BINHI target counts.');
+            throw new RuntimeException('Every row must include province, municipality, barangay, and numeric LAWA, BINHI, CapBuild, and Community action plan target counts.');
         }
 
         $lawaTarget = (int) str_replace(',', '', $lawaTargetRaw);
         $binhiTarget = (int) str_replace(',', '', $binhiTargetRaw);
-        if ($lawaTarget < 0 || $binhiTarget < 0) {
-            throw new RuntimeException('LAWA and BINHI target counts cannot be negative.');
+        $capbuildTarget = (int) str_replace(',', '', $capbuildTargetRaw);
+        $communityActionPlanTarget = (int) str_replace(',', '', $communityActionPlanTargetRaw);
+        if ($lawaTarget < 0 || $binhiTarget < 0 || $capbuildTarget < 0 || $communityActionPlanTarget < 0) {
+            throw new RuntimeException('LAWA, BINHI, CapBuild, and Community action plan target counts cannot be negative.');
         }
-        $computedTargetBeneficiaries = $lawaTarget + $binhiTarget;
-        if ($targetRaw !== '' && is_numeric(str_replace(',', '', $targetRaw))) {
-            $importedTotal = (int) str_replace(',', '', $targetRaw);
-            if ($importedTotal !== $computedTargetBeneficiaries) {
-                throw new RuntimeException('Target Partner-Beneficiaries must equal the sum of LAWA Target and BINHI Target.');
-            }
+        if ($targetRaw === '' || !is_numeric(str_replace(',', '', $targetRaw))) {
+            throw new RuntimeException('Every row must include a numeric Target Partner-Beneficiaries value for the barangay.');
         }
-        $targetBeneficiaries = $computedTargetBeneficiaries;
+        $targetBeneficiaries = (int) str_replace(',', '', $targetRaw);
+        if ($targetBeneficiaries < 0) {
+            throw new RuntimeException('Target Partner-Beneficiaries cannot be negative.');
+        }
 
         if (count($puroks) !== count($projectNames) || count($projectNames) !== count($projectClassifications)) {
             throw new RuntimeException('Purok, Project Name, and Project Classification must have the same number of linked entries per row.');
@@ -149,7 +160,7 @@ try {
         $projectNamesValue = implode('||', $projectNames);
         $projectClassificationsValue = implode('||', $projectClassifications);
 
-        $stmt->bind_param('issssssiii', $selectedYear, $province, $municipality, $barangay, $puroksValue, $projectNamesValue, $projectClassificationsValue, $lawaTarget, $binhiTarget, $targetBeneficiaries);
+        $stmt->bind_param('issssssiiiii', $selectedYear, $province, $municipality, $barangay, $puroksValue, $projectNamesValue, $projectClassificationsValue, $lawaTarget, $binhiTarget, $capbuildTarget, $communityActionPlanTarget, $targetBeneficiaries);
         $stmt->execute();
         $importedRows++;
     }

@@ -121,7 +121,7 @@ unset($_SESSION['target_import_success'], $_SESSION['target_import_error']);
 
             <?php if ($userType === 'admin'): ?>
               <div class="target-import-card">
-                <div class="target-help">Import an Excel file with these exact headers: <strong>PROVINCE</strong>, <strong>MUNICIPALITY</strong>, <strong>BARANGAY</strong>, <strong>PUROK</strong>, <strong>PROJECT NAME</strong>, <strong>PROJECT CLASSIFICATION</strong>, <strong>LAWA TARGET</strong>, <strong>BINHI TARGET</strong>, <strong>TARGET PARTNER-BENEFICIARIES</strong>. Each purok must line up with its matching project name and classification. For multiple entries in one row, separate each column with <strong>||</strong> in the same order. The total target must equal <strong>LAWA + BINHI</strong>.</div>
+                <div class="target-help">Import an Excel file with these exact headers: <strong>PROVINCE</strong>, <strong>MUNICIPALITY</strong>, <strong>BARANGAY</strong>, <strong>PUROK</strong>, <strong>PROJECT NAME</strong>, <strong>PROJECT CLASSIFICATION</strong>, <strong>LAWA TARGET</strong>, <strong>BINHI TARGET</strong>, <strong>CAPBUILD TARGET</strong>, <strong>COMMUNITY ACTION PLAN TARGET</strong>, <strong>TARGET PARTNER-BENEFICIARIES</strong>. Each purok must line up with its matching project name and classification. For multiple entries in one row, separate each column with <strong>||</strong> in the same order. <strong>Target Partner-Beneficiaries</strong> should be the barangay's beneficiary target.</div>
                 <form action="import-project-targets.php" method="POST" enctype="multipart/form-data">
                   <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(security_get_csrf_token(), ENT_QUOTES, 'UTF-8'); ?>">
                   <input type="file" name="targetFile" accept=".xls,.xlsx" class="form-control-file" required>
@@ -143,6 +143,8 @@ unset($_SESSION['target_import_success'], $_SESSION['target_import_error']);
                     <th>Project Classification</th>
                     <th>LAWA Target</th>
                     <th>BINHI Target</th>
+                    <th>CapBuild Target</th>
+                    <th>Community Action Plan Target</th>
                     <th>Target Partner-Beneficiaries</th>
                     <th>Last Updated</th>
                     <th>Action</th>
@@ -216,6 +218,8 @@ $(function() {
             { data: 'project_classifications_display', defaultContent: '' },
             { data: 'lawa_target' },
             { data: 'binhi_target' },
+            { data: 'capbuild_target' },
+            { data: 'community_action_plan_target' },
             { data: 'target_partner_beneficiaries' },
             { data: 'updated_at' },
             { data: 'action', orderable: false, searchable: false }
@@ -224,6 +228,21 @@ $(function() {
         autoWidth: false,
         order: [[0, 'asc'], [1, 'asc'], [2, 'asc']]
     });
+
+    function getTargetRowData(trigger) {
+        const currentRow = $(trigger).closest('tr');
+        let row = table.row(currentRow).data();
+
+        if (row) {
+            return row;
+        }
+
+        if (currentRow.hasClass('child')) {
+            row = table.row(currentRow.prev()).data();
+        }
+
+        return row || null;
+    }
 
     function openTargetModal(row) {
         const target = row || {};
@@ -278,8 +297,16 @@ $(function() {
                                 <input id="target-binhi" type="number" min="0" class="form-control" value="${escapeHtml(target.binhi_target || 0)}">
                             </div>
                             <div class="kodus-edit-field">
+                                <label>CapBuild Target</label>
+                                <input id="target-capbuild" type="number" min="0" class="form-control" value="${escapeHtml(target.capbuild_target || 0)}">
+                            </div>
+                            <div class="kodus-edit-field">
+                                <label>Community Action Plan Target</label>
+                                <input id="target-community-action-plan" type="number" min="0" class="form-control" value="${escapeHtml(target.community_action_plan_target || 0)}">
+                            </div>
+                            <div class="kodus-edit-field">
                                 <label>Total Target Partner-Beneficiaries</label>
-                                <input id="target-total" type="number" min="0" class="form-control" value="${escapeHtml(target.target_partner_beneficiaries || 0)}" readonly>
+                                <input id="target-total" type="number" min="0" class="form-control" value="${escapeHtml(target.target_partner_beneficiaries || 0)}">
                             </div>
                         </div>
                     </div>
@@ -288,15 +315,6 @@ $(function() {
             showCancelButton: true,
             confirmButtonText: row ? '<i class="fas fa-save"></i>' : '<i class="fas fa-plus"></i>',
             didOpen: () => {
-                const syncTotalTarget = () => {
-                    const lawa = parseInt($('#target-lawa').val(), 10) || 0;
-                    const binhi = parseInt($('#target-binhi').val(), 10) || 0;
-                    $('#target-total').val(lawa + binhi);
-                };
-
-                syncTotalTarget();
-                $(document).off('input.targetCounts');
-                $(document).on('input.targetCounts', '#target-lawa, #target-binhi', syncTotalTarget);
                 $(document).off('click.targetModal');
                 $(document).on('click.targetModal', '.add-entry-btn', function() {
                     $('#target-entry-list').append(renderTargetRows([''], [''], ['']));
@@ -313,7 +331,6 @@ $(function() {
                 });
             },
             willClose: () => {
-                $(document).off('input.targetCounts');
                 $(document).off('click.targetModal');
             },
             preConfirm: () => {
@@ -339,6 +356,9 @@ $(function() {
                         entries: entries,
                         lawa_target: $('#target-lawa').val(),
                         binhi_target: $('#target-binhi').val(),
+                        capbuild_target: $('#target-capbuild').val(),
+                        community_action_plan_target: $('#target-community-action-plan').val(),
+                        target_partner_beneficiaries: $('#target-total').val(),
                         csrf_token: window.KODUS_CSRF_TOKEN
                     }
                 }).then(function(response) {
@@ -371,12 +391,20 @@ $(function() {
         });
 
         $('#project-targets-table tbody').on('click', '.edit-target-btn', function() {
-            const row = table.row($(this).closest('tr')).data();
+            const row = getTargetRowData(this);
+            if (!row) {
+                Swal.fire('Error', 'Could not load this target row.', 'error');
+                return;
+            }
             openTargetModal(row);
         });
 
         $('#project-targets-table tbody').on('click', '.delete-target-btn', function() {
-            const row = table.row($(this).closest('tr')).data();
+            const row = getTargetRowData(this);
+            if (!row) {
+                Swal.fire('Error', 'Could not load this target row.', 'error');
+                return;
+            }
             Swal.fire({
                 icon: 'warning',
                 title: 'Delete Baseline Target',

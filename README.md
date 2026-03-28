@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # KODUS
 
 KliMalasakit Online Document Updating System.
@@ -33,3 +34,7 @@ Detailed application documentation is available at [`docs/KODUS_DOCUMENTATION.md
 
 - App version metadata lives in `app_meta.php`.
 - Run `php scripts/update_app_version.php` at the end of the day to bump the patch version only when relevant source changes were detected since the last release date.
+=======
+# kodus
+KliMalasakit Online Document Updating System
+>>>>>>> d1ed1b3fe0bb98033676b293b4e0f261964306f6

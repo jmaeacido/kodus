@@ -201,23 +201,29 @@ $composeCsrfToken = security_get_csrf_token();
     :root {
       --mailbox-surface: #ffffff;
       --mailbox-surface-muted: #f8fafc;
+      --mailbox-surface-elevated: #ffffff;
       --mailbox-border: #d9e2ec;
       --mailbox-border-strong: #c7d2e0;
       --mailbox-text: #1f2937;
       --mailbox-text-muted: #64748b;
       --mailbox-accent-soft: rgba(13, 110, 253, 0.1);
+      --mailbox-accent-strong: #2563eb;
       --mailbox-shadow: 0 16px 36px rgba(15, 23, 42, 0.08);
     }
 
     body.dark-mode .mailbox-app,
-    body[data-theme="dark"] .mailbox-app {
+    body.dark-mode .compose-modal,
+    body[data-theme="dark"] .mailbox-app,
+    body[data-theme="dark"] .compose-modal {
       --mailbox-surface: #1f2a37;
       --mailbox-surface-muted: #243140;
+      --mailbox-surface-elevated: #223041;
       --mailbox-border: rgba(255, 255, 255, 0.09);
       --mailbox-border-strong: rgba(255, 255, 255, 0.18);
       --mailbox-text: #f3f4f6;
       --mailbox-text-muted: #c0cad5;
       --mailbox-accent-soft: rgba(96, 165, 250, 0.18);
+      --mailbox-accent-strong: #93c5fd;
       --mailbox-shadow: 0 18px 36px rgba(0, 0, 0, 0.22);
     }
 
@@ -883,7 +889,7 @@ $composeCsrfToken = security_get_csrf_token();
       font-size: 0.82rem;
     }
 
-    .mailbox-app .compose-modal .modal-content {
+    .compose-modal .modal-content {
       border: 1px solid var(--mailbox-border);
       border-radius: 1.35rem;
       background: linear-gradient(180deg, var(--mailbox-surface) 0%, var(--mailbox-surface-muted) 100%);
@@ -891,26 +897,38 @@ $composeCsrfToken = security_get_csrf_token();
       overflow: hidden;
     }
 
-    .mailbox-app .compose-modal .modal-header,
-    .mailbox-app .compose-modal .modal-footer {
+    .compose-modal .modal-header,
+    .compose-modal .modal-footer {
       border-color: var(--mailbox-border);
       background: color-mix(in srgb, var(--mailbox-surface) 92%, transparent);
     }
 
-    .mailbox-app .compose-modal .modal-title {
+    .compose-modal .modal-title {
       color: var(--mailbox-text);
       font-weight: 800;
       letter-spacing: -0.02em;
     }
 
-    .mailbox-app .compose-panel {
+    .compose-modal .close {
+      color: var(--mailbox-text);
+      opacity: 0.78;
+      text-shadow: none;
+    }
+
+    .compose-modal .close:hover,
+    .compose-modal .close:focus {
+      color: var(--mailbox-text);
+      opacity: 1;
+    }
+
+    .compose-modal .compose-panel {
       border: 1px solid var(--mailbox-border);
       border-radius: 1.1rem;
       background: color-mix(in srgb, var(--mailbox-surface) 94%, transparent);
       padding: 1rem;
     }
 
-    .mailbox-app .compose-panel-head {
+    .compose-modal .compose-panel-head {
       display: flex;
       justify-content: space-between;
       align-items: flex-start;
@@ -918,21 +936,21 @@ $composeCsrfToken = security_get_csrf_token();
       margin-bottom: 0.85rem;
     }
 
-    .mailbox-app .compose-panel-head h4 {
+    .compose-modal .compose-panel-head h4 {
       margin: 0 0 0.25rem;
       color: var(--mailbox-text);
       font-size: 1rem;
       font-weight: 800;
     }
 
-    .mailbox-app .compose-panel-head p,
-    .mailbox-app .compose-meta {
+    .compose-modal .compose-panel-head p,
+    .compose-modal .compose-meta {
       margin: 0;
       color: var(--mailbox-text-muted);
       font-size: 0.88rem;
     }
 
-    .mailbox-app .compose-pill {
+    .compose-modal .compose-pill {
       display: inline-flex;
       align-items: center;
       gap: 0.4rem;
@@ -944,8 +962,8 @@ $composeCsrfToken = security_get_csrf_token();
       font-weight: 700;
     }
 
-    .mailbox-app .compose-field label,
-    .mailbox-app .compose-body label {
+    .compose-modal .compose-field label,
+    .compose-modal .compose-body label {
       display: block;
       color: var(--mailbox-text);
       font-size: 0.84rem;
@@ -953,14 +971,14 @@ $composeCsrfToken = security_get_csrf_token();
       margin-bottom: 0.45rem;
     }
 
-    .mailbox-app .compose-field + .compose-field,
-    .mailbox-app .compose-body {
+    .compose-modal .compose-field + .compose-field,
+    .compose-modal .compose-body {
       margin-top: 0.95rem;
     }
 
-    .mailbox-app .compose-field .form-control,
-    .mailbox-app .compose-body .form-control,
-    .mailbox-app .compose-attachment-label {
+    .compose-modal .compose-field .form-control,
+    .compose-modal .compose-body .form-control,
+    .compose-modal .compose-attachment-label {
       border-radius: 0.95rem;
       border: 1px solid var(--mailbox-border);
       background: color-mix(in srgb, var(--mailbox-surface) 94%, transparent);
@@ -968,13 +986,13 @@ $composeCsrfToken = security_get_csrf_token();
       box-shadow: none;
     }
 
-    .mailbox-app .compose-field .form-control:focus,
-    .mailbox-app .compose-body .form-control:focus {
-      border-color: rgba(37, 99, 235, 0.45);
-      box-shadow: 0 0 0 0.22rem rgba(37, 99, 235, 0.12);
+    .compose-modal .compose-field .form-control:focus,
+    .compose-modal .compose-body .form-control:focus {
+      border-color: color-mix(in srgb, var(--mailbox-accent-strong) 55%, var(--mailbox-border));
+      box-shadow: 0 0 0 0.22rem color-mix(in srgb, var(--mailbox-accent-soft) 88%, transparent);
     }
 
-    .mailbox-app .compose-toolbar {
+    .compose-modal .compose-toolbar {
       display: flex;
       justify-content: space-between;
       align-items: center;
@@ -982,20 +1000,20 @@ $composeCsrfToken = security_get_csrf_token();
       margin-bottom: 0.45rem;
     }
 
-    .mailbox-app .compose-toolbar .btn {
+    .compose-modal .compose-toolbar .btn {
       border-radius: 999px;
     }
 
-    .mailbox-app .compose-toolbar-copy {
+    .compose-modal .compose-toolbar-copy {
       color: var(--mailbox-text-muted);
       font-size: 0.82rem;
     }
 
-    .mailbox-app .compose-attachment-wrap {
+    .compose-modal .compose-attachment-wrap {
       margin-top: 0.95rem;
     }
 
-    .mailbox-app .compose-attachment-label {
+    .compose-modal .compose-attachment-label {
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -1006,20 +1024,20 @@ $composeCsrfToken = security_get_csrf_token();
       border-style: dashed;
     }
 
-    .mailbox-app .compose-file-summary {
+    .compose-modal .compose-file-summary {
       margin-top: 0.65rem;
       color: var(--mailbox-text-muted);
       font-size: 0.85rem;
     }
 
-    .mailbox-app .compose-file-preview {
+    .compose-modal .compose-file-preview {
       display: flex;
       flex-wrap: wrap;
       gap: 0.65rem;
       margin-top: 0.8rem;
     }
 
-    .mailbox-app .compose-file-card {
+    .compose-modal .compose-file-card {
       width: 72px;
       height: 72px;
       border-radius: 1rem;
@@ -1033,19 +1051,19 @@ $composeCsrfToken = security_get_csrf_token();
       color: var(--mailbox-text-muted);
     }
 
-    .mailbox-app .compose-file-card img {
+    .compose-modal .compose-file-card img {
       width: 100%;
       height: 100%;
       object-fit: cover;
     }
 
-    .mailbox-app .compose-file-card.more {
+    .compose-modal .compose-file-card.more {
       background: linear-gradient(135deg, #2563eb, #0f766e);
       color: #fff;
       font-weight: 800;
     }
 
-    .mailbox-app .compose-stats {
+    .compose-modal .compose-stats {
       display: flex;
       flex-wrap: wrap;
       gap: 0.45rem 0.75rem;
@@ -1054,7 +1072,7 @@ $composeCsrfToken = security_get_csrf_token();
       font-size: 0.82rem;
     }
 
-    .mailbox-app .compose-stat-pill {
+    .compose-modal .compose-stat-pill {
       display: inline-flex;
       align-items: center;
       gap: 0.35rem;
@@ -1064,26 +1082,44 @@ $composeCsrfToken = security_get_csrf_token();
       border: 1px solid var(--mailbox-border);
     }
 
-    .mailbox-app .select2-container--bootstrap4 .select2-selection {
+    .mailbox-app .select2-container--bootstrap4 .select2-selection,
+    .compose-modal .select2-container--bootstrap4 .select2-selection {
       min-height: 48px;
       border-radius: 0.95rem;
       border-color: var(--mailbox-border);
       background: color-mix(in srgb, var(--mailbox-surface) 94%, transparent);
+      color: var(--mailbox-text);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
     }
 
-    .mailbox-app .select2-container--bootstrap4.select2-container--focus .select2-selection {
-      border-color: rgba(37, 99, 235, 0.45);
-      box-shadow: 0 0 0 0.22rem rgba(37, 99, 235, 0.12);
+    .mailbox-app .select2-container--bootstrap4.select2-container--focus .select2-selection,
+    .compose-modal .select2-container--bootstrap4.select2-container--focus .select2-selection {
+      border-color: color-mix(in srgb, var(--mailbox-accent-strong) 55%, var(--mailbox-border));
+      box-shadow: 0 0 0 0.22rem color-mix(in srgb, var(--mailbox-accent-soft) 88%, transparent);
     }
 
-    .mailbox-app .select2-container--bootstrap4 .select2-selection--multiple .select2-selection__rendered {
+    .mailbox-app .select2-container--bootstrap4 .select2-selection__rendered,
+    .mailbox-app .select2-container--bootstrap4 .select2-selection__placeholder,
+    .compose-modal .select2-container--bootstrap4 .select2-selection__rendered,
+    .compose-modal .select2-container--bootstrap4 .select2-selection__placeholder {
+      color: var(--mailbox-text);
+    }
+
+    .mailbox-app .select2-container--bootstrap4 .select2-selection__placeholder,
+    .compose-modal .select2-container--bootstrap4 .select2-selection__placeholder {
+      opacity: 0.78;
+    }
+
+    .mailbox-app .select2-container--bootstrap4 .select2-selection--multiple .select2-selection__rendered,
+    .compose-modal .select2-container--bootstrap4 .select2-selection--multiple .select2-selection__rendered {
       display: flex;
       flex-wrap: wrap;
       gap: 0.45rem;
       padding: 0.45rem 0.55rem;
     }
 
-    .mailbox-app .select2-container--bootstrap4 .select2-selection--multiple .select2-selection__choice {
+    .mailbox-app .select2-container--bootstrap4 .select2-selection--multiple .select2-selection__choice,
+    .compose-modal .select2-container--bootstrap4 .select2-selection--multiple .select2-selection__choice {
       display: inline-flex;
       align-items: center;
       gap: 0.35rem;
@@ -1100,36 +1136,89 @@ $composeCsrfToken = security_get_csrf_token();
       max-width: 100%;
     }
 
-    .mailbox-app .select2-container--bootstrap4 .select2-selection--multiple .select2-selection__choice__remove {
+    .mailbox-app .select2-container--bootstrap4 .select2-selection--multiple .select2-selection__choice__remove,
+    .compose-modal .select2-container--bootstrap4 .select2-selection--multiple .select2-selection__choice__remove {
       color: var(--mailbox-text-muted);
       margin: 0 0.15rem 0 0;
       font-size: 0.8rem;
       line-height: 1;
     }
 
-    .mailbox-app .select2-container--bootstrap4 .select2-selection--multiple .select2-search__field {
+    .mailbox-app .select2-container--bootstrap4 .select2-selection--multiple .select2-search__field,
+    .compose-modal .select2-container--bootstrap4 .select2-selection--multiple .select2-search__field {
       color: var(--mailbox-text);
+      background: transparent;
+      caret-color: var(--mailbox-accent-strong);
       margin-top: 0 !important;
     }
 
-    .mailbox-app .select2-container--bootstrap4 .select2-dropdown {
-      background: var(--mailbox-surface);
+    .mailbox-app .select2-container--bootstrap4 .select2-dropdown,
+    .compose-modal .select2-container--bootstrap4 .select2-dropdown {
+      background: var(--mailbox-surface-elevated);
       border-color: var(--mailbox-border);
+      color: var(--mailbox-text);
+      box-shadow: var(--mailbox-shadow);
     }
 
-    .mailbox-app .select2-container--bootstrap4 .select2-results__option {
+    .mailbox-app .select2-container--bootstrap4 .select2-search--dropdown,
+    .compose-modal .select2-container--bootstrap4 .select2-search--dropdown {
+      padding: 0.55rem;
+      background: var(--mailbox-surface-elevated);
+      border-bottom: 1px solid var(--mailbox-border);
+    }
+
+    .mailbox-app .select2-container--bootstrap4 .select2-search--dropdown .select2-search__field,
+    .compose-modal .select2-container--bootstrap4 .select2-search--dropdown .select2-search__field {
+      border-radius: 0.8rem;
+      border: 1px solid var(--mailbox-border);
+      background: color-mix(in srgb, var(--mailbox-surface) 92%, transparent);
+      color: var(--mailbox-text);
+      padding: 0.55rem 0.75rem;
+      outline: none;
+    }
+
+    .mailbox-app .select2-container--bootstrap4 .select2-search--dropdown .select2-search__field:focus,
+    .compose-modal .select2-container--bootstrap4 .select2-search--dropdown .select2-search__field:focus {
+      border-color: color-mix(in srgb, var(--mailbox-accent-strong) 55%, var(--mailbox-border));
+      box-shadow: 0 0 0 0.2rem color-mix(in srgb, var(--mailbox-accent-soft) 88%, transparent);
+    }
+
+    .mailbox-app .select2-container--bootstrap4 .select2-results__option,
+    .compose-modal .select2-container--bootstrap4 .select2-results__option {
+      color: var(--mailbox-text);
+      background: transparent;
+      padding: 0.6rem 0.8rem;
+    }
+
+    .mailbox-app .select2-container--bootstrap4 .select2-results__option[aria-selected="true"],
+    .compose-modal .select2-container--bootstrap4 .select2-results__option[aria-selected="true"] {
+      background: color-mix(in srgb, var(--mailbox-accent-soft) 78%, var(--mailbox-surface-elevated));
       color: var(--mailbox-text);
     }
 
+    .mailbox-app .select2-container--bootstrap4 .select2-results__option--highlighted[aria-selected],
+    .compose-modal .select2-container--bootstrap4 .select2-results__option--highlighted[aria-selected] {
+      background: color-mix(in srgb, var(--mailbox-accent-soft) 92%, var(--mailbox-surface-elevated));
+      color: var(--mailbox-text);
+    }
+
+    .mailbox-app .select2-container--bootstrap4 .select2-results__option--disabled,
+    .compose-modal .select2-container--bootstrap4 .select2-results__option--disabled {
+      color: var(--mailbox-text-muted);
+    }
+
     .mailbox-app .compose-recipient-option,
-    .mailbox-app .compose-recipient-chip {
+    .mailbox-app .compose-recipient-chip,
+    .compose-modal .compose-recipient-option,
+    .compose-modal .compose-recipient-chip {
       display: flex;
       align-items: center;
       gap: 0.55rem;
       min-width: 0;
     }
 
-    .mailbox-app .compose-recipient-avatar {
+    .mailbox-app .compose-recipient-avatar,
+    .compose-modal .compose-recipient-avatar {
       width: 16px;
       height: 16px;
       min-width: 16px;
@@ -1144,11 +1233,13 @@ $composeCsrfToken = security_get_csrf_token();
       background: color-mix(in srgb, var(--mailbox-surface-muted) 88%, transparent);
     }
 
-    .mailbox-app .compose-recipient-copy {
+    .mailbox-app .compose-recipient-copy,
+    .compose-modal .compose-recipient-copy {
       min-width: 0;
     }
 
-    .mailbox-app .compose-recipient-name {
+    .mailbox-app .compose-recipient-name,
+    .compose-modal .compose-recipient-name {
       display: block;
       color: var(--mailbox-text);
       font-size: 0.82rem;
@@ -1159,7 +1250,8 @@ $composeCsrfToken = security_get_csrf_token();
       text-overflow: ellipsis;
     }
 
-    .mailbox-app .compose-recipient-meta {
+    .mailbox-app .compose-recipient-meta,
+    .compose-modal .compose-recipient-meta {
       display: block;
       color: var(--mailbox-text-muted);
       font-size: 0.72rem;
@@ -1169,21 +1261,25 @@ $composeCsrfToken = security_get_csrf_token();
       text-overflow: ellipsis;
     }
 
-    .mailbox-app .compose-recipient-chip .compose-recipient-meta {
+    .mailbox-app .compose-recipient-chip .compose-recipient-meta,
+    .compose-modal .compose-recipient-chip .compose-recipient-meta {
       display: none;
     }
 
-    .mailbox-app .compose-recipient-chip .compose-recipient-name {
+    .mailbox-app .compose-recipient-chip .compose-recipient-name,
+    .compose-modal .compose-recipient-chip .compose-recipient-name {
       font-size: 0.76rem;
       font-weight: 600;
       line-height: 1.1;
     }
 
-    .mailbox-app .select2-container--bootstrap4 .select2-selection__choice .compose-recipient-chip {
+    .mailbox-app .select2-container--bootstrap4 .select2-selection__choice .compose-recipient-chip,
+    .compose-modal .select2-container--bootstrap4 .select2-selection__choice .compose-recipient-chip {
       gap: 0.3rem;
     }
 
-    .mailbox-app .select2-container--bootstrap4 .select2-selection__choice .compose-recipient-avatar {
+    .mailbox-app .select2-container--bootstrap4 .select2-selection__choice .compose-recipient-avatar,
+    .compose-modal .select2-container--bootstrap4 .select2-selection__choice .compose-recipient-avatar {
       width: 14px !important;
       height: 14px !important;
       min-width: 14px !important;
@@ -1194,7 +1290,8 @@ $composeCsrfToken = security_get_csrf_token();
       vertical-align: middle;
     }
 
-    .mailbox-app .select2-container--bootstrap4 .select2-results__option .compose-recipient-avatar {
+    .mailbox-app .select2-container--bootstrap4 .select2-results__option .compose-recipient-avatar,
+    .compose-modal .select2-container--bootstrap4 .select2-results__option .compose-recipient-avatar {
       width: 18px !important;
       height: 18px !important;
       min-width: 18px !important;
@@ -1207,11 +1304,15 @@ $composeCsrfToken = security_get_csrf_token();
 
     .mailbox-app .select2-selection__choice__display,
     .mailbox-app .select2-results__option .compose-recipient-option,
-    .mailbox-app .select2-selection__choice .compose-recipient-chip {
+    .mailbox-app .select2-selection__choice .compose-recipient-chip,
+    .compose-modal .select2-selection__choice__display,
+    .compose-modal .select2-results__option .compose-recipient-option,
+    .compose-modal .select2-selection__choice .compose-recipient-chip {
       max-width: 100%;
     }
 
-    .mailbox-app .select2-selection__choice__display .compose-recipient-name {
+    .mailbox-app .select2-selection__choice__display .compose-recipient-name,
+    .compose-modal .select2-selection__choice__display .compose-recipient-name {
       display: inline-block;
       max-width: 140px;
       overflow: hidden;
@@ -1219,11 +1320,13 @@ $composeCsrfToken = security_get_csrf_token();
       white-space: nowrap;
     }
 
-    .mailbox-app .select2-results__option .compose-recipient-name {
+    .mailbox-app .select2-results__option .compose-recipient-name,
+    .compose-modal .select2-results__option .compose-recipient-name {
       max-width: 240px;
     }
 
-    .mailbox-app .select2-results__option .compose-recipient-meta {
+    .mailbox-app .select2-results__option .compose-recipient-meta,
+    .compose-modal .select2-results__option .compose-recipient-meta {
       max-width: 240px;
     }
 
@@ -1882,7 +1985,7 @@ $composeCsrfToken = security_get_csrf_token();
             <h5 class="modal-title" id="composeModalLabel">New Message</h5>
             <p class="compose-meta">Compose and send without leaving your inbox.</p>
           </div>
-          <button type="button" class="close text-reset" data-dismiss="modal" aria-label="Close">
+          <button type="button" class="close text-reset" id="composeModalClose" data-dismiss="modal" aria-label="Close">
             <span aria-hidden="true">&times;</span>
           </button>
         </div>
@@ -2916,6 +3019,7 @@ $(function() {
 
     const composeModal = $('#composeModal');
     const composeForm = document.getElementById('composeForm');
+    const composeModalClose = document.getElementById('composeModalClose');
     const composeRecipient = document.getElementById('composeRecipient');
     const composeSubject = document.getElementById('composeSubject');
     const composeMessage = document.getElementById('composeMessage');
@@ -3132,6 +3236,11 @@ $(function() {
         e.stopPropagation();
     });
     document.addEventListener('click', closeComposeEmojiMenu);
+    composeModalClose?.addEventListener('click', function(e) {
+        e.preventDefault();
+        closeComposeEmojiMenu();
+        composeModal.modal('hide');
+    });
     composeForm?.addEventListener('submit', function() {
         const submitButton = this.querySelector('[type="submit"]');
         if (submitButton) {

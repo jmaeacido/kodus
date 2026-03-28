@@ -1,0 +1,50 @@
+RewriteEngine On
+Options -Indexes
+
+# Redirect explicit index.php requests to the folder root.
+RewriteCond %{REQUEST_METHOD} =GET [OR]
+RewriteCond %{REQUEST_METHOD} =HEAD
+RewriteCond %{THE_REQUEST} \s/+([^\s?]*?)index\.php(?:[\s?]|$) [NC]
+RewriteRule ^ /%1 [R=301,L]
+
+# Hide direct .php/.html extensions in the address bar.
+RewriteCond %{REQUEST_METHOD} =GET [OR]
+RewriteCond %{REQUEST_METHOD} =HEAD
+RewriteCond %{THE_REQUEST} \s/+([^\s?]+?)\.(php|html)(?:[\s?]|$) [NC]
+RewriteRule ^ /%1 [R=301,L]
+
+# Rule for .php files
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME}.php -f
+RewriteRule ^([^/]+)/?$ $1.php [L]
+
+# Rule for .html files
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME}.html -f
+RewriteRule ^([^/]+)/?$ $1.html [L]
+
+<IfModule mod_headers.c>
+    Header always set X-Frame-Options "SAMEORIGIN"
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+</IfModule>
+
+<Files .env>
+    Order allow,deny
+    Deny from all
+</Files>
+
+<FilesMatch "^\.env(\..+)?$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+<FilesMatch "^(composer\.(json|lock|phar)|composer-setup\.php|phpinfo\.php|info\.php|kodus_db\.sql|kodus-key_pair\.(pem|ppk)|debug_log\.txt)$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+RewriteRule ^(?:uploads|inbox/uploads|dist/img)/.*\.(?:php[0-9]?|phtml|phar|cgi|pl|exe|sh|bat|cmd)$ - [F,L,NC]
+RewriteRule ^(?:storage|artifacts|scratch)/ - [F,L,NC]

@@ -1,0 +1,34 @@
+RewriteEngine On
+
+# Redirect explicit index.php requests to the folder root.
+RewriteCond %{REQUEST_METHOD} =GET [OR]
+RewriteCond %{REQUEST_METHOD} =HEAD
+RewriteCond %{THE_REQUEST} \s/+([^\s?]*?)index\.php(?:[\s?]|$) [NC]
+RewriteRule ^index\.php$ /%1 [R=301,L]
+
+# Hide direct .php/.html extensions in the address bar.
+RewriteCond %{REQUEST_METHOD} =GET [OR]
+RewriteCond %{REQUEST_METHOD} =HEAD
+RewriteCond %{THE_REQUEST} \s/+([^\s?]+?)\.(php|html)(?:[\s?]|$) [NC]
+RewriteRule ^(.+)\.(php|html)$ /%1 [R=301,L]
+
+# Rule for .php files
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME}.php -f
+RewriteRule ^([^/]+)/?$ $1.php [L]
+
+# Rule for .html files
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME}.html -f
+RewriteRule ^([^/]+)/?$ $1.html [L]
+
+<IfModule mod_headers.c>
+    Header set Access-Control-Allow-Origin "*"
+</IfModule>
+
+<Files .env>
+    Order allow,deny
+    Deny from all
+</Files>

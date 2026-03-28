@@ -1,0 +1,67 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R /F2 5 0 R >> >> /Contents 6 0 R >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>
+endobj
+6 0 obj
+<< /Length 3035 >>
+stream
+0.15 w
+0.87 0.90 0.95 RG
+44 746 m 568 746 l S
+44 440 m 568 440 l S
+BT /F2 20 Tf 1 0 0 1 44 770 Tm (KODUS App Summary) Tj ET
+BT /F1 9 Tf 1 0 0 1 44 754 Tm (Generated from repo evidence only.) Tj ET
+BT /F2 11 Tf 1 0 0 1 44 730 Tm (What It Is) Tj ET
+BT /F1 9.5 Tf 1 0 0 1 44 716 Tm (KODUS \(KliMalasakit Online Document Updating System\) is a PHP/MySQL web app for managing) Tj ET
+BT /F1 9.5 Tf 1 0 0 1 44 704 Tm (beneficiary records, document workflows, messaging, and summary reporting.) Tj ET
+BT /F2 11 Tf 1 0 0 1 44 684 Tm (Who It Is For) Tj ET
+BT /F1 9.5 Tf 1 0 0 1 44 670 Tm (Primary persona: KliMalasakit staff and admins who maintain beneficiary data, review reports,) Tj ET
+BT /F1 9.5 Tf 1 0 0 1 44 658 Tm (track documents and payouts, manage events, and communicate with users.) Tj ET
+BT /F2 11 Tf 1 0 0 1 44 638 Tm (What It Does) Tj ET
+BT /F1 9 Tf 1 0 0 1 52 624 Tm (- Login with session timeout, remember-me cookies, password reset, and optional email 2FA.) Tj ET
+BT /F1 9 Tf 1 0 0 1 52 612 Tm (- Requires fiscal year selection before access; dashboard metrics are year-filtered.) Tj ET
+BT /F1 9 Tf 1 0 0 1 52 600 Tm (- Manages MEB beneficiary masterlists with validation plus Excel import/export.) Tj ET
+BT /F1 9 Tf 1 0 0 1 52 588 Tm (- Tracks incoming documents, outgoing documents, and payout records.) Tj ET
+BT /F1 9 Tf 1 0 0 1 52 576 Tm (- Shows charts and reports for sex, NHTS-PR, sectoral, and PWD data.) Tj ET
+BT /F1 9 Tf 1 0 0 1 52 564 Tm (- Provides calendar scheduling, inbox/contact messaging, crossmatch, and deduplication tools.) Tj ET
+BT /F2 11 Tf 1 0 0 1 44 542 Tm (How It Works) Tj ET
+BT /F1 9 Tf 1 0 0 1 44 528 Tm (UI: AdminLTE, jQuery, DataTables, Chart.js, FullCalendar, and AJAX-driven widgets.) Tj ET
+BT /F1 9 Tf 1 0 0 1 44 516 Tm (App layer: PHP entry points such as index.php, home.php, pages/*, inbox/*, crossmatch/*,) Tj ET
+BT /F1 9 Tf 1 0 0 1 44 504 Tm (and deduplication/*; sessions and auth checks are centralized in header.php.) Tj ET
+BT /F1 9 Tf 1 0 0 1 44 492 Tm (Config/data: .env is loaded with phpdotenv; config.php opens a mysqli connection to MySQL.) Tj ET
+BT /F1 9 Tf 1 0 0 1 44 480 Tm (Services: PHPMailer handles login/contact/reset/2FA email; PhpSpreadsheet handles Excel files.) Tj ET
+BT /F1 9 Tf 1 0 0 1 44 468 Tm (Data flow: browser -> PHP pages/APIs -> MySQL tables/files -> JSON/HTML/Excel -> browser widgets.) Tj ET
+BT /F2 11 Tf 1 0 0 1 44 446 Tm (How To Run) Tj ET
+BT /F1 9 Tf 1 0 0 1 52 432 Tm (1. Configure .env with DB_HOST, DB_USERNAME, DB_PASSWORD, DB_NAME, and SMTP settings.) Tj ET
+BT /F1 9 Tf 1 0 0 1 52 420 Tm (2. Import kodus_db.sql into MySQL and keep the DB name aligned with .env \(default: kodus_db\).) Tj ET
+BT /F1 9 Tf 1 0 0 1 52 408 Tm (3. Serve this folder through Apache/Laragon so .htaccess extensionless routes work.) Tj ET
+BT /F1 9 Tf 1 0 0 1 52 396 Tm (4. Open /select_year, choose a year, then sign in at /.) Tj ET
+BT /F1 9 Tf 1 0 0 1 52 384 Tm (5. Full PHP deployment guide: Not found in repo. Top-level Dockerfile is for AdminLTE npm dev only.) Tj ET
+endstream
+endobj
+xref
+0 7
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000251 00000 n 
+0000000321 00000 n 
+0000000396 00000 n 
+trailer
+<< /Size 7 /Root 1 0 R >>
+startxref
+3482
+%%EOF

@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>KODUS | MEB</title>
+
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <!-- Google Font: Source Sans Pro -->
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Source+Sans+Pro:300,400,400i,700&display=fallback">
+  <!-- Font Awesome Icons -->
+  <link rel="stylesheet" href="../plugins/fontawesome-free/css/all.min.css">
+  <!-- DataTables -->
+  <link rel="stylesheet" href="../../../plugins/datatables-bs4/css/dataTables.bootstrap4.min.css">
+  <link rel="stylesheet" href="../../../plugins/datatables-responsive/css/responsive.bootstrap4.min.css">
+  <link rel="stylesheet" href="../../../plugins/datatables-buttons/css/buttons.bootstrap4.min.css">
+  <!-- overlayScrollbars -->
+  <link rel="stylesheet" href="../plugins/overlayScrollbars/css/OverlayScrollbars.min.css">
+  <!-- Theme style -->
+  <link rel="stylesheet" href="../dist/css/adminlte.min.css">
+  <!-- Custom Style -->
+  <link rel="stylesheet" href="../dist/css/custom.css">
+</head>
+<body class="hold-transition dark-mode sidebar-mini layout-fixed layout-navbar-fixed layout-footer-fixed">
+<div class="wrapper">
+
+  <!-- Preloader -->
+  <div class="preloader flex-column justify-content-center align-items-center">
+    <img class="animation__wobble" src="../dist/img/kodus.png" alt="KODUSLogo" height="240" width="240">
+  </div>
+
+  <!-- Navbar -->
+  <nav class="main-header navbar navbar-expand navbar-dark">
+    <!-- Left navbar links -->
+    <ul class="navbar-nav">
+      <li class="nav-item">
+        <a class="nav-link" data-widget="pushmenu" href="#" role="button"><i class="fas fa-bars"></i></a>
+      </li>
+      <li class="nav-item d-none d-sm-inline-block">
+        <a href="../index3.html" class="nav-link">Home</a>
+      </li>
+      <li class="nav-item d-none d-sm-inline-block">
+        <a href="#" class="nav-link">Contact</a>
+      </li>
+    </ul>
+
+    <!-- Right navbar links -->
+    <ul class="navbar-nav ml-auto">
+      <!-- Navbar Search -->
+      <li class="nav-item">
+        <a class="nav-link" data-widget="navbar-search" href="#" role="button">
+          <i class="fas fa-search"></i>
+        </a>
+        <div class="navbar-search-block">
+          <form class="form-inline">
+            <div class="input-group input-group-sm">
+              <input class="form-control form-control-navbar" type="search" placeholder="Search" aria-label="Search">
+              <div class="input-group-append">
+                <button class="btn btn-navbar" type="submit">
+                  <i class="fas fa-search"></i>
+                </button>
+                <button class="btn btn-navbar" type="button" data-widget="navbar-search">
+                  <i class="fas fa-times"></i>
+                </button>
+              </div>
+            </div>
+          </form>
+        </div>
+      </li>
+      
+      <li class="nav-item">
+        <a class="nav-link" data-widget="fullscreen" href="#" role="button">
+          <i class="fas fa-expand-arrows-alt"></i>
+        </a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link" data-widget="control-sidebar" data-slide="true" href="#" role="button">
+          <i class="fas fa-th-large"></i>
+        </a>
+      </li>
+    </ul>
+  </nav>
+  <!-- /.navbar -->
+
+  <!-- Main Sidebar Container -->
+  <aside class="main-sidebar sidebar-dark-primary elevation-4">
+    <!-- Brand Logo -->
+    <a href="../index3.html" class="brand-link">
+      <img src="../dist/img/kodus.png" alt="AdminLTE Logo" class="brand-image img-circle elevation-3" style="opacity: .8">
+      <span class="brand-text font-weight-light">KODUS</span>
+    </a>
+
+    <!-- Sidebar -->
+    <div class="sidebar">
+      <!-- Sidebar user panel (optional) -->
+      <div class="user-panel mt-3 pb-3 mb-3 d-flex">
+        <div class="image">
+          <img src="../dist/img/default.webp" class="img-circle elevation-2" alt="User Image">
+        </div>
+        <div class="info">
+          <a href="#" class="d-block">User</a>
+        </div>
+      </div>
+
+      <!-- SidebarSearch Form -->
+      <div class="form-inline">
+        <div class="input-group" data-widget="sidebar-search">
+          <input class="form-control form-control-sidebar" type="search" placeholder="Search" aria-label="Search">
+          <div class="input-group-append">
+            <button class="btn btn-sidebar">
+              <i class="fas fa-search fa-fw"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Sidebar Menu -->
+      <nav class="mt-2">
+        <ul class="nav nav-pills nav-sidebar flex-column" data-widget="treeview" role="menu" data-accordion="false">
+          <!-- Add icons to the links using the .nav-icon class
+               with font-awesome or any other icon font library -->
+          <li class="nav-item menu-open">
+            <a href="../starter" class="nav-link active">
+              <i class="nav-icon fas fa-edit"></i>
+              <p>
+                Tracking
+                <i class="right fas fa-angle-left"></i>
+              </p>
+            </a>
+            <ul class="nav nav-treeview">
+              <li class="nav-item">
+                <a href="data-tracking" class="nav-link">
+                  <i class="fa fa-table nav-icon"></i>
+                  <p>Documents</p>
+                </a>
+              </li>
+              <li class="nav-item">
+                <a href="#" class="nav-link active">
+                  <i class="fa fa-list nav-icon"></i>
+                  <p>Masterlist of Eligible Beneficiaries</p>
+                </a>
+              </li>
+              <li class="nav-item">
+                <a href="data-tracking-in" class="nav-link">
+                  <i class="fa fa-sign-in-alt nav-icon"></i>
+                  <p>Incoming</p>
+                </a>
+              </li>
+              <li class="nav-item">
+                <a href="data-tracking-out" class="nav-link">
+                  <i class="fa fa-sign-out-alt nav-icon"></i>
+                  <p>Outgoing</p>
+                </a>
+              </li>
+            </ul>
+          </li>
+        </ul>
+      </nav>
+      <!-- /.sidebar-menu -->
+    </div>
+    <!-- /.sidebar -->
+  </aside>
+
+  <!-- Content Wrapper. Contains page content -->
+  <div class="content-wrapper">
+    <!-- Content Header (Page header) -->
+    <div class="content-header">
+      <div class="container-fluid">
+        <div class="row mb-2">
+          <div class="col-sm-6">
+            <h1 class="m-0">Masterlist of Eligible Beneficiaries</h1>
+          </div><!-- /.col -->
+          <div class="col-sm-6">
+            <ol class="breadcrumb float-sm-right">
+              <li class="breadcrumb-item"><a href="../starter">Home</a></li>
+              <li class="breadcrumb-item active">MEB</li>
+            </ol>
+          </div><!-- /.col -->
+        </div><!-- /.row -->
+      </div><!-- /.container-fluid -->
+    </div>
+    <!-- /.content-header -->
+
+    <!-- Main content -->
+    <div class="content">
+      <div class="container-fluid">
+            <div class="card">
+              <div style="margin-left: 10px;">
+                <h4>Import Excel File</h4>
+                <form action="import" method="POST" enctype="multipart/form-data">
+                    <label for="excelFile" class="btn btn-info btn-sm" style="font-size: 10px; position: relative; top: 4px;">Choose Excel File:</label>
+                    <input type="file" name="excelFile" id="excelFile" accept=".xlsx, .xls" style="font-size: 10px; display: none;" onchange="displayFileName()">
+                    <span id="file-name"></span>
+                    <button type="submit" class="btn btn-primary btn-sm" name="import" style="font-size: 10px; width: 60px;">Import</button>
+                </form>
+              </div>
+              <!-- <div class="card-header">
+                <h3 class="card-title">DataTable with default features</h3>
+              </div> -->
+              <!-- /.card-header -->
+              <div class="table-container">
+                <form  id="bulkActionForm" action="bulk_action" method="POST">
+                  <table id="table1" class="table table-bordered table-striped" style="text-align: center; width: 100%; table-layout: auto;">
+                    <thead>
+                      <tr>
+                        <th rowspan="3"></th>
+                        <th style="width: 10px;" rowspan="3">NO.</th>
+                        <th colspan="4" rowspan="2">NAME</th>
+                        <th style="width: 10px;" rowspan="3">PUROK</th>
+                        <th style="width: 10px;" rowspan="3">BARANGAY</th>
+                        <th style="width: 10px;" rowspan="3">LGU</th>
+                        <th style="width: 10px;" rowspan="3">PROVINCE</th>
+                        <th style="width: 10px;" rowspan="3">BIRTHDATE</th>
+                        <th style="width: 10px;" rowspan="3">AGE</th>
+                        <th style="width: 10px;" rowspan="3">SEX</th>
+                        <th style="width: 10px;" rowspan="3">CIVIL STATUS</th>
+                        <th colspan="13">CLASSIFICATIONS</th>
+                      </tr>
+                      <tr class="narrow">
+                        <th rowspan="2">National Household Targeting System for Poverty Reduction (NHTS-PR) Poor</th>
+                        <th rowspan="2">National Household Targeting System for Poverty Reduction (NHTS-PR) Non-poor but considered poor by LSWDO assessment</th>
+                        <th colspan="11">SECTORS</th>
+                      </tr>
+                      <tr>
+                        <th style="white-space: nowrap; width: 10px;">LAST NAME</th>
+                        <th style="white-space: nowrap; width: 10px;">FIRST NAME</th>
+                        <th style="white-space: nowrap; width: 10px;">MIDDLE NAME</th>
+                        <th style="white-space: nowrap; width: 10px;">EXT.</th>
+                        <th style="width: 10px;">Pantawid Pamilyang Pilipino Program (4Ps)</th>
+                        <th style="width: 10px;">Farmers (F)</th>
+                        <th style="width: 10px;">Fisher-folks (FF)</th>
+                        <th style="width: 10px;">Indigenous People (IP)</th>
+                        <th style="width: 10px;">Senior Citizen (SC)</th>
+                        <th style="width: 10px;">Solo Parent (SP)</th>
+                        <th style="width: 10px;">Pregnant Women (PW)</th>
+                        <th style="width: 10px;">Persons with Disability (PWD)</th>
+                        <th style="width: 10px;">Out-of-School Youth (OSY)</th>
+                        <th style="width: 10px;">Former Rebel (FR)</th>
+                        <th style="width: 10px;">YAKAP Bayan/ Drug Surenderee (YB/DS)</th>
+                      </tr>
+                    </thead>
+                    <tbody style="font-size: 10px; white-space: nowrap;">
+                      <!-- Table data here -->
+                    </tbody>
+                  </table>
+                  <button class="btn btn-outline-info" type="submit" name="action" value="edit">Edit Selected</button>
+                  <button class="btn btn-outline-danger" type="submit" name="action" value="delete" id="deleteButton">Delete Selected</button>
+                </form>
+                <br>
+                <form action="delete_batch" method="POST">
+                    <select class="btn btn-outline-info" name="batchId" id="batchId" required>
+                        <option value="" disabled selected>Select Batch ID</option>
+                    </select>
+                    <button class="btn btn-outline-danger" type="submit" name="deleteBatch">Delete Batch</button>
+                </form>
+              </div>
+              <!-- /.card-body -->
+            </div>
+        <!-- /.row -->
+      </div><!-- /.container-fluid -->
+    </div>
+    <!-- /.content -->
+  </div>
+  <!-- /.content-wrapper -->
+
+  <!-- Control Sidebar -->
+  <aside class="control-sidebar control-sidebar-dark">
+    <!-- Control sidebar content goes here -->
+    <div class="p-3">
+      <h5>Title</h5>
+      <p>Sidebar content</p>
+    </div>
+  </aside>
+  <!-- /.control-sidebar -->
+
+  <!-- Main Footer -->
+  <footer class="main-footer">
+    <!-- To the right -->
+    <div class="float-right d-none d-sm-inline">
+      Anything you want
+    </div>
+    <!-- Default to the left -->
+    <strong>Copyright &copy; 2014-2021 <a href="https://adminlte.io">AdminLTE.io</a>.</strong> All rights reserved.
+  </footer>
+</div>
+<!-- ./wrapper -->
+
+<!-- REQUIRED SCRIPTS -->
+
+<!-- jQuery -->
+<script src="../plugins/jquery/jquery.min.js"></script>
+<!-- Bootstrap 4 -->
+<script src="../plugins/bootstrap/js/bootstrap.bundle.min.js"></script>
+<!-- DataTables  & Plugins -->
+<script src="../../plugins/datatables/jquery.dataTables.min.js"></script>
+<script src="../../plugins/datatables-bs4/js/dataTables.bootstrap4.min.js"></script>
+<script src="../../plugins/datatables-responsive/js/dataTables.responsive.min.js"></script>
+<script src="../../plugins/datatables-responsive/js/responsive.bootstrap4.min.js"></script>
+<script src="../../plugins/datatables-buttons/js/dataTables.buttons.min.js"></script>
+<script src="../../plugins/datatables-buttons/js/buttons.bootstrap4.min.js"></script>
+<script src="../../plugins/jszip/jszip.min.js"></script>
+<script src="../../plugins/pdfmake/pdfmake.min.js"></script>
+<script src="../../plugins/pdfmake/vfs_fonts.js"></script>
+<script src="../../plugins/datatables-buttons/js/buttons.html5.min.js"></script>
+<script src="../../plugins/datatables-buttons/js/buttons.print.min.js"></script>
+<script src="../../plugins/datatables-buttons/js/buttons.colVis.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<!-- AdminLTE App -->
+<script src="../dist/js/adminlte.min.js"></script>
+<!-- Page specific script -->
+<script>
+  function displayFileName() {
+  var fileInput = document.getElementById('excelFile');
+  var fileName = fileInput.files[0] ? fileInput.files[0].name : 'No file chosen';
+  document.getElementById('file-name').textContent = fileName;
+}
+</script>
+<script>
+  $(document).ready(function() {
+      let selectedIds = []; // Store selected IDs
+
+      function updateSelectedIds() {
+          selectedIds = Array.from($('input[name="selected[]"]:checked')).map(checkbox => checkbox.value);
+      }
+
+      let table = $("#table1").DataTable({
+          "responsive": true,
+          "processing": false, // Show the processing indicator
+          "serverSide": true, // Enable server-side processing
+          "ajax": {
+              "url": "fetch_data.php", // The PHP file to fetch data
+              "type": "GET",
+              "dataSrc": function(json) {
+                  // Ensure previously selected checkboxes remain checked
+                  setTimeout(() => {
+                      selectedIds.forEach(id => {
+                          $(`input[name="selected[]"][value="${id}"]`).prop('checked', true);
+                      });
+                  }, 100);
+                  return json.data;
+              }
+          },
+          "columns": [
+              { 
+                  "data": "id",
+                  "render": function(data, type, row) {
+                      return `<input type="checkbox" name="selected[]" value="${data}" class="select-checkbox">`;
+                  }
+              },
+              { 
+                  "data": null, // Counter column
+                  "render": function(data, type, row, meta) {
+                      return meta.row + 1; // Returns row index + 1 as the counter
+                  }
+              },
+              { "data": "lastName" },
+              { "data": "firstName" },
+              { "data": "middleName" },
+              { "data": "ext" },
+              { "data": "purok" },
+              { "data": "barangay" },
+              { "data": "lgu"},
+              { "data": "province"},
+              { "data": "birthDate" },
+              { "data": "age" },
+              { "data": "sex" },
+              { "data": "civilStatus" },
+              { "data": "nhts1" },
+              { "data": "nhts2" },
+              { "data": "fourPs" },
+              { "data": "F" },
+              { "data": "FF" },
+              { "data": "IP" },
+              { "data": "SC" },
+              { "data": "SP" },
+              { "data": "PW" },
+              { "data": "PWD" },
+              { "data": "OSY" },
+              { "data": "FR" },
+              { "data": "ybDs" }
+          ],
+          "lengthChange": true,
+          "pageLength": 10, // Default rows per page
+          "paging": true,
+          "dom": 'Bfrtip',
+          "responsive": false,
+          "buttons": ["copy", "csv", "excel", "pdf", "print", "colvis"],
+          "rowCallback": function(row, data, index) {
+              // Ensure the counter updates correctly per page
+              $('td:eq(1)', row).html(index + 1 + table.page.info().start);
+          }
+      });
+
+      // Listen for checkbox changes to update selectedIds
+      $("#table1 tbody").on("change", 'input[name="selected[]"]', function() {
+          updateSelectedIds();
+      });
+
+      // Periodically refresh data while keeping selections
+      setInterval(() => {
+          table.ajax.reload(null, false); // false ensures pagination doesn't reset
+      }, 5000);
+  });
+</script>
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+    function loadBatchOptions() {
+        fetch('fetch_batches.php') // Request batch data from PHP
+            .then(response => response.json())
+            .then(data => {
+                let select = document.getElementById("batchId");
+                select.innerHTML = '<option value="" disabled selected>-- Select Batch ID --</option>'; // Clear existing options
+                
+                if (data.length > 0) {
+                    data.forEach(batchId => {
+                        let option = document.createElement("option");
+                        option.value = batchId;
+                        option.textContent = `Batch ID: ${batchId}`;
+                        select.appendChild(option);
+                    });
+                } else {
+                    let option = document.createElement("option");
+                    option.value = "";
+                    option.disabled = true;
+                    option.textContent = "No batches found";
+                    select.appendChild(option);
+                }
+            })
+            .catch(error => console.error("Error fetching batch IDs:", error));
+    }
+
+    // Load batch options when the page loads
+    loadBatchOptions();
+
+    // Handle form submission for batch deletion
+    document.querySelector("form[action='delete_batch']").addEventListener("submit", function(event) {
+      event.preventDefault(); // Stop form submission
+
+      let formData = new FormData(this);
+
+      fetch('delete_batch.php', { 
+          method: 'POST', 
+          body: formData 
+      })
+      .then(response => response.text())  // Ensure we get raw response first
+      .then(text => {
+          try {
+              return JSON.parse(text);  // Try parsing JSON
+          } catch (error) {
+              console.error("Invalid JSON response:", text); // Log raw response
+              throw new Error("Invalid JSON response from server.");
+          }
+      })
+      .then(result => {
+          if (result.success) {
+              Swal.fire({
+                  icon: 'success',
+                  title: 'Success',
+                  text: 'Batch deleted successfully!',
+              }).then(() => {
+                  location.reload(); // Reload the page after deletion
+              });
+          } else {
+              Swal.fire({
+                  icon: 'error',
+                  title: 'Error',
+                  text: result.error || "An unknown error occurred.",
+              });
+          }
+      })
+      .catch(error => {
+          console.error("Error deleting batch:", error);
+          Swal.fire({
+              icon: 'error',
+              title: 'Error',
+              text: 'Something went wrong. Please try again.',
+          });
+      });
+  });
+});
+</script>
+<!-- <script>
+document.addEventListener("DOMContentLoaded", function() {
+    fetch("get_message")
+    .then(response => response.json())
+    .then(data => {
+        if (data.message) {
+            Swal.fire({
+                icon: data.type,
+                title: data.type === "success" ? "Success" : "Error",
+                text: data.message,
+            });
+        }
+    })
+    .catch(error => console.error("Error fetching message:", error));
+});
+</script> -->
+
+</body>
+</html>

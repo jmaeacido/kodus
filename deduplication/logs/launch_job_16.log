@@ -1,0 +1,4 @@
+2025-09-18T12:17:30+08:00 - Job 16 - LaunchCmd: start /B "" "C:\laragon\bin\apache\httpd-2.4.62-240904-win64-VS17\bin\httpd.exe" "C:\laragon\www\kodus\deduplication/worker.php" 16
+2025-09-30T11:37:24+08:00 - Job 16 - LaunchCmd: start /B "" "C:/laragon/bin/php/php-8.4.3-Win32-vs17-x64/php.exe" "C:\laragon\www\kodus\deduplication/worker.php" 16
+2025-09-30T15:03:29+08:00 - Job 16 - LaunchCmd: start /B "" "C:/laragon/bin/php/php-8.4.3-Win32-vs17-x64/php.exe" "C:\laragon\www\kodus\deduplication/worker.php" 16
+2025-10-08T09:25:15+08:00 - Job 16 - LaunchCmd: start /B "" "C:/laragon/bin/php/php-8.4.3-Win32-vs17-x64/php.exe" "C:\laragon\www\kodus\deduplication/worker.php" 16

@@ -1,0 +1,11 @@
+.env
+.env.*
+*.pem
+*.ppk
+*.sql
+composer.phar
+composer-setup.php
+phpinfo.php
+info.php
+debug_log.txt
+.tmp.driveupload/

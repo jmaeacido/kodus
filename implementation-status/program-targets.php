@@ -78,6 +78,30 @@ unset($_SESSION['target_import_success'], $_SESSION['target_import_error']);
     .target-item .custom-select {
       flex: 1 1 auto;
     }
+    .kodus-edit-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 12px;
+      align-items: stretch;
+    }
+    .kodus-edit-field {
+      display: flex;
+      flex-direction: column;
+      align-self: stretch;
+    }
+    .kodus-edit-field > label {
+      font-size: 0.78rem;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      margin-bottom: 4px;
+      display: block;
+      min-height: 2.4rem;
+    }
+    .kodus-edit-field > .form-control,
+    .kodus-edit-field > .custom-select,
+    .kodus-edit-field > #target-entry-list {
+      margin-top: auto;
+    }
   </style>
 </head>
 <body class="hold-transition dark-mode sidebar-mini layout-fixed layout-navbar-fixed layout-footer-fixed">

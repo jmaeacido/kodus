@@ -52,6 +52,18 @@ function ensureProgramActivityMetadata(mysqli $conn): void
             stage2_end_date DATE DEFAULT NULL,
             stage3_start_date DATE DEFAULT NULL,
             stage3_end_date DATE DEFAULT NULL,
+            drmd_monitoring_from DATE DEFAULT NULL,
+            drmd_monitoring_to DATE DEFAULT NULL,
+            drmd_monitoring_participants VARCHAR(1000) DEFAULT NULL,
+            joint_post_monitoring_from DATE DEFAULT NULL,
+            joint_post_monitoring_to DATE DEFAULT NULL,
+            joint_post_monitoring_participants VARCHAR(1000) DEFAULT NULL,
+            payout_schedule_from DATE DEFAULT NULL,
+            payout_schedule_to DATE DEFAULT NULL,
+            fund_obligation_partner_beneficiaries INT DEFAULT NULL,
+            fund_disbursement_served_partner_beneficiaries INT DEFAULT NULL,
+            liquidation_date DATE DEFAULT NULL,
+            special_disbursing_officer VARCHAR(255) DEFAULT NULL,
             project_names VARCHAR(1000) DEFAULT NULL,
             created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -73,6 +85,18 @@ function ensureProgramActivityMetadata(mysqli $conn): void
     ensureProgramActivityMetadataColumn($conn, 'stage2_end_date', 'DATE DEFAULT NULL');
     ensureProgramActivityMetadataColumn($conn, 'stage3_start_date', 'DATE DEFAULT NULL');
     ensureProgramActivityMetadataColumn($conn, 'stage3_end_date', 'DATE DEFAULT NULL');
+    ensureProgramActivityMetadataColumn($conn, 'drmd_monitoring_from', 'DATE DEFAULT NULL');
+    ensureProgramActivityMetadataColumn($conn, 'drmd_monitoring_to', 'DATE DEFAULT NULL');
+    ensureProgramActivityMetadataColumn($conn, 'drmd_monitoring_participants', 'VARCHAR(1000) DEFAULT NULL');
+    ensureProgramActivityMetadataColumn($conn, 'joint_post_monitoring_from', 'DATE DEFAULT NULL');
+    ensureProgramActivityMetadataColumn($conn, 'joint_post_monitoring_to', 'DATE DEFAULT NULL');
+    ensureProgramActivityMetadataColumn($conn, 'joint_post_monitoring_participants', 'VARCHAR(1000) DEFAULT NULL');
+    ensureProgramActivityMetadataColumn($conn, 'payout_schedule_from', 'DATE DEFAULT NULL');
+    ensureProgramActivityMetadataColumn($conn, 'payout_schedule_to', 'DATE DEFAULT NULL');
+    ensureProgramActivityMetadataColumn($conn, 'fund_obligation_partner_beneficiaries', 'INT DEFAULT NULL');
+    ensureProgramActivityMetadataColumn($conn, 'fund_disbursement_served_partner_beneficiaries', 'INT DEFAULT NULL');
+    ensureProgramActivityMetadataColumn($conn, 'liquidation_date', 'DATE DEFAULT NULL');
+    ensureProgramActivityMetadataColumn($conn, 'special_disbursing_officer', 'VARCHAR(255) DEFAULT NULL');
 
     $conn->query("
         UPDATE program_activity_metadata
@@ -126,6 +150,18 @@ function ensureProgramActivityMetadata(mysqli $conn): void
                 stage2_end_date,
                 stage3_start_date,
                 stage3_end_date,
+                drmd_monitoring_from,
+                drmd_monitoring_to,
+                drmd_monitoring_participants,
+                joint_post_monitoring_from,
+                joint_post_monitoring_to,
+                joint_post_monitoring_participants,
+                payout_schedule_from,
+                payout_schedule_to,
+                fund_obligation_partner_beneficiaries,
+                fund_disbursement_served_partner_beneficiaries,
+                liquidation_date,
+                special_disbursing_officer,
                 project_names,
                 created_at,
                 updated_at
@@ -150,6 +186,18 @@ function ensureProgramActivityMetadata(mysqli $conn): void
                 NULL AS stage2_end_date,
                 NULL AS stage3_start_date,
                 NULL AS stage3_end_date,
+                NULL AS drmd_monitoring_from,
+                NULL AS drmd_monitoring_to,
+                NULL AS drmd_monitoring_participants,
+                NULL AS joint_post_monitoring_from,
+                NULL AS joint_post_monitoring_to,
+                NULL AS joint_post_monitoring_participants,
+                NULL AS payout_schedule_from,
+                NULL AS payout_schedule_to,
+                NULL AS fund_obligation_partner_beneficiaries,
+                NULL AS fund_disbursement_served_partner_beneficiaries,
+                NULL AS liquidation_date,
+                NULL AS special_disbursing_officer,
                 GROUP_CONCAT(DISTINCT NULLIF(TRIM(project_names), '') SEPARATOR '||') AS project_names,
                 MIN(created_at) AS created_at,
                 MAX(updated_at) AS updated_at

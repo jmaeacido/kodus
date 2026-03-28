@@ -125,6 +125,35 @@ function formatBarangayDateSummary(?string $rawValue): string
     return implode(' || ', $formatted);
 }
 
+function formatBarangayTextSummary(?string $rawValue): string
+{
+    $rawValue = trim((string) $rawValue);
+    if ($rawValue === '') {
+        return '';
+    }
+
+    $entries = preg_split('/\|\|/', $rawValue) ?: [];
+    $formatted = [];
+
+    foreach ($entries as $entry) {
+        $entry = trim($entry);
+        if ($entry === '') {
+            continue;
+        }
+
+        $parts = explode('::', $entry, 2);
+        $barangay = trim($parts[0] ?? '');
+        $value = trim($parts[1] ?? '');
+        if ($barangay === '' || $value === '') {
+            continue;
+        }
+
+        $formatted[] = $barangay . ': ' . $value;
+    }
+
+    return implode(' || ', $formatted);
+}
+
 function buildValidationSnapshot(int $targetBeneficiaries, int $actualBeneficiaries): array
 {
     if ($targetBeneficiaries <= 0 && $actualBeneficiaries > 0) {
@@ -161,6 +190,8 @@ function buildCompletenessBadge(array $row): array
         (int) ($row['lawa_target_beneficiaries'] ?? 0) > 0,
         (int) ($row['binhi_target_beneficiaries'] ?? 0) > 0,
         (int) ($row['with_projects'] ?? 0) > 0,
+        !empty($row['drmd_monitoring_from']),
+        !empty($row['payout_schedule_from']),
     ];
 
     $score = (int) round((array_sum(array_map(static fn($v) => $v ? 1 : 0, $checks)) / count($checks)) * 100);
@@ -224,6 +255,71 @@ $sql = "
         MAX(metadata.stage2_end_date) AS stage2_end,
         MIN(metadata.stage3_start_date) AS stage3_start,
         MAX(metadata.stage3_end_date) AS stage3_end,
+        GROUP_CONCAT(
+            DISTINCT CASE
+                WHEN metadata.drmd_monitoring_from IS NOT NULL
+                THEN CONCAT(locations.barangay, '::', metadata.drmd_monitoring_from, '~', COALESCE(metadata.drmd_monitoring_to, metadata.drmd_monitoring_from))
+                ELSE NULL
+            END
+            ORDER BY locations.barangay
+            SEPARATOR '||'
+        ) AS drmd_monitoring_schedule,
+        GROUP_CONCAT(
+            DISTINCT CASE
+                WHEN metadata.drmd_monitoring_participants IS NOT NULL AND TRIM(metadata.drmd_monitoring_participants) <> ''
+                THEN CONCAT(locations.barangay, '::', metadata.drmd_monitoring_participants)
+                ELSE NULL
+            END
+            ORDER BY locations.barangay
+            SEPARATOR '||'
+        ) AS drmd_monitoring_participants,
+        GROUP_CONCAT(
+            DISTINCT CASE
+                WHEN metadata.joint_post_monitoring_from IS NOT NULL
+                THEN CONCAT(locations.barangay, '::', metadata.joint_post_monitoring_from, '~', COALESCE(metadata.joint_post_monitoring_to, metadata.joint_post_monitoring_from))
+                ELSE NULL
+            END
+            ORDER BY locations.barangay
+            SEPARATOR '||'
+        ) AS joint_post_monitoring_schedule,
+        GROUP_CONCAT(
+            DISTINCT CASE
+                WHEN metadata.joint_post_monitoring_participants IS NOT NULL AND TRIM(metadata.joint_post_monitoring_participants) <> ''
+                THEN CONCAT(locations.barangay, '::', metadata.joint_post_monitoring_participants)
+                ELSE NULL
+            END
+            ORDER BY locations.barangay
+            SEPARATOR '||'
+        ) AS joint_post_monitoring_participants,
+        GROUP_CONCAT(
+            DISTINCT CASE
+                WHEN metadata.payout_schedule_from IS NOT NULL
+                THEN CONCAT(locations.barangay, '::', metadata.payout_schedule_from, '~', COALESCE(metadata.payout_schedule_to, metadata.payout_schedule_from))
+                ELSE NULL
+            END
+            ORDER BY locations.barangay
+            SEPARATOR '||'
+        ) AS payout_schedule,
+        SUM(COALESCE(metadata.fund_obligation_partner_beneficiaries, 0)) AS fund_obligation_partner_beneficiaries,
+        SUM(COALESCE(metadata.fund_disbursement_served_partner_beneficiaries, 0)) AS fund_disbursement_served_partner_beneficiaries,
+        GROUP_CONCAT(
+            DISTINCT CASE
+                WHEN metadata.liquidation_date IS NOT NULL
+                THEN CONCAT(locations.barangay, '::', metadata.liquidation_date)
+                ELSE NULL
+            END
+            ORDER BY locations.barangay
+            SEPARATOR '||'
+        ) AS liquidation_dates,
+        GROUP_CONCAT(
+            DISTINCT CASE
+                WHEN metadata.special_disbursing_officer IS NOT NULL AND TRIM(metadata.special_disbursing_officer) <> ''
+                THEN CONCAT(locations.barangay, '::', metadata.special_disbursing_officer)
+                ELSE NULL
+            END
+            ORDER BY locations.barangay
+            SEPARATOR '||'
+        ) AS special_disbursing_officers,
         MAX(metadata.updated_at) AS last_updated
     FROM (
         SELECT province, municipality, barangay
@@ -277,6 +373,18 @@ if ($result) {
         $targetProjectClassifications = parseProjectTargetMultiValueCell($row['all_target_project_classifications'] ?? '');
         $completeness = buildCompletenessBadge($row);
         $validation = buildValidationSnapshot((int) ($row['target_beneficiaries'] ?? 0), (int) ($row['actual_beneficiaries'] ?? 0));
+        $fundObligationPartnerBeneficiaries = (int) ($row['fund_obligation_partner_beneficiaries'] ?? 0);
+        $fundDisbursementServedPartnerBeneficiaries = (int) ($row['fund_disbursement_served_partner_beneficiaries'] ?? 0);
+        $fundObligationAmount = $fundObligationPartnerBeneficiaries * 8700;
+        $fundDisbursementAmount = $fundDisbursementServedPartnerBeneficiaries * 8700;
+        $fundDisbursementUnserved = max($fundObligationPartnerBeneficiaries - $fundDisbursementServedPartnerBeneficiaries, 0);
+        $fundDisbursementUndisbursedAmount = max($fundObligationAmount - $fundDisbursementAmount, 0);
+        $fundObligationPercentage = ((int) ($row['target_beneficiaries'] ?? 0)) > 0
+            ? round(($fundObligationPartnerBeneficiaries / (int) $row['target_beneficiaries']) * 100, 2)
+            : 0;
+        $fundDisbursementPercentage = $fundObligationPartnerBeneficiaries > 0
+            ? round(($fundDisbursementServedPartnerBeneficiaries / $fundObligationPartnerBeneficiaries) * 100, 2)
+            : 0;
         $detailsButton = '<button class="btn btn-primary btn-sm details-btn" title="View details" aria-label="View details"><i class="nav-icon fas fa-eye"></i></button>';
         $editButton = $isAdmin ? '<button class="btn btn-warning btn-sm edit-btn" title="Edit" aria-label="Edit"><i class="nav-icon fas fa-pen"></i></button>' : '';
 
@@ -299,6 +407,21 @@ if ($result) {
             'stage1_phase' => formatDateRange($row['stage1_start'] ?? null, $row['stage1_end'] ?? null),
             'stage2_phase' => formatDateRange($row['stage2_start'] ?? null, $row['stage2_end'] ?? null),
             'stage3_phase' => formatDateRange($row['stage3_start'] ?? null, $row['stage3_end'] ?? null),
+            'drmd_monitoring_schedule' => formatBarangayDateSummary($row['drmd_monitoring_schedule'] ?? ''),
+            'drmd_monitoring_participants' => formatBarangayTextSummary($row['drmd_monitoring_participants'] ?? ''),
+            'joint_post_monitoring_schedule' => formatBarangayDateSummary($row['joint_post_monitoring_schedule'] ?? ''),
+            'joint_post_monitoring_participants' => formatBarangayTextSummary($row['joint_post_monitoring_participants'] ?? ''),
+            'payout_schedule' => formatBarangayDateSummary($row['payout_schedule'] ?? ''),
+            'fund_obligation_partner_beneficiaries' => $fundObligationPartnerBeneficiaries,
+            'fund_obligation_amount' => number_format($fundObligationAmount, 2, '.', ','),
+            'fund_obligation_percentage' => $fundObligationPercentage,
+            'fund_disbursement_served_partner_beneficiaries' => $fundDisbursementServedPartnerBeneficiaries,
+            'fund_disbursement_amount' => number_format($fundDisbursementAmount, 2, '.', ','),
+            'fund_disbursement_unserved_partner_beneficiaries' => $fundDisbursementUnserved,
+            'fund_disbursement_undisbursed_amount' => number_format($fundDisbursementUndisbursedAmount, 2, '.', ','),
+            'fund_disbursement_percentage' => $fundDisbursementPercentage,
+            'liquidation_dates' => formatBarangayDateSummary($row['liquidation_dates'] ?? ''),
+            'special_disbursing_officers' => formatBarangayTextSummary($row['special_disbursing_officers'] ?? ''),
             'no_of_barangays' => (int) $row['target_barangay_count'],
             'actual_barangay_count' => (int) $row['actual_barangay_count'],
             'barangays_and_beneficiaries' => $row['barangays_with_beneficiaries'] ?? '',

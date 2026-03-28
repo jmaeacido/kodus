@@ -237,6 +237,24 @@ $userType = $_SESSION['user_type'] ?? 'user';
       margin-bottom: 4px;
       display: block;
     }
+    .stage-phase-grid > div,
+    .forum-date-grid > div {
+      display: flex;
+      flex-direction: column;
+      align-self: stretch;
+    }
+    .stage-phase-grid > div > label,
+    .forum-date-grid > div > label {
+      min-height: 2.4rem;
+    }
+    .stage-phase-grid > div > .form-control,
+    .stage-phase-grid > div > .custom-select,
+    .stage-phase-grid > div > .date-range-field,
+    .forum-date-grid > div > .form-control,
+    .forum-date-grid > div > .custom-select,
+    .forum-date-grid > div > .date-range-field {
+      margin-top: auto;
+    }
     .swal2-popup .daterangepicker {
       z-index: 10010 !important;
     }
@@ -580,6 +598,9 @@ $userType = $_SESSION['user_type'] ?? 'user';
 <script>
 $(document).ready(function() {
     const isAdmin = $('#user-type').val() === 'admin';
+    const BENEFICIARY_WAGE_RATE = 435;
+    const BENEFICIARY_WORK_DAYS = 20;
+    const BENEFICIARY_RATE = BENEFICIARY_WAGE_RATE * BENEFICIARY_WORK_DAYS;
 
     function escapeHtml(value) {
         return $('<div>').text(value ?? '').html();
@@ -741,6 +762,15 @@ $(document).ready(function() {
         }).format(parsed));
     }
 
+    function formatPercent(value, fallback = '0.00%') {
+        const parsed = Number(value);
+        if (!Number.isFinite(parsed)) {
+            return escapeHtml(fallback);
+        }
+
+        return escapeHtml(`${parsed.toFixed(2)}%`);
+    }
+
     function formatList(value, fallback) {
         const raw = String(value ?? '');
         const items = raw
@@ -829,6 +859,174 @@ $(document).ready(function() {
         }
 
         return `<span class="kodus-detail-badge${valueClass}">${escapeHtml(readinessText || 'Not set')}</span>`;
+    }
+
+    function toInt(value) {
+        const parsed = parseInt(value, 10);
+        return Number.isFinite(parsed) ? parsed : 0;
+    }
+
+    function calculatePostImplementationMetrics(rowData) {
+        const targetPartnerBeneficiaries = toInt(rowData.target_partner_beneficiaries);
+        const obligatedPartnerBeneficiaries = Math.max(toInt(rowData.fund_obligation_partner_beneficiaries), 0);
+        const servedPartnerBeneficiaries = Math.max(toInt(rowData.fund_disbursement_served_partner_beneficiaries), 0);
+        const normalizedServedPartnerBeneficiaries = Math.min(servedPartnerBeneficiaries, obligatedPartnerBeneficiaries);
+        const obligationAmount = obligatedPartnerBeneficiaries * BENEFICIARY_RATE;
+        const disbursedAmount = normalizedServedPartnerBeneficiaries * BENEFICIARY_RATE;
+        const unservedPartnerBeneficiaries = Math.max(obligatedPartnerBeneficiaries - normalizedServedPartnerBeneficiaries, 0);
+        const undisbursedAmount = Math.max(obligationAmount - disbursedAmount, 0);
+        const obligationPercentage = targetPartnerBeneficiaries > 0
+            ? (obligatedPartnerBeneficiaries / targetPartnerBeneficiaries) * 100
+            : 0;
+        const disbursementPercentage = obligatedPartnerBeneficiaries > 0
+            ? (normalizedServedPartnerBeneficiaries / obligatedPartnerBeneficiaries) * 100
+            : 0;
+
+        return {
+            obligationAmount,
+            obligationPercentage,
+            normalizedServedPartnerBeneficiaries,
+            disbursedAmount,
+            unservedPartnerBeneficiaries,
+            undisbursedAmount,
+            disbursementPercentage
+        };
+    }
+
+    function renderPostImplementationInputs(row) {
+        const metrics = calculatePostImplementationMetrics(row);
+
+        return `
+            <div class="activity-edit-section mt-3 mb-0">
+                <h6>Post-Implementation Activities</h6>
+                <div class="section-note">Amounts are computed using this year's wage rate of PHP ${escapeHtml(BENEFICIARY_WAGE_RATE.toFixed(2))} for ${escapeHtml(String(BENEFICIARY_WORK_DAYS))} days.</div>
+
+                <div class="forum-grid">
+                    <div class="forum-card full-width">
+                        <div class="forum-card-title"><i class="fas fa-clipboard-check"></i><span>Monitoring and Technical Assistance</span></div>
+                        <div class="stage-phase-grid">
+                            <div>
+                                <label>DRMD Monitoring Schedule</label>
+                                <div class="date-range-field">
+                                    <input type="text" class="form-control form-control-sm date-range-input js-date-range-picker drmd-monitoring-range" value="${escapeHtml(formatDateRangeInputValue(row.drmd_monitoring_from || '', row.drmd_monitoring_to || ''))}" placeholder="Select date range" readonly>
+                                    <input type="hidden" class="drmd-monitoring-from" value="${escapeHtml(row.drmd_monitoring_from || '')}">
+                                    <input type="hidden" class="drmd-monitoring-to" value="${escapeHtml(row.drmd_monitoring_to || '')}">
+                                </div>
+                            </div>
+                            <div>
+                                <label>Participants (DRMD Monitoring Schedule)</label>
+                                <textarea class="form-control form-control-sm drmd-monitoring-participants" rows="2" placeholder="Name of staffs">${escapeHtml(row.drmd_monitoring_participants || '')}</textarea>
+                            </div>
+                            <div>
+                                <label>Joint DRMB-DRMD Post-Monitoring Schedule</label>
+                                <div class="date-range-field">
+                                    <input type="text" class="form-control form-control-sm date-range-input js-date-range-picker joint-post-monitoring-range" value="${escapeHtml(formatDateRangeInputValue(row.joint_post_monitoring_from || '', row.joint_post_monitoring_to || ''))}" placeholder="Select date range" readonly>
+                                    <input type="hidden" class="joint-post-monitoring-from" value="${escapeHtml(row.joint_post_monitoring_from || '')}">
+                                    <input type="hidden" class="joint-post-monitoring-to" value="${escapeHtml(row.joint_post_monitoring_to || '')}">
+                                </div>
+                            </div>
+                            <div>
+                                <label>Participants (Joint DRMB-DRMD Post-Monitoring Schedule)</label>
+                                <textarea class="form-control form-control-sm joint-post-monitoring-participants" rows="2" placeholder="Name of staffs">${escapeHtml(row.joint_post_monitoring_participants || '')}</textarea>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="forum-card">
+                        <div class="forum-card-title"><i class="fas fa-calendar-alt"></i><span>Payout Schedule and Status</span></div>
+                        <div class="date-range-field">
+                            <label>Payout Schedule</label>
+                            <input type="text" class="form-control form-control-sm date-range-input js-date-range-picker payout-schedule-range" value="${escapeHtml(formatDateRangeInputValue(row.payout_schedule_from || '', row.payout_schedule_to || ''))}" placeholder="Select date range" readonly>
+                            <input type="hidden" class="payout-schedule-from" value="${escapeHtml(row.payout_schedule_from || '')}">
+                            <input type="hidden" class="payout-schedule-to" value="${escapeHtml(row.payout_schedule_to || '')}">
+                        </div>
+                    </div>
+
+                    <div class="forum-card">
+                        <div class="forum-card-title"><i class="fas fa-file-invoice-dollar"></i><span>Fund Obligation Status</span></div>
+                        <div class="stage-phase-grid">
+                            <div>
+                                <label>No. of Partner-beneficiaries</label>
+                                <input type="number" min="0" class="form-control form-control-sm fund-obligation-partner-beneficiaries" value="${escapeHtml(String(row.fund_obligation_partner_beneficiaries || 0))}">
+                            </div>
+                            <div>
+                                <label>Amount</label>
+                                <input type="text" class="form-control form-control-sm fund-obligation-amount" value="${escapeHtml(new Intl.NumberFormat('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(metrics.obligationAmount))}" readonly>
+                            </div>
+                            <div>
+                                <label>Percentage</label>
+                                <input type="text" class="form-control form-control-sm fund-obligation-percentage" value="${escapeHtml(metrics.obligationPercentage.toFixed(2))}%" readonly>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="forum-card">
+                        <div class="forum-card-title"><i class="fas fa-coins"></i><span>Fund Disbursement Status</span></div>
+                        <div class="stage-phase-grid">
+                            <div>
+                                <label>No. of Served Partner-beneficiaries (during the payout)</label>
+                                <input type="number" min="0" class="form-control form-control-sm fund-disbursement-served-partner-beneficiaries" value="${escapeHtml(String(row.fund_disbursement_served_partner_beneficiaries || 0))}">
+                            </div>
+                            <div>
+                                <label>Disbursed Amount</label>
+                                <input type="text" class="form-control form-control-sm fund-disbursed-amount" value="${escapeHtml(new Intl.NumberFormat('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(metrics.disbursedAmount))}" readonly>
+                            </div>
+                            <div>
+                                <label>No. of Unserved Partner-beneficiaries</label>
+                                <input type="text" class="form-control form-control-sm fund-unserved-partner-beneficiaries" value="${escapeHtml(String(metrics.unservedPartnerBeneficiaries))}" readonly>
+                            </div>
+                            <div>
+                                <label>Undisbursed Amount</label>
+                                <input type="text" class="form-control form-control-sm fund-undisbursed-amount" value="${escapeHtml(new Intl.NumberFormat('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(metrics.undisbursedAmount))}" readonly>
+                            </div>
+                            <div>
+                                <label>Percentage</label>
+                                <input type="text" class="form-control form-control-sm fund-disbursement-percentage" value="${escapeHtml(metrics.disbursementPercentage.toFixed(2))}%" readonly>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="forum-card">
+                        <div class="forum-card-title"><i class="fas fa-folder-open"></i><span>Liquidation Status</span></div>
+                        <div class="stage-phase-grid">
+                            <div>
+                                <label>Date</label>
+                                <input type="date" class="form-control form-control-sm liquidation-date" value="${escapeHtml(row.liquidation_date || '')}">
+                            </div>
+                            <div>
+                                <label>Special Disbursing Officer</label>
+                                <input type="text" class="form-control form-control-sm special-disbursing-officer" value="${escapeHtml(row.special_disbursing_officer || '')}" placeholder="Name of officer">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    function updatePostImplementationMetrics($row) {
+        const targetPartnerBeneficiaries = toInt($row.find('.row-total-target').val());
+        const obligatedPartnerBeneficiaries = Math.max(toInt($row.find('.fund-obligation-partner-beneficiaries').val()), 0);
+        let servedPartnerBeneficiaries = Math.max(toInt($row.find('.fund-disbursement-served-partner-beneficiaries').val()), 0);
+
+        if (servedPartnerBeneficiaries > obligatedPartnerBeneficiaries) {
+            servedPartnerBeneficiaries = obligatedPartnerBeneficiaries;
+            $row.find('.fund-disbursement-served-partner-beneficiaries').val(servedPartnerBeneficiaries);
+        }
+
+        const metrics = calculatePostImplementationMetrics({
+            target_partner_beneficiaries: targetPartnerBeneficiaries,
+            fund_obligation_partner_beneficiaries: obligatedPartnerBeneficiaries,
+            fund_disbursement_served_partner_beneficiaries: servedPartnerBeneficiaries
+        });
+        const numberFormatter = new Intl.NumberFormat('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+        $row.find('.fund-obligation-amount').val(numberFormatter.format(metrics.obligationAmount));
+        $row.find('.fund-obligation-percentage').val(`${metrics.obligationPercentage.toFixed(2)}%`);
+        $row.find('.fund-disbursed-amount').val(numberFormatter.format(metrics.disbursedAmount));
+        $row.find('.fund-unserved-partner-beneficiaries').val(metrics.unservedPartnerBeneficiaries);
+        $row.find('.fund-undisbursed-amount').val(numberFormatter.format(metrics.undisbursedAmount));
+        $row.find('.fund-disbursement-percentage').val(`${metrics.disbursementPercentage.toFixed(2)}%`);
     }
 
     function renderActivityDetails(data) {
@@ -956,6 +1154,48 @@ $(document).ready(function() {
                     <h6 class="kodus-detail-section-title">Coverage and Beneficiaries</h6>
                     <span class="kodus-detail-label">Barangays and Partner-Beneficiaries</span>
                     ${formatList(data.barangays_and_beneficiaries, 'No barangay breakdown recorded yet')}
+                </div>
+
+                <div class="kodus-detail-section">
+                    <h6 class="kodus-detail-section-title">Post-Implementation Activities</h6>
+                    <div class="kodus-detail-section-grid">
+                        <div>
+                            <span class="kodus-detail-label">DRMD Monitoring Schedule</span>
+                            <span class="kodus-detail-value">${formatFallback(data.drmd_monitoring_schedule, 'Not set')}</span>
+                        </div>
+                        <div>
+                            <span class="kodus-detail-label">Participants (DRMD Monitoring Schedule)</span>
+                            <span class="kodus-detail-value">${formatFallback(data.drmd_monitoring_participants, 'Not set')}</span>
+                        </div>
+                        <div>
+                            <span class="kodus-detail-label">Joint DRMB-DRMD Post-Monitoring Schedule</span>
+                            <span class="kodus-detail-value">${formatFallback(data.joint_post_monitoring_schedule, 'Not set')}</span>
+                        </div>
+                        <div>
+                            <span class="kodus-detail-label">Participants (Joint DRMB-DRMD Post-Monitoring Schedule)</span>
+                            <span class="kodus-detail-value">${formatFallback(data.joint_post_monitoring_participants, 'Not set')}</span>
+                        </div>
+                        <div>
+                            <span class="kodus-detail-label">Payout Schedule</span>
+                            <span class="kodus-detail-value">${formatFallback(data.payout_schedule, 'Not set')}</span>
+                        </div>
+                        <div>
+                            <span class="kodus-detail-label">Fund Obligation Status</span>
+                            <span class="kodus-detail-value">No. of Partner-beneficiaries: ${formatNumber(data.fund_obligation_partner_beneficiaries)} | Amount: ${formatCurrency(data.fund_obligation_amount)} | Percentage: ${formatPercent(data.fund_obligation_percentage)}</span>
+                        </div>
+                        <div>
+                            <span class="kodus-detail-label">Fund Disbursement Status</span>
+                            <span class="kodus-detail-value">Served: ${formatNumber(data.fund_disbursement_served_partner_beneficiaries)} | Disbursed: ${formatCurrency(data.fund_disbursement_amount)} | Unserved: ${formatNumber(data.fund_disbursement_unserved_partner_beneficiaries)} | Undisbursed: ${formatCurrency(data.fund_disbursement_undisbursed_amount)} | Percentage: ${formatPercent(data.fund_disbursement_percentage)}</span>
+                        </div>
+                        <div>
+                            <span class="kodus-detail-label">Liquidation Date</span>
+                            <span class="kodus-detail-value">${formatFallback(data.liquidation_dates, 'Not set')}</span>
+                        </div>
+                        <div>
+                            <span class="kodus-detail-label">Special Disbursing Officer</span>
+                            <span class="kodus-detail-value">${formatFallback(data.special_disbursing_officers, 'Not set')}</span>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="kodus-detail-section mb-0">
@@ -1089,6 +1329,9 @@ $(document).ready(function() {
                         <div style="grid-column: 1 / -1;">
                             <label class="mb-1">Implementation Phases</label>
                             ${renderStagePhaseInputs(row)}
+                        </div>
+                        <div style="grid-column: 1 / -1;">
+                            ${renderPostImplementationInputs(row)}
                         </div>
                     </div>
                 `).join('');
@@ -1269,7 +1512,19 @@ $(document).ready(function() {
                                 stage2_start_date: $(this).find('.stage2-start-date').val(),
                                 stage2_end_date: $(this).find('.stage2-end-date').val(),
                                 stage3_start_date: $(this).find('.stage3-start-date').val(),
-                                stage3_end_date: $(this).find('.stage3-end-date').val()
+                                stage3_end_date: $(this).find('.stage3-end-date').val(),
+                                drmd_monitoring_from: $(this).find('.drmd-monitoring-from').val(),
+                                drmd_monitoring_to: $(this).find('.drmd-monitoring-to').val(),
+                                drmd_monitoring_participants: $(this).find('.drmd-monitoring-participants').val().trim(),
+                                joint_post_monitoring_from: $(this).find('.joint-post-monitoring-from').val(),
+                                joint_post_monitoring_to: $(this).find('.joint-post-monitoring-to').val(),
+                                joint_post_monitoring_participants: $(this).find('.joint-post-monitoring-participants').val().trim(),
+                                payout_schedule_from: $(this).find('.payout-schedule-from').val(),
+                                payout_schedule_to: $(this).find('.payout-schedule-to').val(),
+                                fund_obligation_partner_beneficiaries: toInt($(this).find('.fund-obligation-partner-beneficiaries').val()),
+                                fund_disbursement_served_partner_beneficiaries: toInt($(this).find('.fund-disbursement-served-partner-beneficiaries').val()),
+                                liquidation_date: $(this).find('.liquidation-date').val(),
+                                special_disbursing_officer: $(this).find('.special-disbursing-officer').val().trim()
                             };
 
                             const stageLabels = [
@@ -1293,6 +1548,39 @@ $(document).ready(function() {
                                     hasRowValidationError = true;
                                     return false;
                                 }
+                            }
+
+                            if (hasRowValidationError) {
+                                return false;
+                            }
+
+                            const postImplementationLabels = [
+                                ['drmd_monitoring_from', 'drmd_monitoring_to', 'DRMD Monitoring Schedule'],
+                                ['joint_post_monitoring_from', 'joint_post_monitoring_to', 'Joint DRMB-DRMD Post-Monitoring Schedule'],
+                                ['payout_schedule_from', 'payout_schedule_to', 'Payout Schedule']
+                            ];
+
+                            for (const [startKey, endKey, label] of postImplementationLabels) {
+                                const startDate = stagePayload[startKey];
+                                const endDate = stagePayload[endKey];
+
+                                if ((startDate && !endDate) || (!startDate && endDate)) {
+                                    Swal.showValidationMessage(`${barangayName}: ${label} needs both From and To dates when one of them is filled in.`);
+                                    hasRowValidationError = true;
+                                    return false;
+                                }
+
+                                if (startDate && endDate && startDate > endDate) {
+                                    Swal.showValidationMessage(`${barangayName}: ${label} From date must be earlier than or equal to its To date.`);
+                                    hasRowValidationError = true;
+                                    return false;
+                                }
+                            }
+
+                            if (stagePayload.fund_disbursement_served_partner_beneficiaries > stagePayload.fund_obligation_partner_beneficiaries) {
+                                Swal.showValidationMessage(`${barangayName}: served partner-beneficiaries cannot be greater than the obligated partner-beneficiaries.`);
+                                hasRowValidationError = true;
+                                return false;
                             }
 
                             if (hasRowValidationError) {
@@ -1390,6 +1678,10 @@ $(document).ready(function() {
             return;
         }
         $(this).closest('.site-validation-item').remove();
+    });
+
+    $(document).on('input', '.row-total-target, .fund-obligation-partner-beneficiaries, .fund-disbursement-served-partner-beneficiaries', function() {
+        updatePostImplementationMetrics($(this).closest('.edit-grid-row'));
     });
 
     function initializeDateRangePickers($scope) {

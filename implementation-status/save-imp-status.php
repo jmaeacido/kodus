@@ -101,8 +101,20 @@ $stmt = $conn->prepare("
         stage2_end_date,
         stage3_start_date,
         stage3_end_date,
+        drmd_monitoring_from,
+        drmd_monitoring_to,
+        drmd_monitoring_participants,
+        joint_post_monitoring_from,
+        joint_post_monitoring_to,
+        joint_post_monitoring_participants,
+        payout_schedule_from,
+        payout_schedule_to,
+        fund_obligation_partner_beneficiaries,
+        fund_disbursement_served_partner_beneficiaries,
+        liquidation_date,
+        special_disbursing_officer,
         project_names
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON DUPLICATE KEY UPDATE
         plgu_forum = VALUES(plgu_forum),
         mlgu_forum = VALUES(mlgu_forum),
@@ -120,6 +132,18 @@ $stmt = $conn->prepare("
         stage2_end_date = VALUES(stage2_end_date),
         stage3_start_date = VALUES(stage3_start_date),
         stage3_end_date = VALUES(stage3_end_date),
+        drmd_monitoring_from = VALUES(drmd_monitoring_from),
+        drmd_monitoring_to = VALUES(drmd_monitoring_to),
+        drmd_monitoring_participants = VALUES(drmd_monitoring_participants),
+        joint_post_monitoring_from = VALUES(joint_post_monitoring_from),
+        joint_post_monitoring_to = VALUES(joint_post_monitoring_to),
+        joint_post_monitoring_participants = VALUES(joint_post_monitoring_participants),
+        payout_schedule_from = VALUES(payout_schedule_from),
+        payout_schedule_to = VALUES(payout_schedule_to),
+        fund_obligation_partner_beneficiaries = VALUES(fund_obligation_partner_beneficiaries),
+        fund_disbursement_served_partner_beneficiaries = VALUES(fund_disbursement_served_partner_beneficiaries),
+        liquidation_date = VALUES(liquidation_date),
+        special_disbursing_officer = VALUES(special_disbursing_officer),
         project_names = VALUES(project_names),
         updated_at = CURRENT_TIMESTAMP
 ");
@@ -186,6 +210,18 @@ foreach ($rows as $row) {
     $stage2End = trim((string) ($row['stage2_end_date'] ?? ''));
     $stage3Start = trim((string) ($row['stage3_start_date'] ?? ''));
     $stage3End = trim((string) ($row['stage3_end_date'] ?? ''));
+    $drmdMonitoringFrom = trim((string) ($row['drmd_monitoring_from'] ?? ''));
+    $drmdMonitoringTo = trim((string) ($row['drmd_monitoring_to'] ?? ''));
+    $drmdMonitoringParticipants = preg_replace('/\s+/', ' ', trim((string) ($row['drmd_monitoring_participants'] ?? '')));
+    $jointPostMonitoringFrom = trim((string) ($row['joint_post_monitoring_from'] ?? ''));
+    $jointPostMonitoringTo = trim((string) ($row['joint_post_monitoring_to'] ?? ''));
+    $jointPostMonitoringParticipants = preg_replace('/\s+/', ' ', trim((string) ($row['joint_post_monitoring_participants'] ?? '')));
+    $payoutScheduleFrom = trim((string) ($row['payout_schedule_from'] ?? ''));
+    $payoutScheduleTo = trim((string) ($row['payout_schedule_to'] ?? ''));
+    $fundObligationPartnerBeneficiaries = isset($row['fund_obligation_partner_beneficiaries']) ? (int) $row['fund_obligation_partner_beneficiaries'] : 0;
+    $fundDisbursementServedPartnerBeneficiaries = isset($row['fund_disbursement_served_partner_beneficiaries']) ? (int) $row['fund_disbursement_served_partner_beneficiaries'] : 0;
+    $liquidationDate = trim((string) ($row['liquidation_date'] ?? ''));
+    $specialDisbursingOfficer = preg_replace('/\s+/', ' ', trim((string) ($row['special_disbursing_officer'] ?? '')));
     $siteValidationRaw = trim((string) ($row['site_validation'] ?? ''));
 
     $stageRanges = [
@@ -224,10 +260,51 @@ foreach ($rows as $row) {
         'CapBuild' => $capbuildTarget,
         'Community action plan' => $communityActionPlanTarget,
         'Target partner-beneficiaries' => $targetBeneficiaries,
+        'Fund obligation partner-beneficiaries' => $fundObligationPartnerBeneficiaries,
+        'Served partner-beneficiaries during payout' => $fundDisbursementServedPartnerBeneficiaries,
     ] as $label => $targetValue) {
         if ($targetValue !== null && $targetValue < 0) {
             http_response_code(400);
             echo json_encode(['success' => false, 'message' => $barangay . ': ' . $label . ' target cannot be negative.']);
+            $stmt->close();
+            $targetLookupStmt->close();
+            $targetSaveStmt->close();
+            exit;
+        }
+    }
+
+    if ($fundDisbursementServedPartnerBeneficiaries > $fundObligationPartnerBeneficiaries) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'message' => $barangay . ': served partner-beneficiaries cannot be greater than the obligated partner-beneficiaries.']);
+        $stmt->close();
+        $targetLookupStmt->close();
+        $targetSaveStmt->close();
+        exit;
+    }
+
+    $postImplementationRanges = [
+        'DRMD Monitoring Schedule' => [$drmdMonitoringFrom, $drmdMonitoringTo],
+        'Joint DRMB-DRMD Post-Monitoring Schedule' => [$jointPostMonitoringFrom, $jointPostMonitoringTo],
+        'Payout Schedule' => [$payoutScheduleFrom, $payoutScheduleTo],
+    ];
+
+    foreach ($postImplementationRanges as $label => [$fromDate, $toDate]) {
+        if ($fromDate === '' && $toDate === '') {
+            continue;
+        }
+
+        if ($fromDate === '' || $toDate === '') {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'message' => $barangay . ': ' . $label . ' needs both From and To dates when one of them is provided.']);
+            $stmt->close();
+            $targetLookupStmt->close();
+            $targetSaveStmt->close();
+            exit;
+        }
+
+        if ($fromDate > $toDate) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'message' => $barangay . ': ' . $label . ' From date cannot be later than the To date.']);
             $stmt->close();
             $targetLookupStmt->close();
             $targetSaveStmt->close();
@@ -241,6 +318,13 @@ foreach ($rows as $row) {
     $stage2End = $stage2End !== '' ? $stage2End : null;
     $stage3Start = $stage3Start !== '' ? $stage3Start : null;
     $stage3End = $stage3End !== '' ? $stage3End : null;
+    $drmdMonitoringFrom = $drmdMonitoringFrom !== '' ? $drmdMonitoringFrom : null;
+    $drmdMonitoringTo = $drmdMonitoringTo !== '' ? $drmdMonitoringTo : null;
+    $jointPostMonitoringFrom = $jointPostMonitoringFrom !== '' ? $jointPostMonitoringFrom : null;
+    $jointPostMonitoringTo = $jointPostMonitoringTo !== '' ? $jointPostMonitoringTo : null;
+    $payoutScheduleFrom = $payoutScheduleFrom !== '' ? $payoutScheduleFrom : null;
+    $payoutScheduleTo = $payoutScheduleTo !== '' ? $payoutScheduleTo : null;
+    $liquidationDate = $liquidationDate !== '' ? $liquidationDate : null;
 
     $siteValidation = '';
     if ($siteValidationRaw !== '') {
@@ -373,7 +457,7 @@ foreach ($rows as $row) {
     $targetSaveStmt->execute();
 
     $stmt->bind_param(
-        "ssssssssssssssssssss",
+        "ssssssssssssssssssssssssssiisss",
         $province,
         $municipality,
         $barangay,
@@ -393,6 +477,18 @@ foreach ($rows as $row) {
         $stage2End,
         $stage3Start,
         $stage3End,
+        $drmdMonitoringFrom,
+        $drmdMonitoringTo,
+        $drmdMonitoringParticipants,
+        $jointPostMonitoringFrom,
+        $jointPostMonitoringTo,
+        $jointPostMonitoringParticipants,
+        $payoutScheduleFrom,
+        $payoutScheduleTo,
+        $fundObligationPartnerBeneficiaries,
+        $fundDisbursementServedPartnerBeneficiaries,
+        $liquidationDate,
+        $specialDisbursingOfficer,
         $projectNames
     );
     $stmt->execute();

@@ -931,7 +931,7 @@ $(document).ready(function () {
     });
   });
 
-  setInterval(function () {
+  function refreshUserStatuses() {
     $.ajax({
       url: 'get_user_status.php',
       method: 'GET',
@@ -955,7 +955,14 @@ $(document).ready(function () {
         classificationTable.rows().invalidate('dom').draw(false);
       }
     });
-  }, 10000);
+  }
+
+  if (window.KODUSLiveRefresh) {
+    window.KODUSLiveRefresh.watch({
+      channels: ['user_status_table'],
+      onChange: refreshUserStatuses
+    });
+  }
 
   if (window.location.hash === '#deactivate') {
     $('#deactivate-tab').tab('show');

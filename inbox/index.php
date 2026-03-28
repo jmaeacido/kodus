@@ -290,11 +290,13 @@ $composeCsrfToken = security_get_csrf_token();
     .mailbox-app .mailbox-pane-card {
       min-height: 72vh;
       background: linear-gradient(180deg, var(--mailbox-surface) 0%, var(--mailbox-surface-muted) 100%);
+      overflow-x: hidden;
     }
 
     .mailbox-app .mailbox-messages-wrap {
       max-height: 48vh;
       overflow-y: auto;
+      overflow-x: hidden;
       border-top: 1px solid var(--mailbox-border);
       background: linear-gradient(180deg, var(--mailbox-surface-muted) 0%, var(--mailbox-surface) 100%);
     }
@@ -358,7 +360,22 @@ $composeCsrfToken = security_get_csrf_token();
 
     .mailbox-app .mailbox-subject {
       max-width: 100%;
+      width: 100%;
+      display: block;
       color: var(--mailbox-text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .mailbox-app .mailbox-subject .mailbox-subject-line,
+    .mailbox-app .mailbox-subject .mailbox-snippet {
+      display: inline-block;
+      max-width: 100%;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      vertical-align: bottom;
     }
 
     .mailbox-app .mailbox-subject .mailbox-snippet {
@@ -1403,7 +1420,7 @@ $composeCsrfToken = security_get_csrf_token();
 
       .mailbox-app .mailbox-messages-wrap {
         max-height: none;
-        overflow-x: auto;
+        overflow-x: hidden;
         -webkit-overflow-scrolling: touch;
       }
 
@@ -1438,14 +1455,17 @@ $composeCsrfToken = security_get_csrf_token();
 
       .mailbox-app .mailbox-messages-wrap .table-responsive {
         min-width: 0 !important;
-        overflow-x: visible;
+        max-width: 100%;
+        overflow-x: hidden;
       }
 
       .mailbox-app .mailbox-messages-wrap table {
         min-width: 0 !important;
         width: 100%;
+        max-width: 100%;
         border-collapse: separate;
         border-spacing: 0;
+        table-layout: fixed;
       }
 
       .mailbox-app .mailbox-messages-wrap tbody {
@@ -1513,6 +1533,7 @@ $composeCsrfToken = security_get_csrf_token();
         font-size: 0.84rem;
       }
 
+      .mailbox-app .mailbox-messages-wrap tr.message-item .mailbox-subject .mailbox-subject-line,
       .mailbox-app .mailbox-messages-wrap tr.message-item .mailbox-subject .mailbox-snippet {
         display: inline;
         white-space: nowrap;
@@ -1848,7 +1869,7 @@ $composeCsrfToken = security_get_csrf_token();
                         <span><?= $unreadCount ?> unread</span>
                       </div>
                       <div class="mailbox-toolbar-copy">
-                        <span class="mailbox-live-indicator">Auto-refresh every 30 seconds</span>
+                        <span class="mailbox-live-indicator">Live updates</span>
                         <span id="mailboxRefreshLabel">Live</span>
                       </div>
                     </div>
@@ -1886,7 +1907,7 @@ $composeCsrfToken = security_get_csrf_token();
                                 }
                                 $subject = htmlspecialchars($row['subject'] ?? '(No Subject)');
                                 $messageText = trim(preg_replace('/\s+/', ' ', (string) ($row['message'] ?? '')));
-                                $snippet = htmlspecialchars(mb_strimwidth($messageText, 0, 70, '...'));
+                                $snippet = htmlspecialchars(mb_strimwidth($messageText, 0, 28, '...'));
                                 $email = htmlspecialchars($row['user_email'] ?? '');
                                 $activityAt = (string) ($row['latest_activity_at'] ?? $row['sent_at'] ?? '');
                                 $sentAt = htmlspecialchars($activityAt);
@@ -1912,8 +1933,7 @@ $composeCsrfToken = security_get_csrf_token();
                                 </td>
                                 <td class="mailbox-name"><?= $name ?></td>
                                 <td class="mailbox-subject">
-                                  <?= $subject ?>
-                                  <span class="mailbox-snippet"> - <?= $snippet ?></span>
+                                  <span class="mailbox-subject-line"><?= $subject ?></span><?php if ($snippet !== ''): ?><span class="mailbox-snippet"> - <?= $snippet ?></span><?php endif; ?>
                                 </td>
                                 <td class="mailbox-attachment text-center" style="width:40px;">
                                   <?php if ($hasAttachment): ?>
@@ -2085,6 +2105,8 @@ let userIsScrolling = false;
 let scrollTimeout = null;
 let forceScrollNext = false;
 let firstLoadDone = false;
+let mailboxStateToken = null;
+let mailboxStatePollInFlight = false;
 const currentMailboxFolder = <?= json_encode($currentFolder, JSON_UNESCAPED_SLASHES) ?>;
 const canReplyInCurrentFolder = currentMailboxFolder !== 'trash';
 const shouldOpenCompose = <?= $composeOpen ? 'true' : 'false' ?>;
@@ -2283,30 +2305,34 @@ function updateMessageList() {
     });
 }
 
+function applyUnreadCount(count) {
+    const unreadCount = Number(count || 0);
+    const badge = $('#sidebarMailUnreadBadge');
+    const sidebarBadge = $('#sidebarUnreadBadge');
+    const topbarBadge = $('#topbarUnreadBadge');
+    const mailNavLabel = $('.nav-item a[href$="kodus/inbox/"] p');
+
+    if (unreadCount > 0) {
+        sidebarBadge.text(unreadCount).show();
+        if (badge.length) {
+            badge.text(unreadCount);
+        } else {
+            mailNavLabel.append(`<span class="right badge badge-danger" id="sidebarMailUnreadBadge">${unreadCount}</span>`);
+        }
+
+        if (topbarBadge.length) {
+            topbarBadge.text(unreadCount).show();
+        }
+    } else {
+        sidebarBadge.hide();
+        badge.remove();
+        topbarBadge.remove();
+    }
+}
+
 function updateUnreadCount() {
     $.getJSON('get_unread_count.php', function(data) {
-        const count = Number(data.count || 0);
-        const badge = $('#sidebarMailUnreadBadge');
-        const sidebarBadge = $('#sidebarUnreadBadge');
-        const topbarBadge = $('#topbarUnreadBadge');
-        const mailNavLabel = $('.nav-item a[href$="kodus/inbox/"] p');
-
-        if (count > 0) {
-            sidebarBadge.text(count).show();
-            if (badge.length) {
-                badge.text(count);
-            } else {
-                mailNavLabel.append(`<span class="right badge badge-danger" id="sidebarMailUnreadBadge">${count}</span>`);
-            }
-
-            if (topbarBadge.length) {
-                topbarBadge.text(count).show();
-            }
-        } else {
-            sidebarBadge.hide();
-            badge.remove();
-            topbarBadge.remove();
-        }
+        applyUnreadCount(data.count || 0);
     });
 }
 
@@ -2678,7 +2704,7 @@ $(document).on('submit', '#replyForm', function(e) {
     });
 });
 
-setInterval(function() {
+function refreshConversationIfChanged() {
     if (!lastOpenedId) {
         return;
     }
@@ -2726,10 +2752,44 @@ setInterval(function() {
             }
         }
     });
-}, 15000);
+}
 
-setInterval(updateUnreadCount, 30000);
-setInterval(updateMessageList, 30000);
+function pollMailboxState() {
+    if (mailboxStatePollInFlight) {
+        return;
+    }
+
+    mailboxStatePollInFlight = true;
+
+    $.getJSON('get_mailbox_state.php', { folder: currentMailboxFolder }, function(data) {
+        const nextToken = String(data.state_token || '');
+        applyUnreadCount(data.unread_count || 0);
+
+        if (!nextToken) {
+            updateRefreshLabel(false);
+            return;
+        }
+
+        if (mailboxStateToken === null) {
+            mailboxStateToken = nextToken;
+            updateRefreshLabel(false);
+            return;
+        }
+
+        if (nextToken === mailboxStateToken) {
+            updateRefreshLabel(false);
+            return;
+        }
+
+        mailboxStateToken = nextToken;
+        updateMessageList();
+        refreshConversationIfChanged();
+    }).always(function() {
+        mailboxStatePollInFlight = false;
+    });
+}
+
+setInterval(pollMailboxState, 5000);
 
 $('#mailboxSearch').on('input', applyMessageFilters);
 
@@ -3002,6 +3062,7 @@ $(function() {
     updateRefreshLabel();
     updateDetailTitle();
     updateUnreadCount();
+    pollMailboxState();
 
     const params = new URLSearchParams(window.location.search);
     const requestedId = params.get('msg') || params.get('id');

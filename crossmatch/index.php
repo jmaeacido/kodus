@@ -201,8 +201,12 @@ function loadRecentCrossmatchings() {
 // Initial load
 loadRecentCrossmatchings();
 
-// Refresh every 30 seconds
-setInterval(loadRecentCrossmatchings, 30000);
+if (window.KODUSLiveRefresh) {
+    window.KODUSLiveRefresh.watch({
+        channels: ['crossmatch_recent_table'],
+        onChange: loadRecentCrossmatchings
+    });
+}
 </script>
 </body>
 </html>

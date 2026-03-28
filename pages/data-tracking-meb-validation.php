@@ -113,9 +113,12 @@ $(document).ready(function() {
             "pageLength": 10
         });
 
-        setInterval(() => {
-            table.ajax.reload(null, false);
-        }, 5000);
+        if (window.KODUSLiveRefresh) {
+            window.KODUSLiveRefresh.watchDataTable({
+                channels: ['meb_validation_table'],
+                table: table
+            });
+        }
     }
 });
 </script>

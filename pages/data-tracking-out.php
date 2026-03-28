@@ -569,10 +569,12 @@ function renderOutgoingDetails(rowData) {
           //"buttons": ["copy", "csv", "excel", "pdf", "print", "colvis"]
       });
 
-      // Periodically refresh data while keeping selections
-      setInterval(() => {
-          table.ajax.reload(null, false); // false ensures pagination doesn't reset
-      }, 60000);
+      if (window.KODUSLiveRefresh) {
+          window.KODUSLiveRefresh.watchDataTable({
+              channels: ['outgoing_table'],
+              table: table
+          });
+      }
 </script>
 <script>
 $(document).on("click", ".edit-btn", function () {

@@ -184,7 +184,7 @@ if ($reply === '' && !$hasAttachments) {
 // Insert reply into database
 // ---------------------------
 $attachmentsDB = !empty($filenamesForDB) ? implode(',', $filenamesForDB) : null;
-$stmt = $conn->prepare("INSERT INTO contact_replies (message_id, user_id, reply, sent_at, attachment) VALUES (?,?,?,NOW(),?)");
+$stmt = $conn->prepare("INSERT INTO contact_replies (message_id, user_id, reply, sent_at, updated_at, attachment) VALUES (?,?,?,NOW(),NOW(),?)");
 if (!$stmt) {
     $buf = ob_get_clean();
     echo json_encode(['status'=>'error','message'=>'DB prepare failed (insert reply).','debug'=>$buf]);

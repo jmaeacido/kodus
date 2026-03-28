@@ -137,7 +137,7 @@ if ($result->num_rows === 0): ?>
                     }
                     $subject = htmlspecialchars($row['subject'] ?? '(No Subject)');
                     $messageText = trim(preg_replace('/\s+/', ' ', (string) ($row['message'] ?? '')));
-                    $snippet = htmlspecialchars(mb_strimwidth($messageText, 0, 70, '...'));
+                    $snippet = htmlspecialchars(mb_strimwidth($messageText, 0, 28, '...'));
                     $email = htmlspecialchars($row['user_email'] ?? '');
                     $activityAt = (string) ($row['latest_activity_at'] ?? $row['sent_at'] ?? '');
                     $sentAt = htmlspecialchars($activityAt);
@@ -163,8 +163,7 @@ if ($result->num_rows === 0): ?>
                     </td>
                     <td class="mailbox-name"><?= $name ?></td>
                     <td class="mailbox-subject">
-                        <?= $subject ?>
-                        <span class="mailbox-snippet"> - <?= $snippet ?></span>
+                        <span class="mailbox-subject-line"><?= $subject ?></span><?php if ($snippet !== ''): ?><span class="mailbox-snippet"> - <?= $snippet ?></span><?php endif; ?>
                     </td>
                     <td class="mailbox-attachment text-center" style="width:40px;">
                         <?php if ($hasAttachment): ?>

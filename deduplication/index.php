@@ -154,8 +154,12 @@ include('../sidenav.php');
   // Load immediately on page load
   loadRecentDeduplications();
 
-  // Refresh every 30 seconds
-  setInterval(loadRecentDeduplications, 30000);
+  if (window.KODUSLiveRefresh) {
+      window.KODUSLiveRefresh.watch({
+          channels: ['deduplication_recent_table'],
+          onChange: loadRecentDeduplications
+      });
+  }
 </script>
 
 </body>

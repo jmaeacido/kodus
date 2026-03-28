@@ -77,6 +77,12 @@ function mailboxEnsureSchema(mysqli $conn): void
         }
     }
 
+    if (!in_array('updated_at', $replyColumns, true)) {
+        if (!$conn->query("ALTER TABLE contact_replies ADD COLUMN updated_at DATETIME NULL DEFAULT NULL AFTER sent_at")) {
+            throw new RuntimeException('Unable to add reply updated timestamp: ' . $conn->error);
+        }
+    }
+
     $ensured = true;
 }
 

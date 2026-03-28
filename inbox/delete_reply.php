@@ -68,6 +68,7 @@ $deleteStmt = $conn->prepare("
     SET reply = '[deleted]',
         attachment = NULL,
         deleted_for_everyone_at = NOW(),
+        updated_at = NOW(),
         deleted_by_user_id = ?
     WHERE id = ?
     LIMIT 1

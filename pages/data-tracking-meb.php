@@ -531,9 +531,12 @@ $isAdmin = isset($_SESSION['user_type']) && $_SESSION['user_type'] === 'admin';
               updateSelectedIds();
           });
 
-          setInterval(() => {
-              table.ajax.reload(null, false);
-          }, 5000);
+          if (window.KODUSLiveRefresh) {
+              window.KODUSLiveRefresh.watchDataTable({
+                  channels: ['meb_table'],
+                  table: table
+              });
+          }
       }
   });
 </script>

@@ -258,6 +258,10 @@
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <!-- AdminLTE App -->
 <script src="../dist/js/adminlte.min.js"></script>
+<script>
+  window.KODUS_LIVE_REFRESH_URL = '../live_refresh.php';
+</script>
+<script src="../dist/js/kodus-live-refresh.js"></script>
 
 <script>
       let table = $("#incoming-table").DataTable({
@@ -295,9 +299,12 @@
       });
 
       // Periodically refresh data while keeping selections
-      setInterval(() => {
-          table.ajax.reload(null, false); // false ensures pagination doesn't reset
-      }, 60000);
+      if (window.KODUSLiveRefresh) {
+          window.KODUSLiveRefresh.watchDataTable({
+              channels: ['incoming_table'],
+              table: table
+          });
+      }
 </script>
 <script>
 $(document).on("click", ".edit-btn", function () {

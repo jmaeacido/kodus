@@ -53,6 +53,10 @@ if (isset($_SESSION['user_id']) && is_numeric($_SESSION['user_id'])) {
     <link rel="stylesheet" href="<?php echo $base_url;?>kodus/plugins/datatables-buttons/css/buttons.bootstrap4.min.css">
     <?php include __DIR__ . '/page_loader.php'; ?>
     <script>
+      window.KODUS_LIVE_REFRESH_URL = <?php echo json_encode($base_url . 'kodus/live_refresh.php'); ?>;
+    </script>
+    <script src="<?php echo $base_url; ?>kodus/dist/js/kodus-live-refresh.js"></script>
+    <script>
       (function() {
         let stickyHeaderRaf = null;
         let stickyHeaderObserver = null;

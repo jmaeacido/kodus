@@ -67,7 +67,8 @@ if (!empty($reply['deleted_for_everyone_at'])) {
 
 $updateStmt = $conn->prepare("
     UPDATE contact_replies
-    SET reply = ?
+    SET reply = ?,
+        updated_at = NOW()
     WHERE id = ?
     LIMIT 1
 ");

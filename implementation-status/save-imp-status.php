@@ -190,9 +190,9 @@ foreach ($rows as $row) {
             continue;
         }
 
-        if ($startDate === '' || $endDate === '') {
+        if ($startDate === '' && $endDate !== '') {
             http_response_code(400);
-            echo json_encode(['success' => false, 'message' => $barangay . ': ' . $label . ' needs both Start and End dates when one is provided.']);
+            echo json_encode(['success' => false, 'message' => $barangay . ': ' . $label . ' needs a Start date before its End date can be set.']);
             $stmt->close();
             $targetLookupStmt->close();
             $targetSaveStmt->close();

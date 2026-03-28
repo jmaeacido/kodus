@@ -222,6 +222,67 @@ if (isset($_SESSION['user_id']) && is_numeric($_SESSION['user_id'])) {
         margin-top: 0.75rem;
       }
 
+      .swal2-popup .swal2-close {
+        color: var(--kodus-detail-text);
+        opacity: 0.78;
+        text-shadow: none;
+        transition: opacity 0.15s ease-in-out, color 0.15s ease-in-out;
+      }
+
+      .swal2-popup .swal2-close:hover,
+      .swal2-popup .swal2-close:focus {
+        color: var(--kodus-detail-text);
+        opacity: 1;
+      }
+
+      .swal2-popup.kodus-swal-has-top-actions {
+        position: relative;
+      }
+
+      .swal2-popup .kodus-swal-top-actions {
+        position: absolute;
+        top: 1rem;
+        right: 1rem;
+        z-index: 3;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.45rem;
+      }
+
+      .swal2-popup .kodus-swal-top-action-button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 2.4rem;
+        height: 2.4rem;
+        padding: 0 0.8rem;
+        border: 1px solid var(--kodus-detail-border);
+        border-radius: 999px;
+        background: var(--kodus-detail-panel-strong);
+        color: var(--kodus-detail-text);
+        box-shadow: none;
+      }
+
+      .swal2-popup .kodus-swal-top-action-button:hover,
+      .swal2-popup .kodus-swal-top-action-button:focus {
+        color: var(--kodus-detail-text);
+        opacity: 1;
+      }
+
+      .swal2-popup .kodus-swal-top-action-button i {
+        pointer-events: none;
+      }
+
+      .swal2-popup.kodus-swal-has-top-actions .swal2-close {
+        position: static;
+        inset: auto;
+        width: 2.4rem;
+        height: 2.4rem;
+        margin: 0;
+        border-radius: 999px;
+        font-size: 1.5rem;
+      }
+
       .kodus-edit-shell {
         text-align: left;
         color: var(--kodus-detail-text);

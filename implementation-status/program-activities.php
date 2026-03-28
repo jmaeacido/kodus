@@ -13,6 +13,7 @@ $userType = $_SESSION['user_type'] ?? 'user';
   <link rel="stylesheet" href="<?php echo $base_url;?>kodus/plugins/datatables-bs4/css/dataTables.bootstrap4.min.css">
   <link rel="stylesheet" href="<?php echo $base_url;?>kodus/plugins/datatables-responsive/css/responsive.bootstrap4.min.css">
   <link rel="stylesheet" href="<?php echo $base_url;?>kodus/plugins/datatables-buttons/css/buttons.bootstrap4.min.css">
+  <link rel="stylesheet" href="<?php echo $base_url;?>kodus/plugins/daterangepicker/daterangepicker.css">
   <style>
     .summary-card .small-box {
       margin-bottom: 0;
@@ -80,9 +81,28 @@ $userType = $_SESSION['user_type'] ?? 'user';
       text-transform: none;
     }
     .stage-phase-dates {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 10px;
+      display: block;
+    }
+    .date-range-field {
+      position: relative;
+    }
+    .date-range-input {
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='rgba(255,255,255,0.72)' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='4' width='18' height='18' rx='2' ry='2'/%3E%3Cline x1='16' y1='2' x2='16' y2='6'/%3E%3Cline x1='8' y1='2' x2='8' y2='6'/%3E%3Cline x1='3' y1='10' x2='21' y2='10'/%3E%3C/svg%3E") !important;
+      background-repeat: no-repeat !important;
+      background-position: right 0.85rem center !important;
+      background-size: 1rem 1rem !important;
+      cursor: pointer;
+      padding-right: 2.5rem;
+    }
+    .date-range-hint {
+      display: block;
+      margin-top: 0.45rem;
+      font-size: 0.74rem;
+      opacity: 0.78;
+    }
+    .site-validation-item .date-range-field {
+      min-width: 0;
+      flex: 1 1 auto;
     }
     .readonly-display {
       min-height: calc(1.8125rem + 2px);
@@ -176,9 +196,7 @@ $userType = $_SESSION['user_type'] ?? 'user';
       color: #f8f9fa;
     }
     .forum-date-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 8px;
+      display: block;
     }
     .site-validation-list {
       display: grid;
@@ -186,15 +204,29 @@ $userType = $_SESSION['user_type'] ?? 'user';
     }
     .site-validation-item {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto auto;
+      grid-template-columns: minmax(0, 1fr) auto auto;
       gap: 8px;
       align-items: end;
+    }
+    .site-validation-item .btn {
+      width: 2.1rem;
+      min-width: 2.1rem;
+      height: calc(1.5em + 0.75rem + 2px);
+      padding: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      align-self: end;
+      line-height: 1;
     }
     @media (max-width: 768px) {
       .site-validation-item,
       .forum-date-grid,
       .stage-phase-dates {
         grid-template-columns: 1fr;
+      }
+      .site-validation-item .btn {
+        width: 100%;
       }
     }
     .forum-date-grid label,
@@ -204,6 +236,14 @@ $userType = $_SESSION['user_type'] ?? 'user';
       letter-spacing: 0.02em;
       margin-bottom: 4px;
       display: block;
+    }
+    .swal2-popup .daterangepicker {
+      z-index: 10010 !important;
+    }
+    .swal2-popup .daterangepicker.openscenter {
+      left: 50% !important;
+      right: auto !important;
+      transform: translateX(-50%);
     }
     .barangay-edit-header {
       display: flex;
@@ -614,13 +654,11 @@ $(document).ready(function() {
         const entries = parseSiteValidationEntries(rawValue);
         return entries.map((entry) => `
             <div class="site-validation-item">
-                <div>
-                    <label>Start</label>
-                    <input type="date" class="form-control site-validation-start" value="${escapeHtml(entry.start || '')}">
-                </div>
-                <div>
-                    <label>End</label>
-                    <input type="date" class="form-control site-validation-end" value="${escapeHtml(entry.end || '')}">
+                <div class="date-range-field">
+                    <label>Schedule</label>
+                    <input type="text" class="form-control site-validation-range date-range-input js-date-range-picker" value="${escapeHtml(formatDateRangeInputValue(entry.start || '', entry.end || ''))}" placeholder="Select date range" readonly>
+                    <input type="hidden" class="site-validation-start" value="${escapeHtml(entry.start || '')}">
+                    <input type="hidden" class="site-validation-end" value="${escapeHtml(entry.end || '')}">
                 </div>
                 <button type="button" class="btn btn-success btn-sm add-site-validation-btn">+</button>
                 <button type="button" class="btn btn-danger btn-sm remove-site-validation-btn">-</button>
@@ -641,19 +679,33 @@ $(document).ready(function() {
                     <div class="stage-phase-card">
                         <h6>${escapeHtml(stage.label)}</h6>
                         <div class="stage-phase-dates">
-                            <div>
-                                <label>Start</label>
-                                <input type="date" class="form-control form-control-sm ${stage.key}-start-date" value="${escapeHtml(row[`${stage.key}_start_date`] || '')}">
-                            </div>
-                            <div>
-                                <label>End</label>
-                                <input type="date" class="form-control form-control-sm ${stage.key}-end-date" value="${escapeHtml(row[`${stage.key}_end_date`] || '')}">
+                            <div class="date-range-field">
+                                <label>Schedule</label>
+                                <input type="text" class="form-control form-control-sm ${stage.key}-range date-range-input js-date-range-picker" value="${escapeHtml(formatDateRangeInputValue(row[`${stage.key}_start_date`] || '', row[`${stage.key}_end_date`] || ''))}" placeholder="Select date range" readonly>
+                                <input type="hidden" class="${stage.key}-start-date" value="${escapeHtml(row[`${stage.key}_start_date`] || '')}">
+                                <input type="hidden" class="${stage.key}-end-date" value="${escapeHtml(row[`${stage.key}_end_date`] || '')}">
+                                <span class="date-range-hint">Pick one day to set both dates, then reopen it later if you need to extend the end date.</span>
                             </div>
                         </div>
                     </div>
                 `).join('')}
             </div>
         `;
+    }
+
+    function formatDateRangeInputValue(startDate, endDate) {
+        const start = String(startDate || '').trim();
+        const end = String(endDate || '').trim();
+
+        if (!start && !end) {
+            return '';
+        }
+
+        if (start && end) {
+            return start === end ? start : `${start} - ${end}`;
+        }
+
+        return start || end;
     }
 
     function stripHtml(value) {
@@ -1021,39 +1073,33 @@ $(document).ready(function() {
                                     <div class="forum-card">
                                         <div class="forum-card-title"><i class="fas fa-users"></i><span>PLGU Forum</span></div>
                                         <div class="forum-date-grid">
-                                            <div>
-                                                <label>From</label>
-                                                <input type="date" id="edit-plgu-from" class="form-control" value="${first.plgu_forum_from || ''}">
-                                            </div>
-                                            <div>
-                                                <label>To</label>
-                                                <input type="date" id="edit-plgu-to" class="form-control" value="${first.plgu_forum_to || ''}">
+                                            <div class="date-range-field">
+                                                <label>Schedule</label>
+                                                <input type="text" id="edit-plgu-range" class="form-control date-range-input js-date-range-picker" value="${escapeHtml(formatDateRangeInputValue(first.plgu_forum_from || '', first.plgu_forum_to || ''))}" placeholder="Select date range" readonly>
+                                                <input type="hidden" id="edit-plgu-from" value="${first.plgu_forum_from || ''}">
+                                                <input type="hidden" id="edit-plgu-to" value="${first.plgu_forum_to || ''}">
                                             </div>
                                         </div>
                                     </div>
                                     <div class="forum-card">
                                         <div class="forum-card-title"><i class="fas fa-landmark"></i><span>MLGU Forum</span></div>
                                         <div class="forum-date-grid">
-                                            <div>
-                                                <label>From</label>
-                                                <input type="date" id="edit-mlgu-from" class="form-control" value="${first.mlgu_forum_from || ''}">
-                                            </div>
-                                            <div>
-                                                <label>To</label>
-                                                <input type="date" id="edit-mlgu-to" class="form-control" value="${first.mlgu_forum_to || ''}">
+                                            <div class="date-range-field">
+                                                <label>Schedule</label>
+                                                <input type="text" id="edit-mlgu-range" class="form-control date-range-input js-date-range-picker" value="${escapeHtml(formatDateRangeInputValue(first.mlgu_forum_from || '', first.mlgu_forum_to || ''))}" placeholder="Select date range" readonly>
+                                                <input type="hidden" id="edit-mlgu-from" value="${first.mlgu_forum_from || ''}">
+                                                <input type="hidden" id="edit-mlgu-to" value="${first.mlgu_forum_to || ''}">
                                             </div>
                                         </div>
                                     </div>
                                     <div class="forum-card">
                                         <div class="forum-card-title"><i class="fas fa-map-marked-alt"></i><span>BLGU Forum</span></div>
                                         <div class="forum-date-grid">
-                                            <div>
-                                                <label>From</label>
-                                                <input type="date" id="edit-blgu-from" class="form-control" value="${first.blgu_forum_from || ''}">
-                                            </div>
-                                            <div>
-                                                <label>To</label>
-                                                <input type="date" id="edit-blgu-to" class="form-control" value="${first.blgu_forum_to || ''}">
+                                            <div class="date-range-field">
+                                                <label>Schedule</label>
+                                                <input type="text" id="edit-blgu-range" class="form-control date-range-input js-date-range-picker" value="${escapeHtml(formatDateRangeInputValue(first.blgu_forum_from || '', first.blgu_forum_to || ''))}" placeholder="Select date range" readonly>
+                                                <input type="hidden" id="edit-blgu-from" value="${first.blgu_forum_from || ''}">
+                                                <input type="hidden" id="edit-blgu-to" value="${first.blgu_forum_to || ''}">
                                             </div>
                                         </div>
                                     </div>
@@ -1071,6 +1117,9 @@ $(document).ready(function() {
                     `,
                     showCancelButton: true,
                     confirmButtonText: '<i class="fas fa-save"></i>',
+                    didOpen: () => {
+                        initializeDateRangePickers($('.swal2-popup'));
+                    },
                     preConfirm: () => {
                         const plguFrom = $('#edit-plgu-from').val();
                         const plguTo = $('#edit-plgu-to').val();
@@ -1184,8 +1233,8 @@ $(document).ready(function() {
                                 const startDate = stagePayload[startKey];
                                 const endDate = stagePayload[endKey];
 
-                                if ((startDate && !endDate) || (!startDate && endDate)) {
-                                    Swal.showValidationMessage(`${barangayName}: ${label} needs both Start and End dates when one is filled in.`);
+                                if (!startDate && endDate) {
+                                    Swal.showValidationMessage(`${barangayName}: ${label} needs a Start date before its End date can be set.`);
                                     hasRowValidationError = true;
                                     return false;
                                 }
@@ -1273,7 +1322,9 @@ $(document).ready(function() {
     });
 
     $(document).on('click', '.add-site-validation-btn', function() {
-        $(this).closest('.row-site-validation-list').append(renderSiteValidationInputs(''));
+        const list = $(this).closest('.row-site-validation-list');
+        list.append(renderSiteValidationInputs(''));
+        initializeDateRangePickers(list);
     });
 
     $(document).on('click', '.remove-site-validation-btn', function() {
@@ -1281,12 +1332,63 @@ $(document).ready(function() {
         if (list.find('.site-validation-item').length === 1) {
             list.find('.site-validation-start').val('');
             list.find('.site-validation-end').val('');
+            list.find('.site-validation-range').val('');
             return;
         }
         $(this).closest('.site-validation-item').remove();
     });
+
+    function initializeDateRangePickers($scope) {
+        $scope.find('.js-date-range-picker').each(function() {
+            const $input = $(this);
+            if ($input.data('daterangepicker')) {
+                return;
+            }
+
+            const $field = $input.closest('.date-range-field');
+            const $start = $field.find('input[type="hidden"]').eq(0);
+            const $end = $field.find('input[type="hidden"]').eq(1);
+            const startValue = ($start.val() || '').trim();
+            const endValue = ($end.val() || '').trim();
+            const initialStart = startValue || endValue || moment().format('YYYY-MM-DD');
+            const initialEnd = endValue || startValue || initialStart;
+            const parentEl = $input.closest('.swal2-popup');
+
+            $input.daterangepicker({
+                autoUpdateInput: false,
+                autoApply: false,
+                alwaysShowCalendars: true,
+                opens: 'center',
+                drops: 'auto',
+                parentEl: parentEl.length ? parentEl : 'body',
+                startDate: moment(initialStart, 'YYYY-MM-DD'),
+                endDate: moment(initialEnd, 'YYYY-MM-DD'),
+                locale: {
+                    format: 'YYYY-MM-DD',
+                    cancelLabel: 'Clear'
+                }
+            });
+
+            $input.on('apply.daterangepicker', function(ev, picker) {
+                const start = picker.startDate.format('YYYY-MM-DD');
+                const end = picker.endDate.format('YYYY-MM-DD');
+                $start.val(start);
+                $end.val(end);
+                $input.val(start === end ? start : `${start} - ${end}`);
+            });
+
+            $input.on('cancel.daterangepicker', function() {
+                $start.val('');
+                $end.val('');
+                $input.val('');
+            });
+        });
+    }
 });
 </script>
+
+<script src="<?php echo $base_url;?>kodus/plugins/moment/moment.min.js"></script>
+<script src="<?php echo $base_url;?>kodus/plugins/daterangepicker/daterangepicker.js"></script>
 
 </body>
 </html>

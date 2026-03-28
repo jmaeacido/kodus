@@ -182,6 +182,17 @@ if ($calendarUsersResult instanceof mysqli_result) {
     .icon-btn:focus {
       box-shadow: none;
     }
+    .calendar-modal-close {
+      color: inherit;
+      opacity: 0.78;
+      text-shadow: none;
+      transition: opacity 0.15s ease-in-out;
+    }
+    .calendar-modal-close:hover,
+    .calendar-modal-close:focus {
+      color: inherit;
+      opacity: 1;
+    }
     .modal-dialog {
       max-height: 90vh; /* Limit modal height */
       display: flex;
@@ -358,7 +369,7 @@ if ($calendarUsersResult instanceof mysqli_result) {
             <button type="button" id="viewDeleteBtn" class="btn p-0 text-secondary ml-3 icon-btn" title="Delete">
               <i class="fas fa-trash"></i>
             </button>
-            <button type="button" class="close ml-2" data-bs-dismiss="modal" aria-label="Close">
+            <button type="button" class="close text-reset ml-2 calendar-modal-close" data-bs-dismiss="modal" aria-label="Close">
               <span aria-hidden="true">&times;</span>
             </button>
           </div>
@@ -381,7 +392,7 @@ if ($calendarUsersResult instanceof mysqli_result) {
       <form id="eventForm" class="modal-content">
         <div class="modal-header">
           <h5 class="modal-title">Event</h5>
-          <button type="button" class="close" data-bs-dismiss="modal" aria-label="Close">
+          <button type="button" class="close text-reset calendar-modal-close" data-bs-dismiss="modal" aria-label="Close">
             <span aria-hidden="true">&times;</span>
           </button>
         </div>

@@ -22,17 +22,91 @@ $currentVersion = (string) ($meta['version'] ?? '0.0.0');
 $releasedOn = (string) ($meta['released_on'] ?? date('Y-m-d'));
 $today = date('Y-m-d');
 
-$allowedExtensions = ['php', 'js', 'css', 'scss', 'json', 'sql', 'md'];
+$allowedExtensions = ['php', 'json', 'sql', 'md'];
+$trackedDirectories = [
+    'admin/',
+    'artifacts/',
+    'crossmatch/',
+    'deduplication/',
+    'docs/',
+    'implementation-status/',
+    'inbox/',
+    'pages/',
+    'scripts/',
+    'sql/',
+];
+$trackedRootFiles = [
+    '.env.example',
+    '.htaccess',
+    'README.md',
+    'ajax_login.php',
+    'app_meta.php',
+    'audit_helpers.php',
+    'auth_helpers.php',
+    'base_url.php',
+    'composer.json',
+    'config.php',
+    'contact.php',
+    'delete_account.php',
+    'disable_2fa.php',
+    'env_helpers.php',
+    'export_excel.php',
+    'export_style_helpers.php',
+    'forgot-password.php',
+    'get_data.php',
+    'header.php',
+    'home.php',
+    'index.php',
+    'live_refresh.php',
+    'login.php',
+    'logout.php',
+    'mail_config.php',
+    'notification_helpers.php',
+    'page_loader.php',
+    'payout.php',
+    'project_targets_helpers.php',
+    'recover-password.php',
+    'register.php',
+    'remove_photo.php',
+    'reset-password.php',
+    'restore_user.php',
+    'restore_users.php',
+    'role-change-status.php',
+    'role_change_helpers.php',
+    'save_profile_settings.php',
+    'save_theme_preference.php',
+    'security.php',
+    'select_year.php',
+    'send-reset-link.php',
+    'send_2fa_code.php',
+    'send_contact.php',
+    'send_login_notification.php',
+    'settings.php',
+    'sidenav.php',
+    'theme_helpers.php',
+    'update-password.php',
+    'verify-2fa.php',
+    'verify_2fa_code.php',
+];
 $ignoredPrefixes = [
-    'vendor/',
-    'storage/',
-    'scratch/',
+    '.git/',
     '.tmp.driveupload/',
+    'cdn.',
+    'dist/',
+    'fonts.',
     'Knowledge Management/',
+    'plugins/',
+    'scratch/',
+    'storage/',
+    'vendor/',
 ];
 $ignoredFiles = [
     'composer.lock',
     'package-lock.json',
+    'composer-setup.php',
+    'composer.phar',
+    'info.php',
+    'phpinfo.php',
 ];
 
 function normalize_git_path(string $path): string
@@ -40,7 +114,14 @@ function normalize_git_path(string $path): string
     return str_replace('\\', '/', trim($path));
 }
 
-function is_relevant_change(string $path, array $allowedExtensions, array $ignoredPrefixes, array $ignoredFiles): bool
+function is_relevant_change(
+    string $path,
+    array $allowedExtensions,
+    array $trackedDirectories,
+    array $trackedRootFiles,
+    array $ignoredPrefixes,
+    array $ignoredFiles
+): bool
 {
     if ($path === '') {
         return false;
@@ -63,7 +144,17 @@ function is_relevant_change(string $path, array $allowedExtensions, array $ignor
         return false;
     }
 
-    return true;
+    if (in_array($normalized, $trackedRootFiles, true)) {
+        return true;
+    }
+
+    foreach ($trackedDirectories as $directory) {
+        if (stripos($normalized, $directory) === 0) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 function collect_lines(array $command, string $cwd): array
@@ -131,8 +222,14 @@ try {
     exit(1);
 }
 
-$relevantChanges = array_values(array_filter(array_keys($changedPaths), static function (string $path) use ($allowedExtensions, $ignoredPrefixes, $ignoredFiles): bool {
-    return is_relevant_change($path, $allowedExtensions, $ignoredPrefixes, $ignoredFiles);
+$relevantChanges = array_values(array_filter(array_keys($changedPaths), static function (string $path) use (
+    $allowedExtensions,
+    $trackedDirectories,
+    $trackedRootFiles,
+    $ignoredPrefixes,
+    $ignoredFiles
+): bool {
+    return is_relevant_change($path, $allowedExtensions, $trackedDirectories, $trackedRootFiles, $ignoredPrefixes, $ignoredFiles);
 }));
 
 $relevantChanges = array_values(array_unique($relevantChanges));

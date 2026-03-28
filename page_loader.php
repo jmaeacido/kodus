@@ -543,9 +543,105 @@ if (isset($themePreference) && is_string($themePreference) && $themePreference !
 
       if (!swalHookInstalled && window.Swal && typeof window.Swal.fire === 'function') {
         var originalFire = window.Swal.fire.bind(window.Swal);
+        function normalizeSwalArguments(argsLike) {
+          var args = Array.prototype.slice.call(argsLike);
+
+          if (args.length === 0) {
+            return [{}];
+          }
+
+          if (typeof args[0] === 'object' && args[0] !== null && !Array.isArray(args[0])) {
+            return [Object.assign({}, args[0])];
+          }
+
+          return [{
+            title: args[0],
+            html: args.length > 1 ? args[1] : undefined,
+            icon: args.length > 2 ? args[2] : undefined
+          }];
+        }
+
+        function isEditActionConfig(config) {
+          return typeof config.confirmButtonText === 'string' && config.confirmButtonText.indexOf('fa-pen') !== -1;
+        }
+
+        function isIconOnlyCloseCancel(config) {
+          return typeof config.cancelButtonText === 'string' && config.cancelButtonText.indexOf('fa-times') !== -1;
+        }
+
+        function syncSwalActionsVisibility() {
+          var actions = window.Swal.getActions && window.Swal.getActions();
+          if (!actions) {
+            return;
+          }
+
+          var visibleButtons = Array.prototype.filter.call(actions.children, function (child) {
+            return child instanceof HTMLElement && child.style.display !== 'none';
+          });
+
+          actions.style.display = visibleButtons.length > 0 ? '' : 'none';
+        }
+
+        function enhanceSwalChrome(config, popup) {
+          if (!popup || config.toast || !isEditActionConfig(config)) {
+            return;
+          }
+
+          var closeButton = window.Swal.getCloseButton && window.Swal.getCloseButton();
+          var confirmButton = window.Swal.getConfirmButton && window.Swal.getConfirmButton();
+          if (!closeButton || !confirmButton) {
+            return;
+          }
+
+          popup.classList.add('kodus-swal-has-top-actions');
+
+          var topActions = popup.querySelector('.kodus-swal-top-actions');
+          if (!topActions) {
+            topActions = document.createElement('div');
+            topActions.className = 'kodus-swal-top-actions';
+            popup.insertBefore(topActions, popup.firstChild);
+          }
+
+          confirmButton.classList.add('kodus-swal-top-action-button');
+          closeButton.classList.add('kodus-swal-top-action-button');
+
+          topActions.appendChild(confirmButton);
+          topActions.appendChild(closeButton);
+
+          if (isIconOnlyCloseCancel(config)) {
+            var cancelButton = window.Swal.getCancelButton && window.Swal.getCancelButton();
+            if (cancelButton) {
+              cancelButton.style.display = 'none';
+            }
+          }
+
+          syncSwalActionsVisibility();
+        }
+
         window.Swal.fire = function () {
+          var normalizedArgs = normalizeSwalArguments(arguments);
+          var config = normalizedArgs[0] || {};
+          var originalDidOpen = config.didOpen;
+
           hideModalLoader();
-          return originalFire.apply(window.Swal, arguments);
+
+          if (typeof config.showCloseButton === 'undefined' && !config.toast) {
+            config.showCloseButton = true;
+          }
+
+          if (typeof config.closeButtonAriaLabel === 'undefined') {
+            config.closeButtonAriaLabel = 'Close';
+          }
+
+          config.didOpen = function (popup) {
+            enhanceSwalChrome(config, popup);
+
+            if (typeof originalDidOpen === 'function') {
+              originalDidOpen(popup);
+            }
+          };
+
+          return originalFire.apply(window.Swal, normalizedArgs);
         };
         swalHookInstalled = true;
       }

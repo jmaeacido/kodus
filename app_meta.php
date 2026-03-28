@@ -3,9 +3,9 @@
 function app_meta(): array
 {
     return [
-        'version' => '1.8.1',
+        'version' => '1.8.2',
         'codename' => 'Control Center',
-        'released_on' => '2026-03-25',
+        'released_on' => '2026-03-28',
     ];
 }
 

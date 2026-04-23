@@ -1,0 +1,674 @@
+{
+  "1": {
+    "Test Status": "Passed",
+    "Remarks": "Year selection proceeded to login flow.",
+    "Developer Comments": "",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Fixed",
+    "Resolved By": "N/A"
+  },
+  "2": {
+    "Test Status": "Passed",
+    "Remarks": "Valid user login reached workspace.",
+    "Developer Comments": "",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Fixed",
+    "Resolved By": "N/A"
+  },
+  "3": {
+    "Test Status": "Passed",
+    "Remarks": "Invalid login was rejected.",
+    "Developer Comments": "",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Fixed",
+    "Resolved By": "N/A"
+  },
+  "4": {
+    "Test Status": "Passed",
+    "Remarks": "Public registration created the account.",
+    "Developer Comments": "",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Fixed",
+    "Resolved By": "N/A"
+  },
+  "5": {
+    "Test Status": "Passed",
+    "Remarks": "Duplicate registration was blocked.",
+    "Developer Comments": "",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Fixed",
+    "Resolved By": "N/A"
+  },
+  "6": {
+    "Test Status": "Passed",
+    "Remarks": "Password reset token worked and new password signed in.",
+    "Developer Comments": "",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Fixed",
+    "Resolved By": "N/A"
+  },
+  "7": {
+    "Test Status": "Failed",
+    "Remarks": "Session remained active after logout.",
+    "Developer Comments": "",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Pending",
+    "Resolved By": "N/A"
+  },
+  "8": {
+    "Test Status": "Passed",
+    "Remarks": "Legacy ajax_login endpoint is disabled.",
+    "Developer Comments": "",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Fixed",
+    "Resolved By": "N/A"
+  },
+  "9": {
+    "Test Status": "Passed",
+    "Remarks": "Dashboard loaded for all authenticated roles.",
+    "Developer Comments": "",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Fixed",
+    "Resolved By": "N/A"
+  },
+  "10": {
+    "Test Status": "Passed",
+    "Remarks": "Profile update saved valid changes.",
+    "Developer Comments": "",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Fixed",
+    "Resolved By": "N/A"
+  },
+  "11": {
+    "Test Status": "Passed",
+    "Remarks": "Invalid settings update was rejected.",
+    "Developer Comments": "",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Fixed",
+    "Resolved By": "N/A"
+  },
+  "12": {
+    "Test Status": "Passed",
+    "Remarks": "Weak replacement password was blocked.",
+    "Developer Comments": "",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Fixed",
+    "Resolved By": "N/A"
+  },
+  "13": {
+    "Test Status": "Passed",
+    "Remarks": "2FA setup began successfully.",
+    "Developer Comments": "",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Fixed",
+    "Resolved By": "N/A"
+  },
+  "14": {
+    "Test Status": "Passed",
+    "Remarks": "Invalid 2FA setup code was rejected.",
+    "Developer Comments": "",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Fixed",
+    "Resolved By": "N/A"
+  },
+  "15": {
+    "Test Status": "Passed",
+    "Remarks": "Valid 2FA setup enabled the authenticator.",
+    "Developer Comments": "",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Fixed",
+    "Resolved By": "N/A"
+  },
+  "16": {
+    "Test Status": "Failed",
+    "Remarks": "2FA disable did not clear the account state.",
+    "Developer Comments": "",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Pending",
+    "Resolved By": "N/A"
+  },
+  "17": {
+    "Test Status": "Passed",
+    "Remarks": "Non-admin self-delete soft-deleted the account.",
+    "Developer Comments": "",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Fixed",
+    "Resolved By": "N/A"
+  },
+  "18": {
+    "Test Status": "Passed",
+    "Remarks": "Admin self-delete was denied.",
+    "Developer Comments": "",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Fixed",
+    "Resolved By": "N/A"
+  },
+  "19": {
+    "Test Status": "Passed",
+    "Remarks": "Notification history page loaded.",
+    "Developer Comments": "",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Fixed",
+    "Resolved By": "N/A"
+  },
+  "20": {
+    "Test Status": "Failed",
+    "Remarks": "Notification mark-read did not create the read state.",
+    "Developer Comments": "",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Pending",
+    "Resolved By": "N/A"
+  },
+  "21": {
+    "Test Status": "Passed",
+    "Remarks": "Non-admin compose saved the message.",
+    "Developer Comments": "",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Fixed",
+    "Resolved By": "N/A"
+  },
+  "22": {
+    "Test Status": "Passed",
+    "Remarks": "Admin compose saved the message and recipients.",
+    "Developer Comments": "",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Fixed",
+    "Resolved By": "N/A"
+  },
+  "23": {
+    "Test Status": "Passed",
+    "Remarks": "Contact validation rejected empty subject/content.",
+    "Developer Comments": "",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Fixed",
+    "Resolved By": "N/A"
+  },
+  "24": {
+    "Test Status": "Failed",
+    "Remarks": "Non-admin inbox showed inaccessible threads.",
+    "Developer Comments": "",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Pending",
+    "Resolved By": "N/A"
+  },
+  "25": {
+    "Test Status": "Failed",
+    "Remarks": "Admin inbox did not show the expected threads.",
+    "Developer Comments": "",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Pending",
+    "Resolved By": "N/A"
+  },
+  "26": {
+    "Test Status": "Passed",
+    "Remarks": "Accessible thread reply was saved.",
+    "Developer Comments": "",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Fixed",
+    "Resolved By": "N/A"
+  },
+  "27": {
+    "Test Status": "Passed",
+    "Remarks": "Unauthorized reply attempt was blocked.",
+    "Developer Comments": "",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Fixed",
+    "Resolved By": "N/A"
+  },
+  "28": {
+    "Test Status": "Passed",
+    "Remarks": "Reply edit succeeded for the sender.",
+    "Developer Comments": "",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Fixed",
+    "Resolved By": "N/A"
+  },
+  "29": {
+    "Test Status": "Passed",
+    "Remarks": "Reply delete-for-everyone worked.",
+    "Developer Comments": "",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Fixed",
+    "Resolved By": "N/A"
+  },
+  "30": {
+    "Test Status": "Passed",
+    "Remarks": "Calendar page loaded.",
+    "Developer Comments": "",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Fixed",
+    "Resolved By": "N/A"
+  },
+  "31": {
+    "Test Status": "Passed",
+    "Remarks": "Calendar event creation succeeded.",
+    "Developer Comments": "",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Fixed",
+    "Resolved By": "N/A"
+  },
+  "32": {
+    "Test Status": "Passed",
+    "Remarks": "Non-owner calendar update was blocked.",
+    "Developer Comments": "",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Fixed",
+    "Resolved By": "N/A"
+  },
+  "33": {
+    "Test Status": "Failed",
+    "Remarks": "Admin override could not update another user's event.",
+    "Developer Comments": "",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Pending",
+    "Resolved By": "N/A"
+  },
+  "34": {
+    "Test Status": "Passed",
+    "Remarks": "Calendar delete respected ownership and admin override.",
+    "Developer Comments": "",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Fixed",
+    "Resolved By": "N/A"
+  },
+  "35": {
+    "Test Status": "Passed",
+    "Remarks": "User role was blocked from operations pages.",
+    "Developer Comments": "",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Fixed",
+    "Resolved By": "N/A"
+  },
+  "36": {
+    "Test Status": "Passed",
+    "Remarks": "Incoming view access matched role restrictions.",
+    "Developer Comments": "",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Fixed",
+    "Resolved By": "N/A"
+  },
+  "37": {
+    "Test Status": "Passed",
+    "Remarks": "Incoming tracking created a document.",
+    "Developer Comments": "",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Fixed",
+    "Resolved By": "N/A"
+  },
+  "38": {
+    "Test Status": "Passed",
+    "Remarks": "Incoming validation rejected missing required fields.",
+    "Developer Comments": "",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Fixed",
+    "Resolved By": "N/A"
+  },
+  "39": {
+    "Test Status": "Passed",
+    "Remarks": "Incoming update saved the changes.",
+    "Developer Comments": "",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Fixed",
+    "Resolved By": "N/A"
+  },
+  "40": {
+    "Test Status": "Passed",
+    "Remarks": "Forward incoming document created the outgoing record and updated status.",
+    "Developer Comments": "",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Fixed",
+    "Resolved By": "N/A"
+  },
+  "41": {
+    "Test Status": "Passed",
+    "Remarks": "Outgoing view access matched role restrictions.",
+    "Developer Comments": "",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Fixed",
+    "Resolved By": "N/A"
+  },
+  "42": {
+    "Test Status": "Passed",
+    "Remarks": "Outgoing tracking created a document.",
+    "Developer Comments": "",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Fixed",
+    "Resolved By": "N/A"
+  },
+  "43": {
+    "Test Status": "Passed",
+    "Remarks": "Outgoing validation rejected missing required fields.",
+    "Developer Comments": "",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Fixed",
+    "Resolved By": "N/A"
+  },
+  "44": {
+    "Test Status": "Passed",
+    "Remarks": "Outgoing update saved the changes.",
+    "Developer Comments": "",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Fixed",
+    "Resolved By": "N/A"
+  },
+  "45": {
+    "Test Status": "Passed",
+    "Remarks": "MEB view access matched role restrictions.",
+    "Developer Comments": "",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Fixed",
+    "Resolved By": "N/A"
+  },
+  "46": {
+    "Test Status": "Passed",
+    "Remarks": "MEB export endpoint responded for admin.",
+    "Developer Comments": "",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Fixed",
+    "Resolved By": "N/A"
+  },
+  "47": {
+    "Test Status": "Passed",
+    "Remarks": "Admin bulk delete removed the MEB row.",
+    "Developer Comments": "",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Fixed",
+    "Resolved By": "N/A"
+  },
+  "48": {
+    "Test Status": "Passed",
+    "Remarks": "Non-admin bulk delete was blocked.",
+    "Developer Comments": "",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Fixed",
+    "Resolved By": "N/A"
+  },
+  "49": {
+    "Test Status": "Failed",
+    "Remarks": "Admin validation update did not persist.",
+    "Developer Comments": "",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Pending",
+    "Resolved By": "N/A"
+  },
+  "50": {
+    "Test Status": "Failed",
+    "Remarks": "Non-admin validation workflow was not fully blocked.",
+    "Developer Comments": "",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Pending",
+    "Resolved By": "N/A"
+  },
+  "51": {
+    "Test Status": "Failed",
+    "Remarks": "Payout page access did not match role restrictions.",
+    "Developer Comments": "",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Pending",
+    "Resolved By": "N/A"
+  },
+  "52": {
+    "Test Status": "Passed",
+    "Remarks": "Authorized payout update succeeded.",
+    "Developer Comments": "",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Fixed",
+    "Resolved By": "N/A"
+  },
+  "53": {
+    "Test Status": "Passed",
+    "Remarks": "Unauthorized payout updates were denied.",
+    "Developer Comments": "",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Fixed",
+    "Resolved By": "N/A"
+  },
+  "54": {
+    "Test Status": "Passed",
+    "Remarks": "Payout export endpoint responded for an allowed role.",
+    "Developer Comments": "",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Fixed",
+    "Resolved By": "N/A"
+  },
+  "55": {
+    "Test Status": "Passed",
+    "Remarks": "Fund monitoring page access matched role restrictions.",
+    "Developer Comments": "",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Fixed",
+    "Resolved By": "N/A"
+  },
+  "56": {
+    "Test Status": "Passed",
+    "Remarks": "Admin fund monitoring save actions succeeded.",
+    "Developer Comments": "",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Fixed",
+    "Resolved By": "N/A"
+  },
+  "57": {
+    "Test Status": "Passed",
+    "Remarks": "Non-admin fund monitoring save was blocked.",
+    "Developer Comments": "",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Fixed",
+    "Resolved By": "N/A"
+  },
+  "58": {
+    "Test Status": "Failed",
+    "Remarks": "Baseline Targets view/manage split did not match implemented access.",
+    "Developer Comments": "",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Pending",
+    "Resolved By": "N/A"
+  },
+  "59": {
+    "Test Status": "Passed",
+    "Remarks": "Baseline target import saved the Excel row.",
+    "Developer Comments": "",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Fixed",
+    "Resolved By": "N/A"
+  },
+  "60": {
+    "Test Status": "Passed",
+    "Remarks": "Baseline target import validation was exercised with an invalid file type.",
+    "Developer Comments": "",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Fixed",
+    "Resolved By": "N/A"
+  },
+  "61": {
+    "Test Status": "Passed",
+    "Remarks": "Baseline target save succeeded.",
+    "Developer Comments": "",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Fixed",
+    "Resolved By": "N/A"
+  },
+  "62": {
+    "Test Status": "Passed",
+    "Remarks": "Baseline target delete succeeded.",
+    "Developer Comments": "",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Fixed",
+    "Resolved By": "N/A"
+  },
+  "63": {
+    "Test Status": "Passed",
+    "Remarks": "AA and User were blocked from target management endpoints.",
+    "Developer Comments": "",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Fixed",
+    "Resolved By": "N/A"
+  },
+  "64": {
+    "Test Status": "Failed",
+    "Remarks": "Program Activities page access did not match role restrictions.",
+    "Developer Comments": "",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Pending",
+    "Resolved By": "N/A"
+  },
+  "65": {
+    "Test Status": "Passed",
+    "Remarks": "Program Activities save succeeded.",
+    "Developer Comments": "",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Fixed",
+    "Resolved By": "N/A"
+  },
+  "66": {
+    "Test Status": "Passed",
+    "Remarks": "AA and User were blocked from Program Activities saves.",
+    "Developer Comments": "",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Fixed",
+    "Resolved By": "N/A"
+  },
+  "67": {
+    "Test Status": "Passed",
+    "Remarks": "project-location-maps page was exercised successfully.",
+    "Developer Comments": "",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Fixed",
+    "Resolved By": "N/A"
+  },
+  "68": {
+    "Test Status": "Passed",
+    "Remarks": "project-location-records page was exercised successfully.",
+    "Developer Comments": "",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Fixed",
+    "Resolved By": "N/A"
+  },
+  "69": {
+    "Test Status": "Passed",
+    "Remarks": "lawa-summary page was exercised successfully.",
+    "Developer Comments": "",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Fixed",
+    "Resolved By": "N/A"
+  },
+  "70": {
+    "Test Status": "Passed",
+    "Remarks": "binhi-summary page was exercised successfully.",
+    "Developer Comments": "",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Fixed",
+    "Resolved By": "N/A"
+  },
+  "71": {
+    "Test Status": "Passed",
+    "Remarks": "Sectoral summary page and export endpoint responded.",
+    "Developer Comments": "",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Fixed",
+    "Resolved By": "N/A"
+  },
+  "72": {
+    "Test Status": "Passed",
+    "Remarks": "Partner-Beneficiaries profile page loaded for an allowed role.",
+    "Developer Comments": "",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Fixed",
+    "Resolved By": "N/A"
+  },
+  "73": {
+    "Test Status": "Failed",
+    "Remarks": "PWD summary route could not be exercised.",
+    "Developer Comments": "",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Pending",
+    "Resolved By": "N/A"
+  },
+  "74": {
+    "Test Status": "Passed",
+    "Remarks": "crossmatch/index.php loaded successfully.",
+    "Developer Comments": "",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Fixed",
+    "Resolved By": "N/A"
+  },
+  "75": {
+    "Test Status": "Passed",
+    "Remarks": "deduplication/index.php loaded successfully.",
+    "Developer Comments": "",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Fixed",
+    "Resolved By": "N/A"
+  },
+  "76": {
+    "Test Status": "Passed",
+    "Remarks": "mebis-consolidator/ loaded successfully.",
+    "Developer Comments": "",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Fixed",
+    "Resolved By": "N/A"
+  },
+  "77": {
+    "Test Status": "Passed",
+    "Remarks": "mebis-lgu-template/ loaded successfully.",
+    "Developer Comments": "",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Fixed",
+    "Resolved By": "N/A"
+  },
+  "78": {
+    "Test Status": "Passed",
+    "Remarks": "Admin users management and role change succeeded.",
+    "Developer Comments": "",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Fixed",
+    "Resolved By": "N/A"
+  },
+  "79": {
+    "Test Status": "Passed",
+    "Remarks": "Non-admin users management access was blocked.",
+    "Developer Comments": "",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Fixed",
+    "Resolved By": "N/A"
+  },
+  "80": {
+    "Test Status": "Passed",
+    "Remarks": "Admin deactivate and restore user flow succeeded.",
+    "Developer Comments": "",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Fixed",
+    "Resolved By": "N/A"
+  },
+  "81": {
+    "Test Status": "Passed",
+    "Remarks": "Password security action allowed admin and denied non-admin.",
+    "Developer Comments": "",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Fixed",
+    "Resolved By": "N/A"
+  },
+  "82": {
+    "Test Status": "Passed",
+    "Remarks": "Project variable save succeeded for an allowed role.",
+    "Developer Comments": "",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Fixed",
+    "Resolved By": "N/A"
+  },
+  "83": {
+    "Test Status": "Passed",
+    "Remarks": "AA and User were blocked from Project Variables management.",
+    "Developer Comments": "",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Fixed",
+    "Resolved By": "N/A"
+  },
+  "84": {
+    "Test Status": "Passed",
+    "Remarks": "Maintenance settings save worked for admin and page access was denied to non-admin.",
+    "Developer Comments": "",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Fixed",
+    "Resolved By": "N/A"
+  }
+}

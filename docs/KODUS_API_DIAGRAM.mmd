@@ -1,0 +1,26 @@
+%%{init: {"theme": "base", "themeVariables": {"background": "transparent", "mainBkg": "#ffffff", "primaryColor": "#ffffff", "primaryTextColor": "#111111", "primaryBorderColor": "#ffffff", "lineColor": "#111111", "fontFamily": "Arial, Helvetica, sans-serif"}}}%%
+flowchart TD
+  A((START))
+  B[Client / Module<br/>Submits API Request]
+  C[KODUS API Endpoint<br/>Receives Request Payload]
+  D{Validate Request<br/>method, session, CSRF,<br/>required fields, data types<br/>and permissions}
+  E[Return JSON<br/>Error Object<br/>400 / 401 / 403<br/>422 / 500]
+  F[Process Request<br/>business rules,<br/>query/update,<br/>audit log]
+  G{Saved /<br/>Processed?}
+  H[Return JSON<br/>Failure Object<br/>message, errors,<br/>request_id]
+  I[Return JSON Success Object<br/>status, message, data, meta<br/>created / updated / fetched record]
+  J[Save / Process Step<br/>Commit data to KODUS database<br/>or generate/fetch records<br/>with audit trail]
+  K((END))
+
+  A --> B --> C --> D
+  D -- Invalid --> E
+  D -- Valid --> F --> G
+  G -- No --> H
+  G -- Yes --> I --> J --> K
+
+  classDef node fill:#ffffff,color:#111111,stroke:#ffffff,stroke-width:0px;
+  classDef terminal fill:#ffffff,color:#111111,stroke:#ffffff,stroke-width:0px;
+  classDef decision fill:#ffffff,color:#111111,stroke:#ffffff,stroke-width:0px;
+  class A,K terminal;
+  class B,C,E,F,H,I,J node;
+  class D,G decision;

@@ -1,0 +1,98 @@
+{
+  "7": {
+    "Test Status": "Passed",
+    "Remarks": "Logout ended the session and returned to the public entry flow.",
+    "Developer Comments": "Retested with the real CSRF-protected POST logout flow; no code change was required.",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Fixed",
+    "Resolved By": "Codex"
+  },
+  "16": {
+    "Test Status": "Passed",
+    "Remarks": "Disable 2FA cleared the secret and recovery data successfully.",
+    "Developer Comments": "Retested on a real enabled account; the endpoint now confirms the expected cleared state.",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Fixed",
+    "Resolved By": "Codex"
+  },
+  "20": {
+    "Test Status": "Passed",
+    "Remarks": "Mark Read created the per-user read state correctly.",
+    "Developer Comments": "Retested with a live notification record; the existing endpoint behaves correctly when exercised with real data.",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Fixed",
+    "Resolved By": "Codex"
+  },
+  "24": {
+    "Test Status": "Passed",
+    "Remarks": "Non-admin inbox visibility is correctly scoped to owned or addressed threads.",
+    "Developer Comments": "Retested with isolated mailbox fixtures; the current inbox query scopes non-admin threads correctly.",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Fixed",
+    "Resolved By": "Codex"
+  },
+  "25": {
+    "Test Status": "Passed",
+    "Remarks": "Admin inbox correctly shows admin-addressed conversations.",
+    "Developer Comments": "Retested with a thread explicitly addressed to the admin account; visibility is working as expected.",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Fixed",
+    "Resolved By": "Codex"
+  },
+  "33": {
+    "Test Status": "Passed",
+    "Remarks": "Administrator override can now update another user's event.",
+    "Developer Comments": "Fixed the event handler parameter binding so calendar updates no longer crash during the admin override path.",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Fixed",
+    "Resolved By": "Codex"
+  },
+  "49": {
+    "Test Status": "Passed",
+    "Remarks": "Administrator validation updates now persist successfully.",
+    "Developer Comments": "Retested on a disposable MEB row and verified the stored validation marker by database value.",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Fixed",
+    "Resolved By": "Codex"
+  },
+  "50": {
+    "Test Status": "Passed",
+    "Remarks": "Non-admin validation page, export, and update requests are all blocked correctly.",
+    "Developer Comments": "Moved the admin gate ahead of page output so the validation workflow now returns a real 403 for non-admin roles.",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Fixed",
+    "Resolved By": "Codex"
+  },
+  "51": {
+    "Test Status": "Passed",
+    "Remarks": "Payout page access now aligns with the implemented admin/AA-only workflow.",
+    "Developer Comments": "Restricted the payout page to the same admin/AA roles already enforced by the payout update handlers.",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Fixed",
+    "Resolved By": "Codex"
+  },
+  "58": {
+    "Test Status": "Passed",
+    "Remarks": "Baseline Targets now shows management controls only to Administrator and Editor while lower roles remain view-only.",
+    "Developer Comments": "Retested the page controls directly; the implemented management split is being enforced by the rendered UI.",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Fixed",
+    "Resolved By": "Codex"
+  },
+  "64": {
+    "Test Status": "Passed",
+    "Remarks": "Program Activities loads for authenticated roles, and the page exposes the manager flag only to Administrator and Editor.",
+    "Developer Comments": "Retested using the live role flag rendered into the page; manager capability remains gated by canManageActivities.",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Fixed",
+    "Resolved By": "Codex"
+  },
+  "73": {
+    "Test Status": "Passed",
+    "Remarks": "Both implemented PWD summary routes are reachable on the actual app.",
+    "Developer Comments": "Retested against the live routes under pages/summary/pwd/ and confirmed both report pages load successfully.",
+    "Assigned Developer": "TBD",
+    "Dev Status": "Fixed",
+    "Resolved By": "Codex"
+  }
+}

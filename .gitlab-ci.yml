@@ -1,0 +1,29 @@
+image: php:8.2-cli
+
+stages:
+  - validate
+
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH
+
+validate:repository:
+  stage: validate
+  script:
+    - php -v
+    - test -f README.md
+    - test -f .gitignore
+    - test -f .env.example
+    - php -r "json_decode(file_get_contents('composer.json')); if (json_last_error() !== JSON_ERROR_NONE) { fwrite(STDERR, 'Invalid composer.json'.PHP_EOL); exit(1); }"
+    - |
+      git ls-files '*.php' ':!:vendor/*' > .php-files
+      test -s .php-files
+      while IFS= read -r file; do
+        php -l "$file"
+      done < .php-files
+  artifacts:
+    when: always
+    expire_in: 1 day
+    paths:
+      - .php-files

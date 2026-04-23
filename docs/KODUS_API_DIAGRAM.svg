@@ -1,0 +1,98 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="1300" viewBox="0 0 1000 1300" role="img" aria-labelledby="title desc">
+  <title id="title">KODUS API Diagram</title>
+  <desc id="desc">KODUS API request, validation, success and error flow, returned data, and save or process step.</desc>
+  <defs>
+    <style>
+      .bg { fill: transparent; }
+      .shape { fill: #ffffff; stroke: #111111; stroke-width: 3; }
+      .line { fill: none; stroke: #111111; stroke-width: 3; stroke-linecap: square; stroke-linejoin: miter; }
+      .arrow { fill: #111111; }
+      .text { fill: #111111; font-family: Arial, Helvetica, sans-serif; font-size: 21px; text-anchor: middle; dominant-baseline: middle; }
+      .small { font-size: 18px; }
+      .title { font-size: 24px; font-weight: 700; }
+      .label { fill: #111111; font-family: Arial, Helvetica, sans-serif; font-size: 17px; text-anchor: middle; dominant-baseline: middle; }
+    </style>
+    <marker id="arrow" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L10,4 L0,8 Z" class="arrow"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1000" height="1300"/>
+
+  <circle class="shape" cx="450" cy="70" r="62"/>
+  <text class="text title" x="450" y="70">START</text>
+
+  <line class="line" x1="450" y1="132" x2="450" y2="205" marker-end="url(#arrow)"/>
+
+  <rect class="shape" x="302" y="205" width="296" height="100"/>
+  <text class="text" x="450" y="242">Client / Module</text>
+  <text class="text small" x="450" y="271">Submits API Request</text>
+
+  <line class="line" x1="450" y1="305" x2="450" y2="372" marker-end="url(#arrow)"/>
+
+  <rect class="shape" x="285" y="372" width="330" height="105"/>
+  <text class="text" x="450" y="410">KODUS API Endpoint</text>
+  <text class="text small" x="450" y="439">Receives Request Payload</text>
+
+  <line class="line" x1="450" y1="477" x2="450" y2="545" marker-end="url(#arrow)"/>
+
+  <polygon class="shape" points="450,545 570,665 450,785 330,665"/>
+  <text class="text" x="450" y="625">Validate Request</text>
+  <text class="text small" x="450" y="654">method, session, CSRF,</text>
+  <text class="text small" x="450" y="681">required fields, data types</text>
+  <text class="text small" x="450" y="708">and permissions</text>
+
+  <line class="line" x1="330" y1="665" x2="180" y2="665" marker-end="url(#arrow)"/>
+  <text class="label" x="253" y="640">Invalid</text>
+
+  <rect class="shape" x="15" y="595" width="165" height="140"/>
+  <text class="text small" x="97.5" y="631">Return JSON</text>
+  <text class="text small" x="97.5" y="656">Error Object</text>
+  <text class="text small" x="97.5" y="690">400 / 401 / 403</text>
+  <text class="text small" x="97.5" y="715">422 / 500</text>
+
+  <line class="line" x1="570" y1="665" x2="720" y2="665" marker-end="url(#arrow)"/>
+  <text class="label" x="647" y="640">Valid</text>
+
+  <rect class="shape" x="720" y="595" width="165" height="140"/>
+  <text class="text small" x="802.5" y="631">Process Request</text>
+  <text class="text small" x="802.5" y="660">business rules,</text>
+  <text class="text small" x="802.5" y="689">query/update,</text>
+  <text class="text small" x="802.5" y="718">audit log</text>
+
+  <line class="line" x1="802.5" y1="735" x2="802.5" y2="818" marker-end="url(#arrow)"/>
+
+  <polygon class="shape" points="802.5,818 878,893 802.5,968 727,893"/>
+  <text class="text small" x="802.5" y="876">Saved /</text>
+  <text class="text small" x="802.5" y="900">Processed?</text>
+
+  <line class="line" x1="727" y1="893" x2="615" y2="893" marker-end="url(#arrow)"/>
+  <text class="label" x="671" y="868">No</text>
+
+  <rect class="shape" x="450" y="820" width="165" height="146"/>
+  <text class="text small" x="532.5" y="854">Return JSON</text>
+  <text class="text small" x="532.5" y="879">Failure Object</text>
+  <text class="text small" x="532.5" y="913">message, errors,</text>
+  <text class="text small" x="532.5" y="938">request_id</text>
+
+  <line class="line" x1="802.5" y1="968" x2="802.5" y2="1039" marker-end="url(#arrow)"/>
+  <text class="label" x="829" y="1008">Yes</text>
+
+  <rect class="shape" x="625" y="1039" width="355" height="135"/>
+  <text class="text" x="802.5" y="1076">Return JSON Success Object</text>
+  <text class="text small" x="802.5" y="1108">status, message, data, meta</text>
+  <text class="text small" x="802.5" y="1138">created / updated / fetched record</text>
+
+  <polyline class="line" points="625,1107 450,1107 450,1032" marker-end="url(#arrow)"/>
+
+  <rect class="shape" x="265" y="952" width="370" height="160"/>
+  <text class="text" x="450" y="992">Save / Process Step</text>
+  <text class="text small" x="450" y="1025">Commit data to KODUS database</text>
+  <text class="text small" x="450" y="1054">or generate/fetch records</text>
+  <text class="text small" x="450" y="1083">with audit trail</text>
+
+  <line class="line" x1="450" y1="1112" x2="450" y2="1190" marker-end="url(#arrow)"/>
+
+  <circle class="shape" cx="450" cy="1235" r="50"/>
+  <text class="text title" x="450" y="1235">END</text>
+</svg>

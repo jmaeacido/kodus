@@ -1,0 +1,32 @@
+{
+  "admin": {
+    "id": 39,
+    "username": "zz_fix_admin",
+    "email": "zz_fix_admin@example.com",
+    "role": "admin"
+  },
+  "aa": {
+    "id": 40,
+    "username": "zz_fix_aa",
+    "email": "zz_fix_aa@example.com",
+    "role": "aa"
+  },
+  "editor": {
+    "id": 41,
+    "username": "zz_fix_editor",
+    "email": "zz_fix_editor@example.com",
+    "role": "editor"
+  },
+  "user": {
+    "id": 42,
+    "username": "zz_fix_user",
+    "email": "zz_fix_user@example.com",
+    "role": "user"
+  },
+  "target": {
+    "id": 43,
+    "username": "zz_fix_target",
+    "email": "zz_fix_target@example.com",
+    "role": "user"
+  }
+}

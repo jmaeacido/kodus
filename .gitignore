@@ -1,0 +1,82 @@
+.env
+!.env.example
+
+# Secrets and local keys
+*.pem
+*.ppk
+*.key
+*.crt
+*.csr
+
+# Database dumps and local backups
+*.sql
+*.sql.gz
+*.sql.zip
+*.bak
+*.old
+*.orig
+*.save
+
+# Logs and diagnostics
+*.log
+debug_log.txt
+phpinfo.php
+info.php
+__diag_password_policy.php
+__https_debug.php
+
+# Dependency and package manager artifacts
+composer.phar
+composer-setup.php
+node_modules/
+
+# OS, editor, and cache files
+.DS_Store
+Thumbs.db
+Desktop.ini
+.idea/
+.vscode/
+.cache/
+docs/__pycache__/
+scripts/__pycache__/
+*.pyc
+
+# Local working folders and generated artifacts
+.tmp-mermaid/
+.tmp.driveupload/
+.tmp.drivedownload/
+artifacts/
+scratch/
+screenshots/
+pandoc-main/
+storage/cache/
+
+# Runtime uploads, outputs, and generated workbooks
+crossmatch/uploads/
+crossmatch/progress/
+deduplication/uploads/
+deduplication/logs/
+deduplication/outputs/
+inbox/uploads/
+pages/uploads/
+mebis-consolidator/outputs/
+mebis-consolidator/helpers/*.lookup-cache.json
+mebis-lgu-template/outputs/
+implementation-status/helpers/*.generated.*
+
+# Local SQL workspace
+sql/
+
+# Source maps and packaged plugin archives
+dist/**/*.map
+plugins/**/*.map
+plugins/**/*.zip
+
+# Office and temporary working files
+~$*
+*.tmp
+Knowledge Management/
+Beneficiaries_Template.xlsx
+Caraga RRP-CFTW Tracker_CY2026 live file.xlsx
+LIBJO, PDI (ECT PAYROLL).xlsm
+Regional Program Implementation Plan.xlsx

@@ -1,0 +1,104 @@
+# Copy this file to:
+# /etc/nginx/sites-available/crg-kodus.conf
+#
+# Then enable it with:
+# ln -s /etc/nginx/sites-available/crg-kodus.conf /etc/nginx/sites-enabled/crg-kodus.conf
+#
+# This config expects:
+# - app code in /opt/apps/crg-kodus
+# - public URL at http://172.31.240.55/kodus/
+#
+# Let the PHP application emit the Content-Security-Policy header. Adding a
+# separate Nginx CSP here can block inline scripts that are still used by some
+# pages.
+server {
+    listen 80;
+    listen [::]:80;
+    server_name 172.31.240.55;
+
+    autoindex off;
+    client_max_body_size 25m;
+
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    add_header Permissions-Policy "camera=(), microphone=(), geolocation=(self)" always;
+
+    error_page 400 /kodus/400;
+    error_page 401 /kodus/401;
+    error_page 403 /kodus/403;
+    error_page 404 /kodus/404;
+    error_page 405 /kodus/405;
+    error_page 408 /kodus/408;
+    error_page 429 /kodus/429;
+    error_page 500 /kodus/500;
+    error_page 502 /kodus/502;
+    error_page 503 /kodus/503;
+    error_page 504 /kodus/504;
+
+    location = /kodus {
+        return 301 /kodus/;
+    }
+
+    # Keep explicit index.php out of browser-visible URLs.
+    location = /kodus/index.php {
+        return 301 /kodus/;
+    }
+
+    location ~ ^/kodus/\.(?!well-known) {
+        deny all;
+    }
+
+    location ~* ^/kodus/(?:composer\.(json|lock|phar)|composer-setup\.php|phpinfo\.php|info\.php|kodus_db\.sql|kodus-key_pair\.(pem|ppk)|debug_log\.txt|__diag_password_policy\.php|__https_debug\.php)$ {
+        deny all;
+    }
+
+    location ~* ^/kodus/.+\.(?:sql(?:\..*)?|bak|old|orig|save|log|ini|env|pem|ppk|key)$ {
+        deny all;
+    }
+
+    location ~* ^/kodus/(?:storage|artifacts|scratch|sql|screenshots|docs|\.git|\.tmp\.driveupload|deduplication/logs)/ {
+        deny all;
+    }
+
+    location ~* ^/kodus/(?:uploads|inbox/uploads|dist/img)/.*\.(?:php[0-9]?|phtml|phar|cgi|pl|exe|sh|bat|cmd)$ {
+        deny all;
+    }
+
+    location ~* ^/kodus/(?:crossmatch/uploads|deduplication/uploads|inbox/uploads|pages/uploads)/.*\.(?:php[0-9]?|phtml|phar|cgi|pl|exe|sh|bat|cmd|js|jsp|asp|aspx)$ {
+        deny all;
+    }
+
+    # Run browser-visible PHP entry points from the real app directory.
+    location ~ ^/kodus(?<script_path>/.*\.php)$ {
+        include snippets/fastcgi-php.conf;
+        fastcgi_param SCRIPT_FILENAME /opt/apps/crg-kodus$script_path;
+        fastcgi_param SCRIPT_NAME $script_path;
+        fastcgi_pass unix:/run/php/php8.4-fpm.sock;
+    }
+
+    # Serve static files and directories after stripping the /kodus prefix.
+    location /kodus/ {
+        rewrite ^/kodus(/.*)$ $1 break;
+        root /opt/apps/crg-kodus;
+        index index.php index.html;
+        try_files $uri $uri/ @kodus_extensionless;
+    }
+
+    # Resolve extensionless routes to real .php or .html files.
+    location @kodus_extensionless {
+        if (-f /opt/apps/crg-kodus$uri.php) {
+            rewrite ^ $uri.php last;
+        }
+
+        if (-f /opt/apps/crg-kodus$uri.html) {
+            rewrite ^ $uri.html last;
+        }
+
+        return 404;
+    }
+
+    location / {
+        return 404;
+    }
+}

@@ -1,0 +1,117 @@
+<?php
+require_once __DIR__ . '/../security.php';
+security_bootstrap_session();
+require_once __DIR__ . '/../auth_helpers.php';
+require_once __DIR__ . '/../socket_helpers.php';
+include('../config.php'); // Database connection
+
+header('Content-Type: application/json');
+
+auth_handle_page_access($conn);
+auth_apply_security_headers();
+security_enforce_same_origin();
+security_require_method(['POST']);
+security_require_csrf_token();
+
+// Check user session
+if(!isset($_SESSION['user_id'])){
+    echo json_encode(['success' => false, 'message' => 'Unauthorized']);
+    exit;
+}
+
+// Required POST fields
+$required = ['id','tracking_number','description','receiving_office','date_forwarded'];
+foreach($required as $field){
+    if(empty($_POST[$field])){
+        echo json_encode(['success' => false, 'message' => "Field $field is required"]);
+        exit;
+    }
+}
+
+// Sanitize inputs
+$id = intval($_POST['id']);
+$tracking_number = $_POST['tracking_number'];
+$description = $_POST['description'];
+$remarks = $_POST['remarks'] ?? '';
+$file_name = $_POST['file_name'] ?? '';
+$receiving_office = $_POST['receiving_office'];
+$date_forwarded = $_POST['date_forwarded'];
+
+// Get user info
+$user_id = $_SESSION['user_id'];
+$username = $_SESSION['username'] ?? 'unknown'; // username to log in outgoing.user_log
+
+// Check if incoming already forwarded
+$check = $conn->prepare("SELECT status FROM incoming WHERE id = ? LIMIT 1");
+$check->bind_param("i", $id);
+$check->execute();
+$row = db_stmt_fetch_one_assoc($check);
+
+if(!$row){
+    echo json_encode(['success' => false, 'message' => 'Document not found']);
+    exit;
+}
+if($row['status'] === 'Forwarded'){
+    echo json_encode(['success' => false, 'message' => 'Document already forwarded']);
+    exit;
+}
+
+// Begin transaction
+$conn->begin_transaction();
+
+try {
+    // Insert into outgoing including date_out and user_log
+    $stmt = $conn->prepare("INSERT INTO outgoing 
+        (tracking_number, description, remarks, file_name, receiving_office, date_forwarded, date_out, user_log)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+    $stmt->bind_param(
+        "ssssssss",
+        $tracking_number,
+        $description,
+        $remarks,
+        $file_name,
+        $receiving_office,
+        $date_forwarded,  // date_forwarded
+        $date_forwarded,  // date_out = same as date_forwarded
+        $username         // user_log
+    );
+    $stmt->execute();
+
+    // Update incoming status
+    $stmt2 = $conn->prepare("UPDATE incoming SET status='Forwarded' WHERE id=?");
+    $stmt2->bind_param("i", $id);
+    $stmt2->execute();
+
+    // Audit log
+    $action = "Forwarded incoming document";
+    $details = json_encode([
+        'tracking_number' => $tracking_number,
+        'receiving_office' => $receiving_office,
+        'remarks' => $remarks
+    ], JSON_UNESCAPED_UNICODE);
+    $ip_address = $_SERVER['REMOTE_ADDR'];
+    audit_log($conn, (int) $user_id, $action, $details, $ip_address);
+
+    $conn->commit();
+
+    kodus_socket_broadcast('kodus.incoming', 'incoming.changed', [
+        'action' => 'forwarded',
+        'incoming_id' => $id,
+        'tracking_number' => $tracking_number,
+        'actor_id' => (int) $user_id,
+    ]);
+    kodus_socket_broadcast('kodus.outgoing', 'outgoing.changed', [
+        'action' => 'created_from_forward',
+        'incoming_id' => $id,
+        'tracking_number' => $tracking_number,
+        'actor_id' => (int) $user_id,
+    ]);
+
+    echo json_encode(['success' => true, 'message' => 'Document forwarded successfully']);
+
+} catch(Exception $e) {
+    $conn->rollback();
+    echo json_encode(['success' => false, 'message' => 'Database error: '.$e->getMessage()]);
+}
+
+?>

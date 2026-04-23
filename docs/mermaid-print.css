@@ -1,0 +1,56 @@
+#my-svg,
+#my-svg svg {
+  font-family: Arial, Helvetica, sans-serif !important;
+  font-size: 15px !important;
+}
+
+#my-svg .entityBox,
+#my-svg .node rect,
+#my-svg .node circle,
+#my-svg .node ellipse,
+#my-svg .node polygon,
+#my-svg .outer-path path:first-child,
+#my-svg .row-rect-odd path:first-child,
+#my-svg .row-rect-even path:first-child {
+  fill: #ffffff !important;
+}
+
+#my-svg .row-rect-even path:first-child {
+  fill: #f2f2f2 !important;
+}
+
+#my-svg .entityBox,
+#my-svg .node rect,
+#my-svg .node circle,
+#my-svg .node ellipse,
+#my-svg .node polygon,
+#my-svg .outer-path path:last-child,
+#my-svg .row-rect-odd path:last-child,
+#my-svg .row-rect-even path:last-child,
+#my-svg .divider path:last-child,
+#my-svg .relationshipLine,
+#my-svg .marker,
+#my-svg .marker.cross {
+  stroke: #222222 !important;
+}
+
+#my-svg .label,
+#my-svg .nodeLabel,
+#my-svg .edgeLabel,
+#my-svg .edgeLabel .label,
+#my-svg .edgeLabel .label text,
+#my-svg .attribute-type,
+#my-svg .attribute-name,
+#my-svg .attribute-keys,
+#my-svg .attribute-comment {
+  color: #111111 !important;
+  fill: #111111 !important;
+}
+
+#my-svg .relationshipLabelBox,
+#my-svg .edgeLabel .label rect,
+#my-svg .labelBkg {
+  fill: #ffffff !important;
+  background-color: #ffffff !important;
+  opacity: 1 !important;
+}

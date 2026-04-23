@@ -1,0 +1,271 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1180" viewBox="0 0 1800 1180">
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#475569" />
+    </marker>
+    <style>
+      .title { font: 700 28px Arial, Helvetica, sans-serif; fill: #0f172a; }
+      .subtitle { font: 400 14px Arial, Helvetica, sans-serif; fill: #475569; }
+      .laneLabel { font: 700 15px Arial, Helvetica, sans-serif; fill: #0f172a; letter-spacing: .04em; }
+      .boxText { font: 600 14px Arial, Helvetica, sans-serif; fill: #172033; }
+      .smallText { font: 400 12px Arial, Helvetica, sans-serif; fill: #475569; }
+      .flowText { font: 700 12px Arial, Helvetica, sans-serif; fill: #334155; }
+      .laneA { fill: #f8fafc; }
+      .laneB { fill: #eef2f7; }
+      .laneBorder { stroke: #cbd5e1; stroke-width: 1; }
+      .process { fill: #ffffff; stroke: #2563eb; stroke-width: 1.5; rx: 6; }
+      .validation { fill: #eff6ff; stroke: #0284c7; stroke-width: 1.5; rx: 6; }
+      .decision { fill: #fff7ed; stroke: #f59e0b; stroke-width: 1.6; }
+      .approval { fill: #f0fdf4; stroke: #16a34a; stroke-width: 1.5; rx: 6; }
+      .exception { fill: #fef2f2; stroke: #dc2626; stroke-width: 1.5; rx: 6; }
+      .output { fill: #f8fafc; stroke: #64748b; stroke-width: 1.4; rx: 6; }
+      .terminal { fill: #0f172a; stroke: #0f172a; stroke-width: 1; }
+      .terminalText { font: 700 13px Arial, Helvetica, sans-serif; fill: #ffffff; }
+      .arrow { fill: none; stroke: #475569; stroke-width: 1.5; marker-end: url(#arrow); }
+      .arrowLite { fill: none; stroke: #94a3b8; stroke-width: 1.35; marker-end: url(#arrow); }
+    </style>
+  </defs>
+
+  <rect width="1800" height="1180" fill="#ffffff" />
+  <text x="80" y="48" class="title">KODUS BPRA Swimlane Flowchart</text>
+  <text x="80" y="72" class="subtitle">Business process, validation, approval, notification, reporting, administration, and maintenance workflow</text>
+
+  <g id="lanes">
+    <rect x="60" y="100" width="1680" height="120" class="laneA laneBorder" />
+    <rect x="60" y="220" width="1680" height="145" class="laneB laneBorder" />
+    <rect x="60" y="365" width="1680" height="145" class="laneA laneBorder" />
+    <rect x="60" y="510" width="1680" height="145" class="laneB laneBorder" />
+    <rect x="60" y="655" width="1680" height="145" class="laneA laneBorder" />
+    <rect x="60" y="800" width="1680" height="145" class="laneB laneBorder" />
+    <rect x="60" y="945" width="1680" height="145" class="laneA laneBorder" />
+
+    <rect x="60" y="100" width="190" height="990" fill="#e2e8f0" stroke="#cbd5e1" />
+    <text x="85" y="166" class="laneLabel">ACTORS</text>
+    <text x="85" y="295" class="laneLabel">LOGIN / ACCESS</text>
+    <text x="85" y="440" class="laneLabel">IMPLEMENTATION</text>
+    <text x="85" y="586" class="laneLabel">MEB</text>
+    <text x="85" y="732" class="laneLabel">REPORTS / NOTICES</text>
+    <text x="85" y="875" class="laneLabel">ADMIN</text>
+    <text x="85" y="1022" class="laneLabel">MAINTENANCE</text>
+  </g>
+
+  <g id="actors">
+    <circle cx="300" cy="160" r="24" class="terminal" />
+    <text x="285" y="165" class="terminalText">START</text>
+    <rect x="380" y="128" width="185" height="64" class="process" />
+    <text x="404" y="154" class="boxText">User / Staff / Admin</text>
+    <text x="425" y="174" class="boxText">opens KODUS</text>
+    <rect x="1110" y="128" width="190" height="64" class="process" />
+    <text x="1143" y="154" class="boxText">Select module</text>
+    <text x="1130" y="174" class="boxText">based on role</text>
+    <circle cx="1630" cy="160" r="24" class="terminal" />
+    <text x="1619" y="165" class="terminalText">END</text>
+  </g>
+
+  <g id="login">
+    <rect x="380" y="258" width="185" height="64" class="process" />
+    <text x="403" y="282" class="boxText">Submit credentials</text>
+    <text x="398" y="302" class="smallText">or SSO sign-in</text>
+
+    <polygon points="650,225 725,290 650,355 575,290" class="decision" />
+    <text x="609" y="286" class="boxText">Valid login</text>
+    <text x="624" y="306" class="boxText">request?</text>
+
+    <rect x="785" y="258" width="190" height="64" class="validation" />
+    <text x="812" y="276" class="boxText">Validate session,</text>
+    <text x="819" y="294" class="boxText">CSRF, role,</text>
+    <text x="811" y="312" class="boxText">2FA and policy</text>
+
+    <polygon points="1060,225 1135,290 1060,355 985,290" class="decision" />
+    <text x="1016" y="286" class="boxText">Maintenance</text>
+    <text x="1038" y="306" class="boxText">mode?</text>
+
+    <rect x="1195" y="258" width="180" height="64" class="approval" />
+    <text x="1226" y="282" class="boxText">Authorize</text>
+    <text x="1235" y="302" class="boxText">session</text>
+
+    <rect x="1510" y="258" width="155" height="64" class="exception" />
+    <text x="1538" y="282" class="boxText">Reject /</text>
+    <text x="1536" y="302" class="boxText">error page</text>
+  </g>
+
+  <g id="implementation">
+    <rect x="310" y="405" width="185" height="64" class="process" />
+    <text x="343" y="429" class="boxText">Select year</text>
+    <text x="325" y="449" class="smallText">and LGU location</text>
+
+    <rect x="560" y="405" width="185" height="64" class="process" />
+    <text x="584" y="429" class="boxText">Load targets,</text>
+    <text x="582" y="449" class="smallText">activities, locations</text>
+
+    <polygon points="840,372 915,437 840,502 765,437" class="decision" />
+    <text x="804" y="433" class="boxText">Valid and</text>
+    <text x="808" y="453" class="boxText">allowed?</text>
+
+    <rect x="990" y="405" width="210" height="64" class="process" />
+    <text x="1017" y="426" class="boxText">Save targets and</text>
+    <text x="1014" y="444" class="boxText">actual projects</text>
+    <text x="1020" y="462" class="smallText">coverage, status, GPS</text>
+
+    <rect x="1275" y="405" width="210" height="64" class="approval" />
+    <text x="1304" y="426" class="boxText">Authorized user</text>
+    <text x="1304" y="444" class="boxText">reviews status</text>
+    <text x="1306" y="462" class="smallText">pending / completed</text>
+  </g>
+
+  <g id="meb">
+    <rect x="310" y="550" width="185" height="64" class="process" />
+    <text x="334" y="574" class="boxText">Upload / update</text>
+    <text x="355" y="594" class="boxText">MEB data</text>
+
+    <polygon points="650,517 725,582 650,647 575,582" class="decision" />
+    <text x="612" y="578" class="boxText">Workbook</text>
+    <text x="619" y="598" class="boxText">valid?</text>
+
+    <rect x="800" y="550" width="205" height="64" class="process" />
+    <text x="823" y="574" class="boxText">Store batch and</text>
+    <text x="818" y="594" class="smallText">change history / payout</text>
+
+    <rect x="1080" y="550" width="190" height="64" class="approval" />
+    <text x="1110" y="574" class="boxText">Review edits</text>
+    <text x="1116" y="594" class="smallText">before acceptance</text>
+  </g>
+
+  <g id="reports">
+    <rect x="310" y="695" width="185" height="64" class="process" />
+    <text x="338" y="719" class="boxText">Choose report</text>
+    <text x="333" y="739" class="smallText">and fiscal year</text>
+
+    <polygon points="650,662 725,727 650,792 575,727" class="decision" />
+    <text x="611" y="724" class="boxText">Filters and</text>
+    <text x="616" y="744" class="boxText">data valid?</text>
+
+    <rect x="800" y="695" width="205" height="64" class="process" />
+    <text x="822" y="719" class="boxText">Generate summary,</text>
+    <text x="818" y="739" class="smallText">sectoral, PWD, payout</text>
+
+    <rect x="1080" y="695" width="190" height="64" class="output" />
+    <text x="1112" y="719" class="boxText">Export / view</text>
+    <text x="1118" y="739" class="smallText">Excel, PDF, dashboard</text>
+
+    <rect x="1390" y="695" width="190" height="64" class="process" />
+    <text x="1413" y="719" class="boxText">Notify recipient</text>
+    <text x="1411" y="739" class="smallText">feed, badge, mailbox</text>
+  </g>
+
+  <g id="admin">
+    <rect x="310" y="840" width="210" height="64" class="process" />
+    <text x="340" y="862" class="boxText">Manage users, roles,</text>
+    <text x="339" y="880" class="boxText">2FA, passwords and</text>
+    <text x="355" y="898" class="smallText">project variables</text>
+
+    <polygon points="650,807 725,872 650,937 575,872" class="decision" />
+    <text x="608" y="868" class="boxText">Admin policy</text>
+    <text x="622" y="888" class="boxText">passed?</text>
+
+    <rect x="800" y="840" width="215" height="64" class="approval" />
+    <text x="830" y="862" class="boxText">Apply change and</text>
+    <text x="842" y="880" class="boxText">record audit</text>
+    <text x="836" y="898" class="smallText">restore, deactivate, reset</text>
+  </g>
+
+  <g id="maintenance">
+    <rect x="310" y="985" width="210" height="64" class="process" />
+    <text x="336" y="1007" class="boxText">Configure message,</text>
+    <text x="343" y="1025" class="boxText">redirect, logging,</text>
+    <text x="371" y="1043" class="smallText">and bypass</text>
+
+    <polygon points="650,952 725,1017 650,1082 575,1017" class="decision" />
+    <text x="608" y="1014" class="boxText">Admin approval</text>
+    <text x="630" y="1034" class="boxText">given?</text>
+
+    <rect x="800" y="985" width="215" height="64" class="approval" />
+    <text x="835" y="1009" class="boxText">Publish controlled</text>
+    <text x="845" y="1029" class="boxText">503 / bypass state</text>
+  </g>
+
+  <g id="arrows">
+    <path d="M324 160 H380" class="arrow" />
+    <path d="M472 192 V258" class="arrow" />
+    <path d="M565 290 H575" class="arrow" />
+    <path d="M725 290 H785" class="arrow" />
+    <text x="735" y="280" class="flowText">Yes</text>
+    <path d="M650 225 C650 210,1510 205,1588 258" class="arrowLite" />
+    <text x="710" y="216" class="flowText">No</text>
+    <path d="M975 290 H985" class="arrow" />
+    <path d="M1135 290 H1195" class="arrow" />
+    <text x="1144" y="280" class="flowText">No / bypass</text>
+    <path d="M1060 225 C1130 200,1430 210,1560 258" class="arrowLite" />
+    <text x="1182" y="216" class="flowText">Public blocked</text>
+    <path d="M1375 290 C1415 290,1460 290,1510 290" class="arrowLite" />
+    <path d="M1285 258 C1285 220,1240 195,1205 192" class="arrow" />
+    <path d="M1110 160 H565" class="arrowLite" />
+    <path d="M1300 160 H1606" class="arrowLite" />
+
+    <path d="M1205 192 V405 H495" class="arrowLite" />
+    <text x="532" y="394" class="flowText">Implementation Status</text>
+    <path d="M495 437 H560" class="arrow" />
+    <path d="M745 437 H765" class="arrow" />
+    <path d="M915 437 H990" class="arrow" />
+    <text x="930" y="427" class="flowText">Yes</text>
+    <path d="M840 372 C950 320,1490 330,1565 322" class="arrowLite" />
+    <text x="920" y="351" class="flowText">No</text>
+    <path d="M1200 437 H1275" class="arrow" />
+    <path d="M1485 437 C1520 500,1485 630,1485 695" class="arrowLite" />
+
+    <path d="M1205 192 V550 H495" class="arrowLite" />
+    <text x="534" y="539" class="flowText">MEB</text>
+    <path d="M495 582 H575" class="arrow" />
+    <path d="M725 582 H800" class="arrow" />
+    <text x="739" y="572" class="flowText">Yes</text>
+    <path d="M650 517 C760 465,1470 470,1565 322" class="arrowLite" />
+    <text x="735" y="493" class="flowText">No</text>
+    <path d="M1005 582 H1080" class="arrow" />
+    <path d="M1175 614 V695" class="arrowLite" />
+
+    <path d="M1205 192 V695 H495" class="arrowLite" />
+    <text x="535" y="684" class="flowText">Reports</text>
+    <path d="M495 727 H575" class="arrow" />
+    <path d="M725 727 H800" class="arrow" />
+    <text x="739" y="717" class="flowText">Yes</text>
+    <path d="M650 662 C760 620,1460 610,1565 322" class="arrowLite" />
+    <text x="735" y="638" class="flowText">No</text>
+    <path d="M1005 727 H1080" class="arrow" />
+    <path d="M1270 727 H1390" class="arrow" />
+    <path d="M1580 727 C1610 690,1612 225,1630 184" class="arrowLite" />
+
+    <path d="M1205 192 V840 H520" class="arrowLite" />
+    <text x="535" y="829" class="flowText">Admin</text>
+    <path d="M520 872 H575" class="arrow" />
+    <path d="M725 872 H800" class="arrow" />
+    <text x="739" y="862" class="flowText">Approved</text>
+    <path d="M650 807 C790 760,1460 740,1565 322" class="arrowLite" />
+    <text x="735" y="786" class="flowText">Rejected</text>
+    <path d="M1015 872 C1185 872,1290 755,1390 727" class="arrowLite" />
+
+    <path d="M1205 192 V985 H520" class="arrowLite" />
+    <text x="535" y="974" class="flowText">Maintenance</text>
+    <path d="M520 1017 H575" class="arrow" />
+    <path d="M725 1017 H800" class="arrow" />
+    <text x="739" y="1007" class="flowText">Approved</text>
+    <path d="M650 952 C790 905,1480 835,1565 322" class="arrowLite" />
+    <text x="735" y="931" class="flowText">Rejected</text>
+    <path d="M1015 1017 C1200 1017,1280 770,1390 727" class="arrowLite" />
+  </g>
+
+  <g id="legend">
+    <rect x="80" y="1115" width="1640" height="42" fill="#ffffff" stroke="#cbd5e1" />
+    <rect x="105" y="1126" width="22" height="18" class="process" />
+    <text x="134" y="1140" class="smallText">Process</text>
+    <rect x="230" y="1126" width="22" height="18" class="validation" />
+    <text x="260" y="1140" class="smallText">Validation</text>
+    <polygon points="385,1125 400,1135 385,1145 370,1135" class="decision" />
+    <text x="413" y="1140" class="smallText">Decision</text>
+    <rect x="530" y="1126" width="22" height="18" class="approval" />
+    <text x="560" y="1140" class="smallText">Approval / authorized action</text>
+    <rect x="790" y="1126" width="22" height="18" class="exception" />
+    <text x="820" y="1140" class="smallText">Rejected / blocked / error</text>
+    <rect x="1045" y="1126" width="22" height="18" class="output" />
+    <text x="1075" y="1140" class="smallText">Output / report</text>
+  </g>
+</svg>

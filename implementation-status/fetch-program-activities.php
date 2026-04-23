@@ -1,0 +1,739 @@
+<?php
+require_once '../security.php';
+security_bootstrap_session();
+require_once '../auth_helpers.php';
+include('../config.php');
+require_once __DIR__ . '/activity_metadata.php';
+require_once '../project_targets_helpers.php';
+
+auth_handle_page_access($conn);
+auth_apply_security_headers();
+header('Content-Type: application/json');
+
+if (!isset($_SESSION['selected_year'])) {
+    echo json_encode(['data' => [], 'error' => 'Fiscal year not selected']);
+    exit;
+}
+
+$canManageActivities = auth_can_manage_program_activities();
+$selectedYear = (int) $_SESSION['selected_year'];
+$data = [];
+
+ensureProgramActivityMetadata($conn, $selectedYear);
+ensureProjectLawaBinhiTargets($conn);
+
+function formatDateRange($from, $to): string
+{
+    if (!$from) {
+        return '';
+    }
+
+    $fromFormatted = date('M d, Y', strtotime($from));
+    if ($to && $from !== $to) {
+        $toFormatted = date('M d, Y', strtotime($to));
+        return $fromFormatted . ' - ' . $toFormatted;
+    }
+
+    return $fromFormatted;
+}
+
+function resolveForumFrom(array $row, string $prefix): ?string
+{
+    $fromValue = $row[$prefix . '_from'] ?? null;
+    if (!empty($fromValue)) {
+        return $fromValue;
+    }
+
+    return $row[$prefix] ?? null;
+}
+
+function resolveForumTo(array $row, string $prefix): ?string
+{
+    $toValue = $row[$prefix . '_to'] ?? null;
+    if (!empty($toValue)) {
+        return $toValue;
+    }
+
+    return $row[$prefix] ?? null;
+}
+
+function normalizeProjectList(?string $projectNames): array
+{
+    return parseProjectTargetMultiValueCell($projectNames, false);
+}
+
+function formatStructuredDateSummary(?string $rawValue): string
+{
+    $rawValue = trim((string) $rawValue);
+    if ($rawValue === '') {
+        return '';
+    }
+
+    $entries = preg_split('/\|\|/', $rawValue) ?: [];
+    $formatted = [];
+
+    foreach ($entries as $entry) {
+        $entry = trim($entry);
+        if ($entry === '') {
+            continue;
+        }
+
+        if (strpos($entry, '~') !== false) {
+            [$startDate, $endDate] = array_pad(explode('~', $entry, 2), 2, '');
+            $startDate = trim($startDate);
+            $endDate = trim($endDate);
+            if ($startDate === '') {
+                continue;
+            }
+
+            $formatted[] = formatDateRange($startDate, $endDate !== '' ? $endDate : $startDate);
+            continue;
+        }
+
+        $formatted[] = $entry;
+    }
+
+    return implode(', ', array_filter($formatted, static fn($value) => trim((string) $value) !== ''));
+}
+
+function formatBarangayDateSummary(?string $rawValue): string
+{
+    $rawValue = trim((string) $rawValue);
+    if ($rawValue === '') {
+        return '';
+    }
+
+    $entries = preg_split('/\|\|/', $rawValue) ?: [];
+    $formatted = [];
+
+    foreach ($entries as $entry) {
+        $entry = trim($entry);
+        if ($entry === '') {
+            continue;
+        }
+
+        $parts = explode('::', $entry, 2);
+        $barangay = trim($parts[0] ?? '');
+        $dates = formatStructuredDateSummary($parts[1] ?? '');
+        if ($barangay === '' || $dates === '') {
+            continue;
+        }
+
+        $formatted[] = $barangay . ': ' . $dates;
+    }
+
+    return implode(' || ', $formatted);
+}
+
+function formatBarangayTextSummary(?string $rawValue): string
+{
+    $rawValue = trim((string) $rawValue);
+    if ($rawValue === '') {
+        return '';
+    }
+
+    $entries = preg_split('/\|\|/', $rawValue) ?: [];
+    $formatted = [];
+
+    foreach ($entries as $entry) {
+        $entry = trim($entry);
+        if ($entry === '') {
+            continue;
+        }
+
+        $parts = explode('::', $entry, 2);
+        $barangay = trim($parts[0] ?? '');
+        $value = trim($parts[1] ?? '');
+        if ($barangay === '' || $value === '') {
+            continue;
+        }
+
+        $formatted[] = $barangay . ': ' . $value;
+    }
+
+    return implode(' || ', $formatted);
+}
+
+function formatBarangayNumericSummary(?string $rawValue, string $suffix = ''): string
+{
+    $rawValue = trim((string) $rawValue);
+    if ($rawValue === '') {
+        return '';
+    }
+
+    $entries = preg_split('/\|\|/', $rawValue) ?: [];
+    $formatted = [];
+
+    foreach ($entries as $entry) {
+        $entry = trim($entry);
+        if ($entry === '') {
+            continue;
+        }
+
+        $parts = explode('::', $entry, 2);
+        $barangay = trim($parts[0] ?? '');
+        $value = trim($parts[1] ?? '');
+        if ($barangay === '' || $value === '') {
+            continue;
+        }
+
+        $formatted[] = $barangay . ': ' . $value . $suffix;
+    }
+
+    return implode(' || ', $formatted);
+}
+
+function buildValidationSnapshot(int $targetBeneficiaries, int $actualBeneficiaries): array
+{
+    if ($targetBeneficiaries <= 0 && $actualBeneficiaries > 0) {
+        return ['label' => 'Unplanned Import', 'class' => 'info'];
+    }
+
+    if ($targetBeneficiaries <= 0) {
+        return ['label' => 'No Target', 'class' => 'secondary'];
+    }
+
+    if ($actualBeneficiaries === 0) {
+        return ['label' => 'No Import', 'class' => 'secondary'];
+    }
+
+    if ($actualBeneficiaries < $targetBeneficiaries) {
+        return ['label' => 'Partial', 'class' => 'warning'];
+    }
+
+    if ($actualBeneficiaries === $targetBeneficiaries) {
+        return ['label' => 'Validated', 'class' => 'success'];
+    }
+
+    return ['label' => 'Over Target', 'class' => 'danger'];
+}
+
+function buildCompletenessBadge(array $row): array
+{
+    $checks = [
+        !empty($row['plgu_from']),
+        !empty($row['mlgu_from']),
+        !empty($row['blgu_from']),
+        (int) ($row['target_barangay_count'] ?? 0) > 0,
+        (int) ($row['target_beneficiaries'] ?? 0) > 0,
+        (int) ($row['lawa_target_beneficiaries'] ?? 0) > 0,
+        (int) ($row['binhi_target_beneficiaries'] ?? 0) > 0,
+        (int) ($row['with_projects'] ?? 0) > 0,
+        !empty($row['drmd_monitoring_from']),
+        !empty($row['payout_schedule_from']),
+    ];
+
+    $score = (int) round((array_sum(array_map(static fn($v) => $v ? 1 : 0, $checks)) / count($checks)) * 100);
+    if ($score >= 80) {
+        return ['label' => 'Ready', 'class' => 'success', 'score' => $score];
+    }
+    if ($score >= 40) {
+        return ['label' => 'In Progress', 'class' => 'warning', 'score' => $score];
+    }
+
+    return ['label' => 'Needs Update', 'class' => 'secondary', 'score' => $score];
+}
+
+function fetchProgramActivityLocationRows(
+    mysqli $conn,
+    int $selectedYear,
+    string $province,
+    string $municipality
+): array {
+    $stmt = $conn->prepare("
+        SELECT
+            locations.barangay,
+            targets.id AS target_id,
+            metadata.id AS metadata_id
+        FROM (
+            SELECT province, municipality, barangay
+            FROM project_lawa_binhi_targets
+            WHERE fiscal_year = ?
+              AND province = ?
+              AND municipality = ?
+
+            UNION
+
+            SELECT province, lgu AS municipality, barangay
+            FROM meb
+            WHERE YEAR(time_stamp) = ?
+              AND province = ?
+              AND lgu = ?
+            GROUP BY province, lgu, barangay
+        ) AS locations
+        LEFT JOIN project_lawa_binhi_targets AS targets
+            ON targets.fiscal_year = ?
+           AND targets.province = ?
+           AND targets.municipality = ?
+           AND targets.barangay = locations.barangay
+        LEFT JOIN program_activity_metadata AS metadata
+            ON metadata.fiscal_year = ?
+           AND metadata.province = ?
+           AND metadata.municipality = ?
+           AND metadata.barangay = locations.barangay
+        ORDER BY locations.barangay ASC
+    ");
+
+    if (!$stmt) {
+        return [];
+    }
+
+    $stmt->bind_param(
+        'ississississ',
+        $selectedYear,
+        $province,
+        $municipality,
+        $selectedYear,
+        $province,
+        $municipality,
+        $selectedYear,
+        $province,
+        $municipality,
+        $selectedYear,
+        $province,
+        $municipality
+    );
+    $stmt->execute();
+    $rows = db_stmt_fetch_all_assoc($stmt);
+    $stmt->close();
+
+    return $rows;
+}
+
+$sql = "
+    SELECT
+        locations.province,
+        locations.municipality,
+        COALESCE(SUM(targets.lawa_target), 0) AS lawa_target_beneficiaries,
+        COALESCE(SUM(targets.binhi_target), 0) AS binhi_target_beneficiaries,
+        COALESCE(SUM(targets.capbuild_target), 0) AS capbuild_target_beneficiaries,
+        COALESCE(SUM(targets.community_action_plan_target), 0) AS community_action_plan_target_beneficiaries,
+        COALESCE(SUM(targets.target_partner_beneficiaries), 0) AS target_beneficiaries,
+        COALESCE(SUM(actuals.actual_beneficiaries), 0) AS actual_beneficiaries,
+        SUM(CASE WHEN COALESCE(targets.target_partner_beneficiaries, 0) > 0 THEN 1 ELSE 0 END) AS target_barangay_count,
+        SUM(CASE WHEN COALESCE(actuals.actual_beneficiaries, 0) > 0 THEN 1 ELSE 0 END) AS actual_barangay_count,
+        0 AS with_projects,
+        GROUP_CONCAT(
+            CONCAT(
+                locations.barangay,
+                ' (T:',
+                COALESCE(targets.target_partner_beneficiaries, 0),
+                ', A:',
+                COALESCE(actuals.actual_beneficiaries, 0),
+                ')'
+            )
+            ORDER BY locations.barangay
+            SEPARATOR '||'
+        ) AS barangays_with_beneficiaries,
+        '' AS all_puroks,
+        '' AS all_target_project_names,
+        '' AS all_target_project_classifications,
+        '' AS all_target_project_types,
+        '' AS all_target_aquatic_resources,
+        '' AS all_target_aquatic_resource_quantities,
+        '' AS all_coverage_actual_puroks,
+        '' AS all_coverage_actual_project_names,
+        '' AS all_coverage_actual_project_classifications,
+        '' AS all_coverage_actual_project_types,
+        '' AS all_coverage_actual_aquatic_resources,
+        '' AS all_coverage_actual_aquatic_resource_quantities,
+        '' AS all_coverage_actual_land_areas,
+        '' AS all_coverage_actual_land_ownerships,
+        '' AS all_coverage_actual_accomplishments,
+        '' AS all_project_names,
+        MAX(province_forums.plgu_forum_from) AS plgu_from,
+        MAX(province_forums.plgu_forum_to) AS plgu_to,
+        MAX(municipality_forums.mlgu_forum_from) AS mlgu_from,
+        MAX(municipality_forums.mlgu_forum_to) AS mlgu_to,
+        MIN(COALESCE(metadata.blgu_forum_from, metadata.blgu_forum)) AS blgu_from,
+        MAX(COALESCE(metadata.blgu_forum_to, metadata.blgu_forum)) AS blgu_to,
+        GROUP_CONCAT(
+            DISTINCT CASE
+                WHEN metadata.site_validation IS NOT NULL AND TRIM(metadata.site_validation) <> ''
+                THEN CONCAT(locations.barangay, '::', metadata.site_validation)
+                ELSE NULL
+            END
+            ORDER BY locations.barangay
+            SEPARATOR '||'
+        ) AS site_validation,
+        MIN(metadata.stage1_start_date) AS stage1_start,
+        MAX(metadata.stage1_end_date) AS stage1_end,
+        MIN(metadata.stage2_start_date) AS stage2_start,
+        MAX(metadata.stage2_end_date) AS stage2_end,
+        MIN(metadata.stage3_start_date) AS stage3_start,
+        MAX(metadata.stage3_end_date) AS stage3_end,
+        GROUP_CONCAT(
+            DISTINCT CASE
+                WHEN metadata.drmd_monitoring_from IS NOT NULL
+                THEN CONCAT(locations.barangay, '::', metadata.drmd_monitoring_from, '~', COALESCE(metadata.drmd_monitoring_to, metadata.drmd_monitoring_from))
+                ELSE NULL
+            END
+            ORDER BY locations.barangay
+            SEPARATOR '||'
+        ) AS drmd_monitoring_schedule,
+        GROUP_CONCAT(
+            DISTINCT CASE
+                WHEN metadata.drmd_monitoring_participants IS NOT NULL AND TRIM(metadata.drmd_monitoring_participants) <> ''
+                THEN CONCAT(locations.barangay, '::', metadata.drmd_monitoring_participants)
+                ELSE NULL
+            END
+            ORDER BY locations.barangay
+            SEPARATOR '||'
+        ) AS drmd_monitoring_participants,
+        GROUP_CONCAT(
+            DISTINCT CASE
+                WHEN metadata.joint_post_monitoring_from IS NOT NULL
+                THEN CONCAT(locations.barangay, '::', metadata.joint_post_monitoring_from, '~', COALESCE(metadata.joint_post_monitoring_to, metadata.joint_post_monitoring_from))
+                ELSE NULL
+            END
+            ORDER BY locations.barangay
+            SEPARATOR '||'
+        ) AS joint_post_monitoring_schedule,
+        GROUP_CONCAT(
+            DISTINCT CASE
+                WHEN metadata.joint_post_monitoring_participants IS NOT NULL AND TRIM(metadata.joint_post_monitoring_participants) <> ''
+                THEN CONCAT(locations.barangay, '::', metadata.joint_post_monitoring_participants)
+                ELSE NULL
+            END
+            ORDER BY locations.barangay
+            SEPARATOR '||'
+        ) AS joint_post_monitoring_participants,
+        GROUP_CONCAT(
+            DISTINCT CASE
+                WHEN metadata.payout_schedule_from IS NOT NULL
+                THEN CONCAT(locations.barangay, '::', metadata.payout_schedule_from, '~', COALESCE(metadata.payout_schedule_to, metadata.payout_schedule_from))
+                ELSE NULL
+            END
+            ORDER BY locations.barangay
+            SEPARATOR '||'
+        ) AS payout_schedule,
+        SUM(COALESCE(metadata.fund_obligation_partner_beneficiaries, 0)) AS fund_obligation_partner_beneficiaries,
+        SUM(COALESCE(metadata.fund_disbursement_served_partner_beneficiaries, 0)) AS fund_disbursement_served_partner_beneficiaries,
+        GROUP_CONCAT(
+            DISTINCT CASE
+                WHEN metadata.liquidation_date IS NOT NULL
+                THEN CONCAT(locations.barangay, '::', metadata.liquidation_date)
+                ELSE NULL
+            END
+            ORDER BY locations.barangay
+            SEPARATOR '||'
+        ) AS liquidation_dates,
+        GROUP_CONCAT(
+            DISTINCT CASE
+                WHEN metadata.last_day_project_implementation IS NOT NULL
+                THEN CONCAT(locations.barangay, '::', metadata.last_day_project_implementation)
+                ELSE NULL
+            END
+            ORDER BY locations.barangay
+            SEPARATOR '||'
+        ) AS last_day_project_implementation_dates,
+        GROUP_CONCAT(
+            DISTINCT CASE
+                WHEN metadata.last_day_project_implementation IS NOT NULL
+                     AND COALESCE(metadata.payout_schedule_to, metadata.payout_schedule_from) IS NOT NULL
+                THEN CONCAT(
+                    locations.barangay,
+                    '::',
+                    DATEDIFF(
+                        COALESCE(metadata.payout_schedule_to, metadata.payout_schedule_from),
+                        metadata.last_day_project_implementation
+                    )
+                )
+                ELSE NULL
+            END
+            ORDER BY locations.barangay
+            SEPARATOR '||'
+        ) AS payout_to_completion_aging,
+        GROUP_CONCAT(
+            DISTINCT CASE
+                WHEN metadata.check_issuance_date IS NOT NULL
+                THEN CONCAT(locations.barangay, '::', metadata.check_issuance_date)
+                ELSE NULL
+            END
+            ORDER BY locations.barangay
+            SEPARATOR '||'
+        ) AS check_issuance_dates,
+        GROUP_CONCAT(
+            DISTINCT CASE
+                WHEN metadata.check_issuance_date IS NOT NULL
+                     AND metadata.liquidation_date IS NOT NULL
+                THEN CONCAT(
+                    locations.barangay,
+                    '::',
+                    DATEDIFF(metadata.liquidation_date, metadata.check_issuance_date)
+                )
+                ELSE NULL
+            END
+            ORDER BY locations.barangay
+            SEPARATOR '||'
+        ) AS check_to_liquidation_aging,
+        GROUP_CONCAT(
+            DISTINCT CASE
+                WHEN metadata.work_accomplishment_report_status IS NOT NULL AND TRIM(metadata.work_accomplishment_report_status) <> ''
+                THEN CONCAT(locations.barangay, '::', metadata.work_accomplishment_report_status)
+                ELSE NULL
+            END
+            ORDER BY locations.barangay
+            SEPARATOR '||'
+        ) AS work_accomplishment_report_statuses,
+        GROUP_CONCAT(
+            DISTINCT CASE
+                WHEN metadata.performance_rating_remarks IS NOT NULL AND TRIM(metadata.performance_rating_remarks) <> ''
+                THEN CONCAT(locations.barangay, '::', metadata.performance_rating_remarks)
+                ELSE NULL
+            END
+            ORDER BY locations.barangay
+            SEPARATOR '||'
+        ) AS performance_rating_remarks,
+        GROUP_CONCAT(
+            DISTINCT CASE
+                WHEN metadata.special_disbursing_officer IS NOT NULL AND TRIM(metadata.special_disbursing_officer) <> ''
+                THEN CONCAT(locations.barangay, '::', metadata.special_disbursing_officer)
+                ELSE NULL
+            END
+            ORDER BY locations.barangay
+            SEPARATOR '||'
+        ) AS special_disbursing_officers,
+        MAX(metadata.updated_at) AS last_updated
+    FROM (
+        SELECT province, municipality, barangay
+        FROM project_lawa_binhi_targets
+        WHERE fiscal_year = ?
+
+        UNION
+
+        SELECT province, lgu AS municipality, barangay
+        FROM meb
+        WHERE YEAR(time_stamp) = ?
+        GROUP BY province, lgu, barangay
+    ) AS locations
+    LEFT JOIN project_lawa_binhi_targets AS targets
+        ON targets.fiscal_year = ?
+       AND targets.province = locations.province
+       AND targets.municipality = locations.municipality
+       AND targets.barangay = locations.barangay
+    LEFT JOIN (
+        SELECT
+            province,
+            lgu AS municipality,
+            barangay,
+            COUNT(*) AS actual_beneficiaries
+        FROM meb
+        WHERE YEAR(time_stamp) = ?
+        GROUP BY province, lgu, barangay
+    ) AS actuals
+        ON actuals.province = locations.province
+       AND actuals.municipality = locations.municipality
+       AND actuals.barangay = locations.barangay
+    LEFT JOIN (
+        SELECT
+            province,
+            MIN(COALESCE(plgu_forum_from, plgu_forum)) AS plgu_forum_from,
+            MAX(COALESCE(plgu_forum_to, plgu_forum)) AS plgu_forum_to
+        FROM program_activity_metadata
+        WHERE fiscal_year = ?
+          AND (
+              plgu_forum IS NOT NULL
+              OR plgu_forum_from IS NOT NULL
+              OR plgu_forum_to IS NOT NULL
+          )
+        GROUP BY province
+    ) AS province_forums
+        ON province_forums.province = locations.province
+    LEFT JOIN (
+        SELECT
+            province,
+            municipality,
+            MIN(COALESCE(mlgu_forum_from, mlgu_forum)) AS mlgu_forum_from,
+            MAX(COALESCE(mlgu_forum_to, mlgu_forum)) AS mlgu_forum_to
+        FROM program_activity_metadata
+        WHERE fiscal_year = ?
+          AND (
+              mlgu_forum IS NOT NULL
+              OR mlgu_forum_from IS NOT NULL
+              OR mlgu_forum_to IS NOT NULL
+          )
+        GROUP BY province, municipality
+    ) AS municipality_forums
+        ON municipality_forums.province = locations.province
+       AND municipality_forums.municipality = locations.municipality
+    LEFT JOIN program_activity_metadata AS metadata
+        ON metadata.fiscal_year = ?
+       AND metadata.province = locations.province
+       AND metadata.municipality = locations.municipality
+       AND metadata.barangay = locations.barangay
+    GROUP BY locations.province, locations.municipality
+    ORDER BY locations.province, locations.municipality
+";
+
+$stmt = $conn->prepare($sql);
+$stmt->bind_param('iiiiiii', $selectedYear, $selectedYear, $selectedYear, $selectedYear, $selectedYear, $selectedYear, $selectedYear);
+$stmt->execute();
+$result = db_stmt_fetch_all_assoc($stmt);
+
+if ($result !== []) {
+    foreach ($result as $row) {
+        $locationRows = fetchProgramActivityLocationRows(
+            $conn,
+            $selectedYear,
+            (string) ($row['province'] ?? ''),
+            (string) ($row['municipality'] ?? '')
+        );
+        $targetEntryMap = projectTargetsFetchEntriesByTargetIds(
+            $conn,
+            array_map(static fn(array $locationRow): int => (int) ($locationRow['target_id'] ?? 0), $locationRows)
+        );
+        $actualProjectMap = programActivityFetchActualProjectsByMetadataIds(
+            $conn,
+            array_map(static fn(array $locationRow): int => (int) ($locationRow['metadata_id'] ?? 0), $locationRows)
+        );
+
+        $targetPuroks = [];
+        $targetProjects = [];
+        $targetProjectClassifications = [];
+        $targetProjectTypes = [];
+        $targetAquaticResources = [];
+        $targetAquaticResourceQuantities = [];
+        $actualCoveragePuroks = [];
+        $actualCoverageProjectNames = [];
+        $actualCoverageProjectClassifications = [];
+        $actualCoverageProjectTypes = [];
+        $actualCoverageAquaticResources = [];
+        $actualCoverageAquaticResourceQuantities = [];
+        $actualCoverageLandAreas = [];
+        $actualCoverageLandOwnerships = [];
+        $coverageActualAccomplishments = [];
+        $displayProjects = [];
+        $computedProjectBarangayCount = 0;
+
+        foreach ($locationRows as $locationRow) {
+            $barangayTargetEntries = $targetEntryMap[(int) ($locationRow['target_id'] ?? 0)] ?? [];
+            $barangayActualEntries = $actualProjectMap[(int) ($locationRow['metadata_id'] ?? 0)] ?? [];
+            $barangayDisplayProjects = [];
+
+            foreach ($barangayTargetEntries as $entry) {
+                $targetPuroks[] = (string) ($entry['purok'] ?? '');
+                $targetProjects[] = (string) ($entry['project_name'] ?? '');
+                $targetProjectClassifications[] = (string) ($entry['project_classification'] ?? '');
+                $targetProjectTypes[] = (string) ($entry['project_type'] ?? '');
+                $targetAquaticResources[] = (string) ($entry['aquatic_resource'] ?? '');
+                $targetAquaticResourceQuantities[] = isset($entry['aquatic_resource_quantity']) ? (string) $entry['aquatic_resource_quantity'] : '';
+                $barangayDisplayProjects[] = (string) ($entry['project_name'] ?? '');
+            }
+
+            foreach ($barangayActualEntries as $entry) {
+                $actualCoveragePuroks[] = (string) ($entry['purok'] ?? '');
+                $actualCoverageProjectNames[] = (string) ($entry['project_name'] ?? '');
+                $actualCoverageProjectClassifications[] = (string) ($entry['project_classification'] ?? '');
+                $actualCoverageProjectTypes[] = (string) ($entry['project_type'] ?? '');
+                $actualCoverageAquaticResources[] = (string) ($entry['aquatic_resource'] ?? '');
+                $actualCoverageAquaticResourceQuantities[] = isset($entry['aquatic_resource_quantity']) ? (string) $entry['aquatic_resource_quantity'] : '';
+                $actualCoverageLandAreas[] = (string) ($entry['land_area'] ?? '');
+                $actualCoverageLandOwnerships[] = (string) ($entry['land_ownership'] ?? '');
+                $coverageActualAccomplishments[] = isset($entry['actual_accomplishment']) ? (string) $entry['actual_accomplishment'] : '';
+                if ($barangayDisplayProjects === []) {
+                    $barangayDisplayProjects[] = (string) ($entry['project_name'] ?? '');
+                }
+            }
+
+            $barangayDisplayProjects = array_values(array_filter($barangayDisplayProjects, static fn($value) => trim((string) $value) !== ''));
+            if ($barangayDisplayProjects !== []) {
+                $computedProjectBarangayCount++;
+                foreach ($barangayDisplayProjects as $projectName) {
+                    $displayProjects[] = $projectName;
+                }
+            }
+        }
+
+        $displayProjects = array_values(array_unique(array_filter($displayProjects, static fn($value) => trim((string) $value) !== '')));
+        $row['with_projects'] = $computedProjectBarangayCount;
+        $completeness = buildCompletenessBadge($row);
+        $validation = buildValidationSnapshot((int) ($row['target_beneficiaries'] ?? 0), (int) ($row['actual_beneficiaries'] ?? 0));
+        $fundObligationPartnerBeneficiaries = (int) ($row['fund_obligation_partner_beneficiaries'] ?? 0);
+        $fundDisbursementServedPartnerBeneficiaries = (int) ($row['fund_disbursement_served_partner_beneficiaries'] ?? 0);
+        $fundObligationAmount = $fundObligationPartnerBeneficiaries * 8700;
+        $fundDisbursementAmount = $fundDisbursementServedPartnerBeneficiaries * 8700;
+        $fundDisbursementUnserved = max($fundObligationPartnerBeneficiaries - $fundDisbursementServedPartnerBeneficiaries, 0);
+        $fundDisbursementUndisbursedAmount = max($fundObligationAmount - $fundDisbursementAmount, 0);
+        $fundObligationPercentage = ((int) ($row['target_beneficiaries'] ?? 0)) > 0
+            ? round(($fundObligationPartnerBeneficiaries / (int) $row['target_beneficiaries']) * 100, 2)
+            : 0;
+        $fundDisbursementPercentage = $fundObligationPartnerBeneficiaries > 0
+            ? round(($fundDisbursementServedPartnerBeneficiaries / $fundObligationPartnerBeneficiaries) * 100, 2)
+            : 0;
+        $detailsButton = '<button class="btn btn-primary btn-sm details-btn" title="View details" aria-label="View details"><i class="nav-icon fas fa-eye"></i></button>';
+        $editButton = $canManageActivities ? '<button class="btn btn-warning btn-sm edit-btn" title="Edit" aria-label="Edit"><i class="nav-icon fas fa-pen"></i></button>' : '';
+
+        $data[] = [
+            'action' => '<span class="kodus-row-actions">' . $detailsButton . $editButton . '</span>',
+            'province' => $row['province'],
+            'municipality' => $row['municipality'],
+            'lawa_target_beneficiaries' => (int) $row['lawa_target_beneficiaries'],
+            'binhi_target_beneficiaries' => (int) $row['binhi_target_beneficiaries'],
+            'capbuild_target_beneficiaries' => (int) $row['capbuild_target_beneficiaries'],
+            'community_action_plan_target_beneficiaries' => (int) $row['community_action_plan_target_beneficiaries'],
+            'target_partner_beneficiaries' => (int) $row['target_beneficiaries'],
+            'actual_partner_beneficiaries' => (int) $row['actual_beneficiaries'],
+            'variance_partner_beneficiaries' => (int) $row['actual_beneficiaries'] - (int) $row['target_beneficiaries'],
+            'amount' => number_format((int) $row['target_beneficiaries'] * 8700, 2, '.', ','),
+            'plgu_forum' => formatDateRange(resolveForumFrom($row, 'plgu'), resolveForumTo($row, 'plgu')),
+            'mlgu_forum' => formatDateRange(resolveForumFrom($row, 'mlgu'), resolveForumTo($row, 'mlgu')),
+            'blgu_forum' => formatDateRange(resolveForumFrom($row, 'blgu'), resolveForumTo($row, 'blgu')),
+            'site_validation' => formatBarangayDateSummary($row['site_validation'] ?? ''),
+            'stage1_phase' => formatDateRange($row['stage1_start'] ?? null, $row['stage1_end'] ?? null),
+            'stage2_phase' => formatDateRange($row['stage2_start'] ?? null, $row['stage2_end'] ?? null),
+            'stage3_phase' => formatDateRange($row['stage3_start'] ?? null, $row['stage3_end'] ?? null),
+            'drmd_monitoring_schedule' => formatBarangayDateSummary($row['drmd_monitoring_schedule'] ?? ''),
+            'drmd_monitoring_participants' => formatBarangayTextSummary($row['drmd_monitoring_participants'] ?? ''),
+            'joint_post_monitoring_schedule' => formatBarangayDateSummary($row['joint_post_monitoring_schedule'] ?? ''),
+            'joint_post_monitoring_participants' => formatBarangayTextSummary($row['joint_post_monitoring_participants'] ?? ''),
+            'payout_schedule' => formatBarangayDateSummary($row['payout_schedule'] ?? ''),
+            'fund_obligation_partner_beneficiaries' => $fundObligationPartnerBeneficiaries,
+            'fund_obligation_amount' => number_format($fundObligationAmount, 2, '.', ','),
+            'fund_obligation_percentage' => $fundObligationPercentage,
+            'fund_disbursement_served_partner_beneficiaries' => $fundDisbursementServedPartnerBeneficiaries,
+            'fund_disbursement_amount' => number_format($fundDisbursementAmount, 2, '.', ','),
+            'fund_disbursement_unserved_partner_beneficiaries' => $fundDisbursementUnserved,
+            'fund_disbursement_undisbursed_amount' => number_format($fundDisbursementUndisbursedAmount, 2, '.', ','),
+            'fund_disbursement_percentage' => $fundDisbursementPercentage,
+            'liquidation_dates' => formatBarangayDateSummary($row['liquidation_dates'] ?? ''),
+            'last_day_project_implementation_dates' => formatBarangayDateSummary($row['last_day_project_implementation_dates'] ?? ''),
+            'payout_to_completion_aging' => formatBarangayNumericSummary($row['payout_to_completion_aging'] ?? '', ' day(s)'),
+            'check_issuance_dates' => formatBarangayDateSummary($row['check_issuance_dates'] ?? ''),
+            'check_to_liquidation_aging' => formatBarangayNumericSummary($row['check_to_liquidation_aging'] ?? '', ' day(s)'),
+            'work_accomplishment_report_statuses' => formatBarangayTextSummary($row['work_accomplishment_report_statuses'] ?? ''),
+            'performance_rating_remarks' => formatBarangayTextSummary($row['performance_rating_remarks'] ?? ''),
+            'special_disbursing_officers' => formatBarangayTextSummary($row['special_disbursing_officers'] ?? ''),
+            'no_of_barangays' => (int) $row['target_barangay_count'],
+            'actual_barangay_count' => (int) $row['actual_barangay_count'],
+            'barangays_and_beneficiaries' => $row['barangays_with_beneficiaries'] ?? '',
+            'target_puroks' => implode('||', $targetPuroks),
+            'target_project_names' => implode('||', $targetProjects),
+            'target_project_classifications' => implode('||', $targetProjectClassifications),
+            'target_project_types' => implode('||', $targetProjectTypes),
+            'target_aquatic_resources' => implode('||', $targetAquaticResources),
+            'target_aquatic_resource_quantities' => implode('||', $targetAquaticResourceQuantities),
+            'coverage_puroks' => implode('||', $actualCoveragePuroks),
+            'coverage_project_names' => implode('||', $actualCoverageProjectNames),
+            'coverage_project_classifications' => implode('||', $actualCoverageProjectClassifications),
+            'coverage_project_types' => implode('||', $actualCoverageProjectTypes),
+            'coverage_aquatic_resources' => implode('||', $actualCoverageAquaticResources),
+            'coverage_aquatic_resource_quantities' => implode('||', $actualCoverageAquaticResourceQuantities),
+            'coverage_land_areas' => implode('||', $actualCoverageLandAreas),
+            'coverage_land_ownerships' => implode('||', $actualCoverageLandOwnerships),
+            'coverage_actual_accomplishments' => implode('||', $coverageActualAccomplishments),
+            'project_names' => implode(', ', $displayProjects),
+            'readiness' => '<span class="badge badge-' . $completeness['class'] . '">' . $completeness['label'] . ' (' . $completeness['score'] . '%)</span>',
+            'validation_snapshot' => '<span class="badge badge-' . $validation['class'] . '">' . $validation['label'] . '</span>',
+            'project_count' => count($displayProjects),
+            'last_updated' => !empty($row['last_updated']) ? date('M d, Y h:i A', strtotime($row['last_updated'])) : '',
+        ];
+    }
+
+    echo json_encode(['data' => $data]);
+} else {
+    echo json_encode(['data' => [], 'error' => $conn->error]);
+}
+
+$stmt->close();
+

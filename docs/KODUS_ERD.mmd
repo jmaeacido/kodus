@@ -1,0 +1,118 @@
+erDiagram
+    USERS {
+        int id PK
+        varchar username
+        varchar email
+        varchar userType
+    }
+
+    PROJECT_LAWA_BINHI_TARGETS {
+        int id PK
+        int fiscal_year
+        varchar province
+        varchar municipality
+        varchar barangay
+        int lawa_target
+        int binhi_target
+        int target_partner_beneficiaries
+    }
+
+    PROJECT_TARGET_ENTRIES {
+        bigint id PK
+        int target_id FK
+        varchar row_id
+        int sort_order
+        varchar purok
+        varchar project_name
+        varchar project_type
+        varchar project_classification
+    }
+
+    PROGRAM_ACTIVITY_METADATA {
+        int id PK
+        int fiscal_year
+        varchar province
+        varchar municipality
+        varchar barangay
+        int actual_lawa_accomplishment
+        int actual_binhi_accomplishment
+    }
+
+    PROGRAM_ACTIVITY_ACTUAL_PROJECTS {
+        bigint id PK
+        int program_activity_id FK
+        varchar actual_project_id
+        varchar coverage_entry_id
+        varchar target_project_row_id
+        int sort_order
+        varchar purok
+        decimal latitude
+        decimal longitude
+        varchar project_name
+        varchar project_classification
+        varchar project_type
+        varchar status
+    }
+
+    CONTACT_MESSAGES {
+        int id PK
+        varchar user_email
+        varchar user_name
+        text subject
+        datetime sent_at
+    }
+
+    CONTACT_MESSAGE_RECIPIENTS {
+        bigint id PK
+        int message_id FK
+        int user_id FK
+        varchar recipient_email
+        varchar recipient_name
+    }
+
+    CONTACT_REPLIES {
+        int id PK
+        int message_id FK
+        int user_id FK
+        datetime sent_at
+    }
+
+    MESSAGE_READS {
+        int id PK
+        int message_id FK
+        int user_id FK
+        tinyint is_read
+        tinyint is_trashed
+    }
+
+    EVENTS {
+        int id PK
+        int created_by FK
+        int updated_by FK
+        varchar title
+        datetime start
+        datetime end
+    }
+
+    EVENT_GUESTS {
+        bigint id PK
+        int event_id FK
+        int user_id FK
+        varchar guest_email
+        varchar guest_name
+    }
+
+    USERS ||--o{ CONTACT_MESSAGE_RECIPIENTS : receives
+    USERS ||--o{ CONTACT_REPLIES : sends
+    USERS ||--o{ MESSAGE_READS : reads
+    USERS ||--o{ EVENTS : creates
+    USERS ||--o{ EVENT_GUESTS : attends
+
+    PROJECT_LAWA_BINHI_TARGETS ||--o{ PROJECT_TARGET_ENTRIES : contains
+    PROGRAM_ACTIVITY_METADATA ||--o{ PROGRAM_ACTIVITY_ACTUAL_PROJECTS : records
+
+    CONTACT_MESSAGES ||--o{ CONTACT_MESSAGE_RECIPIENTS : addresses
+    CONTACT_MESSAGES ||--o{ CONTACT_REPLIES : has
+    CONTACT_MESSAGES ||--o{ MESSAGE_READS : tracks
+
+    EVENTS ||--o{ EVENT_GUESTS : invites

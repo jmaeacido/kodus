@@ -1,0 +1,83 @@
+RewriteEngine On
+Options -Indexes
+
+# Keep local dev hosts flexible, but force canonical HTTPS for deployed hosts.
+RewriteCond %{HTTP_HOST} !^(localhost|127\.0\.0\.1|::1)(:\d+)?$ [NC]
+RewriteCond %{HTTP_HOST} !\.test(?::\d+)?$ [NC]
+RewriteCond %{HTTP_HOST} !\.local(?::\d+)?$ [NC]
+RewriteCond %{HTTPS} !=on
+RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [R=307,L]
+
+ErrorDocument 400 /kodus/400
+ErrorDocument 401 /kodus/401
+ErrorDocument 403 /kodus/403
+ErrorDocument 404 /kodus/404
+ErrorDocument 405 /kodus/405
+ErrorDocument 408 /kodus/408
+ErrorDocument 429 /kodus/429
+ErrorDocument 500 /kodus/500
+ErrorDocument 502 /kodus/502
+ErrorDocument 503 /kodus/503
+ErrorDocument 504 /kodus/504
+
+# When this repo is mounted directly at the vhost root (e.g. http://kodus.test/),
+# many templates still generate legacy /kodus/... URLs. Translate those to the
+# real file or extensionless route target before the standard rules below.
+RewriteRule ^kodus/?$ ./ [L]
+
+RewriteCond %{REQUEST_URI} ^/kodus/(.+)$ [NC]
+RewriteCond %{DOCUMENT_ROOT}/%1 -f [OR]
+RewriteCond %{DOCUMENT_ROOT}/%1 -d
+RewriteRule ^kodus/(.+)$ $1 [L]
+
+RewriteCond %{REQUEST_URI} ^/kodus/(.+)$ [NC]
+RewriteCond %{DOCUMENT_ROOT}/%1.php -f
+RewriteRule ^kodus/(.+)$ $1.php [L]
+
+RewriteCond %{REQUEST_URI} ^/kodus/(.+)$ [NC]
+RewriteCond %{DOCUMENT_ROOT}/%1.html -f
+RewriteRule ^kodus/(.+)$ $1.html [L]
+
+# Redirect explicit index.php requests to the folder root.
+RewriteCond %{REQUEST_METHOD} =GET [OR]
+RewriteCond %{REQUEST_METHOD} =HEAD
+RewriteCond %{THE_REQUEST} \s/+([^\s?]*?)index\.php(?:[\s?]|$) [NC]
+RewriteRule ^ /%1 [R=301,L]
+
+# Hide direct .php/.html extensions in the address bar.
+RewriteCond %{REQUEST_METHOD} =GET [OR]
+RewriteCond %{REQUEST_METHOD} =HEAD
+RewriteCond %{THE_REQUEST} \s/+([^\s?]+?)\.(php|html)(?:[\s?]|$) [NC]
+RewriteRule ^ /%1 [R=301,L]
+
+# Rule for .php files
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME}.php -f
+RewriteRule ^(.+?)/?$ $1.php [L]
+
+# Rule for .html files
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME}.html -f
+RewriteRule ^(.+?)/?$ $1.html [L]
+
+<Files .env>
+    Order allow,deny
+    Deny from all
+</Files>
+
+<FilesMatch "^\.env(\..+)?$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+<FilesMatch "^(composer\.(json|lock|phar)|composer-setup\.php|phpinfo\.php|info\.php|kodus_db\.sql|kodus-key_pair\.(pem|ppk)|debug_log\.txt|__diag_password_policy\.php|__https_debug\.php)$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+RewriteRule ^(?:uploads|inbox/uploads|dist/img)/.*\.(?:php[0-9]?|phtml|phar|cgi|pl|exe|sh|bat|cmd)$ - [F,L,NC]
+RewriteRule ^(?:storage|artifacts|scratch|sql|screenshots|docs|\.git|\.tmp\.driveupload|deduplication/logs)/ - [F,L,NC]
+RewriteRule ^(?:crossmatch/uploads|deduplication/uploads|inbox/uploads|pages/uploads)/.*\.(?:php[0-9]?|phtml|phar|cgi|pl|exe|sh|bat|cmd|js|jsp|asp|aspx)$ - [F,L,NC]
+RewriteRule ^.+\.(?:sql(?:\..*)?|bak|old|orig|save|log|ini|env|pem|ppk|key)$ - [F,L,NC]

@@ -64,7 +64,7 @@
               </div>
               <!-- /.card-header -->
               <div class="card-body">
-                <form id="uploadForm" action="upload_handler.php" method="post" enctype="multipart/form-data">
+                <form id="uploadForm" action="upload_handler.php" method="post" enctype="multipart/form-data" data-no-loader="true">
                   <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(security_get_csrf_token(), ENT_QUOTES, 'UTF-8') ?>">
                   <div class="row g-3">
 
@@ -103,8 +103,8 @@
                     </div><div style="height: 120px; display:block"></div>
 
                     <div class="col-12">
-                      <button class="btn btn-primary">Upload & Start</button>
-                      <a class="btn btn-link" href="helpers/Beneficiaries_Template.xlsx" download>Download Template</a>
+                      <button class="btn btn-primary" id="crossmatchStartButton">Upload & Start</button>
+                      <a class="btn btn-link" href="template_file" download>Download Template</a>
                     </div>
 
                   </div>
@@ -212,6 +212,183 @@ if (window.KODUSLiveRefresh) {
 window.addEventListener('kodus:partial-refresh', function () {
     loadRecentCrossmatchings();
 });
+
+(function () {
+    const form = document.getElementById('uploadForm');
+    const submitButton = document.getElementById('crossmatchStartButton');
+
+    if (!form) {
+        return;
+    }
+
+    let progressTimer = null;
+    let progressValue = 0;
+
+    function clearProgressTimer() {
+        if (progressTimer) {
+            window.clearInterval(progressTimer);
+            progressTimer = null;
+        }
+    }
+
+    function updateProgress(value, statusText) {
+        progressValue = Math.max(0, Math.min(100, Number(value || 0)));
+        const progressBar = document.getElementById('crossmatchUploadProgressBar');
+        const progressValueLabel = document.getElementById('crossmatchUploadProgressValue');
+        const progressStatus = document.getElementById('crossmatchUploadProgressStatus');
+
+        if (progressBar) {
+            progressBar.style.width = `${progressValue}%`;
+            progressBar.setAttribute('aria-valuenow', String(Math.round(progressValue)));
+        }
+
+        if (progressValueLabel) {
+            progressValueLabel.textContent = `${Math.round(progressValue)}%`;
+        }
+
+        if (progressStatus && statusText) {
+            progressStatus.textContent = statusText;
+        }
+    }
+
+    function startProgressRamp(targetValue, statusText) {
+        clearProgressTimer();
+        progressTimer = window.setInterval(function () {
+            if (progressValue >= targetValue) {
+                clearProgressTimer();
+                return;
+            }
+
+            const remaining = targetValue - progressValue;
+            const increment = remaining > 14 ? 4 : (remaining > 6 ? 2 : 1);
+            updateProgress(progressValue + increment, statusText);
+        }, 180);
+    }
+
+    function openProgressModal() {
+        progressValue = 8;
+
+        return Swal.fire({
+            title: 'Starting Crossmatch',
+            html: `
+              <div class="text-left">
+                <p class="mb-2">Please keep this tab open while we upload and validate your source files.</p>
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                  <strong id="crossmatchUploadProgressStatus">Preparing upload...</strong>
+                  <span id="crossmatchUploadProgressValue">8%</span>
+                </div>
+                <div class="progress" style="height: 0.85rem; border-radius: 999px; overflow: hidden;">
+                  <div id="crossmatchUploadProgressBar" class="progress-bar progress-bar-striped progress-bar-animated bg-primary" role="progressbar" style="width: 8%;" aria-valuemin="0" aria-valuemax="100" aria-valuenow="8"></div>
+                </div>
+              </div>
+            `,
+            allowOutsideClick: false,
+            allowEscapeKey: false,
+            showConfirmButton: false,
+            didOpen: function () {
+                updateProgress(8, 'Preparing upload...');
+            }
+        });
+    }
+
+    function submitCrossmatchRequest(formData) {
+        return new Promise(function (resolve, reject) {
+            const xhr = new XMLHttpRequest();
+            let settled = false;
+
+            xhr.open('POST', form.action, true);
+            xhr.withCredentials = true;
+            xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+            xhr.setRequestHeader('Accept', 'application/json');
+
+            xhr.upload.addEventListener('progress', function (event) {
+                if (!event.lengthComputable) {
+                    return;
+                }
+
+                const percent = Math.round((event.loaded / event.total) * 68);
+                updateProgress(Math.max(progressValue, percent), 'Uploading source files...');
+            });
+
+            xhr.upload.addEventListener('load', function () {
+                updateProgress(Math.max(progressValue, 72), 'Upload complete. Creating crossmatch job...');
+                startProgressRamp(94, 'Preparing matching engine...');
+            });
+
+            xhr.addEventListener('load', function () {
+                if (settled) {
+                    return;
+                }
+
+                settled = true;
+                clearProgressTimer();
+
+                const payload = (() => {
+                    try {
+                        return JSON.parse(xhr.responseText || '{}');
+                    } catch (error) {
+                        const responseText = (xhr.responseText || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+                        return { success: false, message: responseText || 'The server returned an invalid response.' };
+                    }
+                })();
+
+                if (xhr.status < 200 || xhr.status >= 300 || !payload.success) {
+                    reject(new Error(payload.message || 'Unable to start crossmatching.'));
+                    return;
+                }
+
+                updateProgress(100, 'Crossmatch job started.');
+                window.setTimeout(function () {
+                    resolve(payload);
+                }, 220);
+            });
+
+            xhr.addEventListener('error', function () {
+                if (settled) {
+                    return;
+                }
+
+                settled = true;
+                clearProgressTimer();
+                reject(new Error('Unable to start crossmatching.'));
+            });
+
+            xhr.send(formData);
+        });
+    }
+
+    form.addEventListener('submit', async function (event) {
+        event.preventDefault();
+
+        if (!form.checkValidity()) {
+            form.reportValidity();
+            return;
+        }
+
+        const formData = new FormData(form);
+
+        if (submitButton) {
+            submitButton.disabled = true;
+        }
+
+        try {
+            openProgressModal();
+            const payload = await submitCrossmatchRequest(formData);
+            window.location.href = payload.redirect || `start.php?job=${encodeURIComponent(payload.job_id || '')}`;
+        } catch (error) {
+            Swal.close();
+            await Swal.fire({
+                icon: 'error',
+                title: 'Crossmatch failed',
+                text: error && error.message ? error.message : 'Unable to start crossmatching.'
+            });
+        } finally {
+            if (submitButton) {
+                submitButton.disabled = false;
+            }
+        }
+    });
+}());
 </script>
 </body>
 </html>

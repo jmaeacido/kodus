@@ -12,6 +12,14 @@ security_enforce_same_origin();
 security_require_method(['POST']);
 security_require_csrf_token();
 
+function crossmatch_is_ajax_request(): bool
+{
+    $requestedWith = strtolower(trim((string) ($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '')));
+    $accept = strtolower((string) ($_SERVER['HTTP_ACCEPT'] ?? ''));
+
+    return $requestedWith === 'xmlhttprequest' || strpos($accept, 'application/json') !== false;
+}
+
 try {
     $userId = (int) ($_SESSION['user_id'] ?? 0);
     if ($userId <= 0) {
@@ -60,9 +68,25 @@ try {
     $_SESSION['kds_done'] = false;
     $_SESSION['kds_results'] = [];
 
+    if (crossmatch_is_ajax_request()) {
+        security_send_json([
+            'success' => true,
+            'message' => 'Crossmatching job started.',
+            'job_id' => $jobId,
+            'redirect' => "start.php?job={$jobId}",
+        ]);
+    }
+
     header("Location: start.php?job={$jobId}");
     exit;
 } catch (Throwable $e) {
+    if (crossmatch_is_ajax_request()) {
+        security_send_json([
+            'success' => false,
+            'message' => $e->getMessage(),
+        ], 400);
+    }
+
     $msg = htmlspecialchars($e->getMessage(), ENT_QUOTES, 'UTF-8');
     echo "<script src='../plugins/sweetalert2/sweetalert2.min.js'></script>
           <script>

@@ -13,6 +13,12 @@ function mebis_template_ensure_outputs_dir(): void
     if (!is_dir($dir)) {
         mkdir($dir, 0777, true);
     }
+
+    @chmod($dir, 02775);
+
+    if (!is_writable($dir)) {
+        throw new RuntimeException('The generated template output folder is not writable by the web server.');
+    }
 }
 
 function mebis_template_history_ensure_schema(mysqli $conn): void

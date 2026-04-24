@@ -48,18 +48,24 @@ if (!$job) {
   const jobId = <?= json_encode($jobId) ?>;
 
   Swal.fire({
-    title: 'Crossmatching…',
+    title: 'Running Crossmatch',
     html: `
-      <div class="progress" style="height:24px;">
-        <div id="pb" class="progress-bar progress-bar-striped progress-bar-animated" style="width:0%">0%</div>
+      <div class="text-left">
+        <p class="mb-2">Please keep this tab open while we compare beneficiary records.</p>
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <strong id="lbl">Starting...</strong>
+          <span id="pbl">0%</span>
+        </div>
+        <div class="progress" style="height: 0.85rem; border-radius: 999px; overflow: hidden;">
+          <div id="pb" class="progress-bar progress-bar-striped progress-bar-animated bg-primary" role="progressbar" style="width:0%;" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></div>
+        </div>
       </div>
-      <div id="lbl" class="mt-2">Starting…</div>
     `,
-    icon: 'info',
     allowOutsideClick: false,
     showConfirmButton: false,
     didOpen: () => {
       const pb  = document.getElementById('pb');
+      const pbl = document.getElementById('pbl');
       const lbl = document.getElementById('lbl');
 
       let interval = 800;     // start fast
@@ -70,8 +76,18 @@ if (!$job) {
           .then(r => r.json())
           .then(j => {
             pb.style.width = j.percent + '%';
-            pb.textContent = j.percent + '%';
+            pb.setAttribute('aria-valuenow', String(j.percent));
+            pbl.textContent = j.percent + '%';
             lbl.textContent = j.status;
+
+            pb.classList.remove('bg-primary', 'bg-warning', 'bg-success');
+            if (j.percent < 50) {
+              pb.classList.add('bg-primary');
+            } else if (j.percent < 90) {
+              pb.classList.add('bg-warning');
+            } else {
+              pb.classList.add('bg-success');
+            }
 
             if (j.done) {
               clearTimeout(timerId);

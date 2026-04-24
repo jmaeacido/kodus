@@ -17,7 +17,7 @@ server {
     server_name 172.31.240.55;
 
     autoindex off;
-    client_max_body_size 25m;
+    client_max_body_size 80m;
 
     add_header X-Frame-Options "SAMEORIGIN" always;
     add_header X-Content-Type-Options "nosniff" always;

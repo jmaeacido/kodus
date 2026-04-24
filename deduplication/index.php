@@ -142,7 +142,7 @@ $dedupGeneratedFiles = dedup_template_list_outputs(
           <h4 class="m-0 flex-grow-1">Beneficiary Deduplication</h4>
         </div>
         <div class="card-body">
-          <form action="upload_handler.php" method="POST" enctype="multipart/form-data">
+          <form id="deduplicationRunForm" action="upload_handler.php" method="POST" enctype="multipart/form-data" data-loader-text="Starting beneficiary deduplication..." data-no-loader="true">
             <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(security_get_csrf_token(), ENT_QUOTES, 'UTF-8') ?>">
             <div class="row g-3">
               <div class="col-md-6">
@@ -167,7 +167,7 @@ $dedupGeneratedFiles = dedup_template_list_outputs(
               </div>
 
               <div class="col-12 mt-3">
-                <button type="submit" class="btn btn-primary">Start Deduplication</button>
+                <button type="submit" class="btn btn-primary" id="deduplicationRunButton">Start Deduplication</button>
                 <a class="btn btn-link" href="helpers/Deduplication_Template.xlsx" download>Download Template</a>
               </div>
             </div>
@@ -187,6 +187,7 @@ $dedupGeneratedFiles = dedup_template_list_outputs(
 
           <form id="dedupTemplateGenerateForm" action="generate_template.php" method="post" enctype="multipart/form-data" data-loader-text="Building deduplication-ready templates..." data-no-loader="true">
             <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(security_get_csrf_token(), ENT_QUOTES, 'UTF-8') ?>">
+            <input type="hidden" name="template_action" value="generate" id="dedupTemplateAction">
 
             <div class="form-group">
               <label for="dedup-template-files">Final Validated MEB Workbooks</label>
@@ -199,10 +200,20 @@ $dedupGeneratedFiles = dedup_template_list_outputs(
               <ul id="dedup-template-preview-list"></ul>
             </div>
 
-            <button type="submit" class="btn btn-success mt-3" id="dedupTemplateGenerateButton">
-              <i class="fas fa-file-excel mr-1"></i>
-              Generate Deduplication Templates
-            </button>
+            <div class="btn-group mt-3">
+              <button type="submit" class="btn btn-success" id="dedupTemplateGenerateButton" data-template-action="generate">
+                <i class="fas fa-file-excel mr-1"></i>
+                Generate Deduplication Templates
+              </button>
+              <button type="button" class="btn btn-success dropdown-toggle dropdown-toggle-split" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                <span class="sr-only">Toggle template generator actions</span>
+              </button>
+              <div class="dropdown-menu">
+                <button type="submit" class="dropdown-item" data-template-action="generate_and_deduplicate">
+                  Generate Deduplication Templates and Deduplicate
+                </button>
+              </div>
+            </div>
           </form>
         </div>
       </div>
@@ -332,11 +343,201 @@ $dedupGeneratedFiles = dedup_template_list_outputs(
   });
 
   (function () {
+      const form = document.getElementById('deduplicationRunForm');
+      const submitButton = document.getElementById('deduplicationRunButton');
+
+      if (!form) {
+          return;
+      }
+
+      let progressTimer = null;
+      let progressValue = 0;
+
+      function clearRunProgressTimer() {
+          if (progressTimer) {
+              window.clearInterval(progressTimer);
+              progressTimer = null;
+          }
+      }
+
+      function updateRunProgress(value, statusText) {
+          progressValue = Math.max(0, Math.min(100, Number(value || 0)));
+          const progressBar = document.getElementById('dedupRunProgressBar');
+          const progressValueLabel = document.getElementById('dedupRunProgressValue');
+          const progressStatus = document.getElementById('dedupRunProgressStatus');
+
+          if (progressBar) {
+              progressBar.style.width = `${progressValue}%`;
+              progressBar.setAttribute('aria-valuenow', String(Math.round(progressValue)));
+          }
+
+          if (progressValueLabel) {
+              progressValueLabel.textContent = `${Math.round(progressValue)}%`;
+          }
+
+          if (progressStatus && statusText) {
+              progressStatus.textContent = statusText;
+          }
+      }
+
+      function startRunProgressRamp(targetValue, statusText) {
+          clearRunProgressTimer();
+          progressTimer = window.setInterval(function () {
+              if (progressValue >= targetValue) {
+                  clearRunProgressTimer();
+                  return;
+              }
+
+              const remaining = targetValue - progressValue;
+              const increment = remaining > 14 ? 4 : (remaining > 6 ? 2 : 1);
+              updateRunProgress(progressValue + increment, statusText);
+          }, 180);
+      }
+
+      function openRunProgressModal() {
+          progressValue = 8;
+
+          return Swal.fire({
+              title: 'Starting Deduplication',
+              html: `
+                <div class="text-left">
+                  <p class="mb-2">Please keep this tab open while we upload and validate your beneficiary file.</p>
+                  <div class="d-flex justify-content-between align-items-center mb-2">
+                    <strong id="dedupRunProgressStatus">Preparing upload...</strong>
+                    <span id="dedupRunProgressValue">8%</span>
+                  </div>
+                  <div class="progress" style="height: 0.85rem; border-radius: 999px; overflow: hidden;">
+                    <div id="dedupRunProgressBar" class="progress-bar progress-bar-striped progress-bar-animated bg-primary" role="progressbar" style="width: 8%;" aria-valuemin="0" aria-valuemax="100" aria-valuenow="8"></div>
+                  </div>
+                </div>
+              `,
+              allowOutsideClick: false,
+              allowEscapeKey: false,
+              showConfirmButton: false,
+              didOpen: function () {
+                  updateRunProgress(8, 'Preparing upload...');
+              }
+          });
+      }
+
+      function submitDeduplicationRequest(formData) {
+          return new Promise(function (resolve, reject) {
+              const xhr = new XMLHttpRequest();
+              let settled = false;
+
+              xhr.open('POST', form.action, true);
+              xhr.withCredentials = true;
+              xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+              xhr.setRequestHeader('Accept', 'application/json');
+
+              xhr.upload.addEventListener('progress', function (event) {
+                  if (!event.lengthComputable) {
+                      return;
+                  }
+
+                  const percent = Math.round((event.loaded / event.total) * 68);
+                  updateRunProgress(Math.max(progressValue, percent), 'Uploading beneficiary file...');
+              });
+
+              xhr.upload.addEventListener('load', function () {
+                  updateRunProgress(Math.max(progressValue, 72), 'Upload complete. Validating template...');
+                  startRunProgressRamp(94, 'Creating deduplication job...');
+              });
+
+              xhr.addEventListener('load', function () {
+                  if (settled) {
+                      return;
+                  }
+
+                  settled = true;
+                  clearRunProgressTimer();
+
+                  const payload = (() => {
+                      try {
+                          return JSON.parse(xhr.responseText || '{}');
+                      } catch (error) {
+                          const responseText = (xhr.responseText || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+                          return { success: false, message: responseText || 'The server returned an invalid response.' };
+                      }
+                  })();
+
+                  if (xhr.status < 200 || xhr.status >= 300 || !payload.success) {
+                      reject(new Error(payload.message || 'Unable to start deduplication.'));
+                      return;
+                  }
+
+                  updateRunProgress(100, 'Deduplication job started.');
+                  window.setTimeout(function () {
+                      resolve(payload);
+                  }, 220);
+              });
+
+              xhr.addEventListener('error', function () {
+                  if (settled) {
+                      return;
+                  }
+
+                  settled = true;
+                  clearRunProgressTimer();
+                  reject(new Error('Unable to start deduplication.'));
+              });
+
+              xhr.addEventListener('abort', function () {
+                  if (settled) {
+                      return;
+                  }
+
+                  settled = true;
+                  clearRunProgressTimer();
+                  reject(new Error('Deduplication upload was cancelled.'));
+              });
+
+              updateRunProgress(12, 'Starting upload...');
+              startRunProgressRamp(24, 'Starting upload...');
+              xhr.send(formData);
+          });
+      }
+
+      form.addEventListener('submit', async function (event) {
+          event.preventDefault();
+
+          if (!form.checkValidity()) {
+              form.reportValidity();
+              return;
+          }
+
+          const formData = new FormData(form);
+
+          if (submitButton) {
+              submitButton.disabled = true;
+          }
+
+          try {
+              openRunProgressModal();
+              const payload = await submitDeduplicationRequest(formData);
+              window.location.href = payload.redirect || `progress_status.php?job=${encodeURIComponent(payload.job_id || '')}`;
+          } catch (error) {
+              Swal.close();
+              await Swal.fire({
+                  icon: 'error',
+                  title: 'Deduplication failed',
+                  text: error && error.message ? error.message : 'Unable to start deduplication.'
+              });
+          } finally {
+              if (submitButton) {
+                  submitButton.disabled = false;
+              }
+          }
+      });
+  }());
+
+  (function () {
       const form = document.getElementById('dedupTemplateGenerateForm');
       const input = document.getElementById('dedup-template-files');
       const preview = document.getElementById('dedup-template-preview');
       const list = document.getElementById('dedup-template-preview-list');
       const submitButton = document.getElementById('dedupTemplateGenerateButton');
+      const actionInput = document.getElementById('dedupTemplateAction');
 
       if (!input || !preview || !list) {
           return;
@@ -363,6 +564,13 @@ $dedupGeneratedFiles = dedup_template_list_outputs(
       if (!form) {
           return;
       }
+
+      form.addEventListener('click', function (event) {
+          const actionButton = event.target && event.target.closest('[data-template-action]');
+          if (actionButton && actionInput) {
+              actionInput.value = actionButton.getAttribute('data-template-action') || 'generate';
+          }
+      });
 
       let progressTimer = null;
       let progressValue = 0;
@@ -410,12 +618,13 @@ $dedupGeneratedFiles = dedup_template_list_outputs(
 
       function openProgressModal() {
           progressValue = 8;
+          const isCombinedAction = actionInput && actionInput.value === 'generate_and_deduplicate';
 
           return Swal.fire({
               title: 'Generating Templates',
               html: `
                 <div class="text-left">
-                  <p class="mb-2">Please keep this tab open while we upload and build your deduplication-ready files.</p>
+                  <p class="mb-2">${isCombinedAction ? 'Please keep this tab open while we generate templates and queue deduplication.' : 'Please keep this tab open while we upload and build your deduplication-ready files.'}</p>
                   <div class="d-flex justify-content-between align-items-center mb-2">
                     <strong id="dedupTemplateProgressStatus">Preparing upload...</strong>
                     <span id="dedupTemplateProgressValue">8%</span>
@@ -454,8 +663,9 @@ $dedupGeneratedFiles = dedup_template_list_outputs(
               });
 
               xhr.upload.addEventListener('load', function () {
+                  const isCombinedAction = actionInput && actionInput.value === 'generate_and_deduplicate';
                   updateProgress(Math.max(progressValue, 72), 'Upload complete. Generating deduplication templates...');
-                  startProgressRamp(94, 'Formatting rows and preparing downloads...');
+                  startProgressRamp(94, isCombinedAction ? 'Formatting rows and queueing deduplication...' : 'Formatting rows and preparing downloads...');
               });
 
               xhr.addEventListener('load', function () {
@@ -479,7 +689,7 @@ $dedupGeneratedFiles = dedup_template_list_outputs(
                       return;
                   }
 
-                  updateProgress(100, 'Templates ready.');
+                  updateProgress(100, payload.redirect ? 'Deduplication job started.' : 'Templates ready.');
                   window.setTimeout(function () {
                       resolve(payload);
                   }, 220);
@@ -522,6 +732,12 @@ $dedupGeneratedFiles = dedup_template_list_outputs(
           try {
               openProgressModal();
               const payload = await submitGeneratorRequest(formData);
+
+              if (payload.redirect) {
+                  window.location.href = payload.redirect;
+                  return;
+              }
+
               Swal.close();
               await Swal.fire({
                   icon: 'success',

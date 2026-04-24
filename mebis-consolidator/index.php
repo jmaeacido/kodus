@@ -394,7 +394,7 @@ foreach ($savedOutputs as $entry) {
                         </td>
                         <td>
                           <?php if ($fileExists): ?>
-                            <a href="file.php?id=<?= urlencode((string) ($entry['token'] ?? '')) ?>" class="btn btn-sm btn-primary">
+                            <a href="file?id=<?= urlencode((string) ($entry['token'] ?? '')) ?>" class="btn btn-sm btn-primary" download>
                               <i class="fas fa-download mr-1"></i>
                               Download
                             </a>

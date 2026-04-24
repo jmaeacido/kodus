@@ -12,6 +12,19 @@ security_enforce_same_origin();
 security_require_method(['POST']);
 security_require_csrf_token();
 
+function dedupIsAjaxRequest(): bool
+{
+    $requestedWith = strtolower(trim((string) ($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '')));
+    $accept = strtolower((string) ($_SERVER['HTTP_ACCEPT'] ?? ''));
+
+    return $requestedWith === 'xmlhttprequest' || strpos($accept, 'application/json') !== false;
+}
+
+function dedupSendJson(array $payload, int $statusCode = 200): never
+{
+    security_send_json($payload, $statusCode);
+}
+
 function dedupFriendlyColumnLabel(string $field): string
 {
     $labels = [
@@ -30,6 +43,13 @@ function dedupFriendlyColumnLabel(string $field): string
 
 function dedupRenderUploadError(string $message): never
 {
+    if (dedupIsAjaxRequest()) {
+        dedupSendJson([
+            'success' => false,
+            'message' => $message,
+        ], 400);
+    }
+
     $safeMessage = htmlspecialchars($message, ENT_QUOTES, 'UTF-8');
     $html = nl2br($safeMessage);
 
@@ -101,6 +121,41 @@ function dedupPhpHasZipSupport(string $phpBinary): bool
     $output = @shell_exec($command);
 
     return trim((string) $output) === '1';
+}
+
+function dedupPhpCliBinary(): string
+{
+    $candidates = [
+        defined('PHP_BINARY') ? PHP_BINARY : '',
+        '/usr/bin/php',
+        '/usr/local/bin/php',
+        'C:\\xampp\\php\\php.exe',
+    ];
+
+    $candidates = array_merge(
+        $candidates,
+        glob('C:\\laragon\\bin\\php\\php-*\\php.exe') ?: [],
+        glob('C:\\laragon\\bin\\php\\archive\\php-*\\php.exe') ?: []
+    );
+
+    $candidates = array_values(array_unique(array_filter(array_map('strval', $candidates))));
+
+    foreach ($candidates as $candidate) {
+        $binaryName = strtolower(basename(str_replace('\\', '/', $candidate)));
+        if (!is_executable($candidate)) {
+            continue;
+        }
+
+        if (!in_array($binaryName, ['php', 'php.exe', 'php8.4', 'php8.3', 'php8.2', 'php8.1', 'php8.0'], true)) {
+            continue;
+        }
+
+        if (dedupPhpHasZipSupport($candidate)) {
+            return $candidate;
+        }
+    }
+
+    return 'php';
 }
 
 if (!isset($_SESSION['user_id'])) {
@@ -175,35 +230,8 @@ $stmt->execute();
 $jobId = $stmt->insert_id;
 $stmt->close();
 
-// Detect PHP binary
-$phpBinary = defined('PHP_BINARY') ? PHP_BINARY : '';
-$phpBinaryName = strtolower(basename(str_replace('\\', '/', $phpBinary)));
-if ($phpBinaryName !== 'php.exe' || !is_executable($phpBinary)) {
-    $candidates = array_merge(
-        glob('C:\\laragon\\bin\\php\\php-*\\php.exe') ?: [],
-        glob('C:\\laragon\\bin\\php\\archive\\php-*\\php.exe') ?: [],
-        [
-            'C:\\xampp\\php\\php.exe',
-            '/usr/bin/php',
-            '/usr/local/bin/php',
-        ]
-    );
-
-    $candidates = array_values(array_unique($candidates));
-    rsort($candidates, SORT_NATURAL);
-
-    foreach ($candidates as $p) {
-        if (
-            is_executable($p)
-            && strtolower(basename(str_replace('\\', '/', $p))) === 'php.exe'
-            && dedupPhpHasZipSupport($p)
-        ) {
-            $phpBinary = $p;
-            break;
-        }
-    }
-}
-if (!$phpBinary) $phpBinary = 'php';
+// Detect a CLI PHP binary. PHP_BINARY is php-fpm under FPM, which cannot run workers.
+$phpBinary = dedupPhpCliBinary();
 
 $workerPath = __DIR__ . '/worker_v2.php';
 $jobIdArg   = intval($jobId);
@@ -236,5 +264,14 @@ file_put_contents(
 );
 
 // Redirect to progress
+if (dedupIsAjaxRequest()) {
+    dedupSendJson([
+        'success' => true,
+        'message' => 'Deduplication job started.',
+        'job_id' => $jobId,
+        'redirect' => "progress_status.php?job=$jobId",
+    ]);
+}
+
 header("Location: progress_status.php?job=$jobId");
 exit;

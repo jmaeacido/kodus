@@ -3,23 +3,6 @@ include('../header.php');
 include('../sidenav.php');
 require_once __DIR__ . '/helpers/history.php';
 
-function mebis_template_absolute_url(string $path): string
-{
-    global $app_root;
-
-    $host = trim((string) ($_SERVER['HTTP_HOST'] ?? ''));
-    $relativePath = rtrim((string) $app_root, '/') . '/mebis-lgu-template/' . ltrim($path, '/');
-    $https = strtolower((string) ($_SERVER['HTTPS'] ?? ''));
-    $forwardedProto = strtolower((string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? ''));
-    $scheme = ($https === 'on' || $https === '1' || $forwardedProto === 'https') ? 'https' : 'http';
-
-    if ($host === '') {
-        return $relativePath;
-    }
-
-    return $scheme . '://' . $host . $relativePath;
-}
-
 $successMessage = $_SESSION['mebis_template_success'] ?? null;
 $errorMessage = $_SESSION['mebis_template_error'] ?? null;
 unset($_SESSION['mebis_template_success'], $_SESSION['mebis_template_error']);
@@ -141,7 +124,7 @@ $savedOutputs = mebis_template_list_outputs($conn);
               <p>Uploads one or more final validated MEB workbooks and converts each one into a simple import-ready template for the app. The output keeps the beneficiary fields needed for import and removes the <strong>PUROK</strong> prefix so values stay uniform and neat.</p>
             </div>
 
-            <form id="mebisTemplateGenerateForm" action="<?= htmlspecialchars(mebis_template_absolute_url('download'), ENT_QUOTES, 'UTF-8') ?>" method="post" enctype="multipart/form-data" data-loader-text="Building import-ready MEB templates..." data-no-loader="true">
+            <form id="mebisTemplateGenerateForm" action="download" method="post" enctype="multipart/form-data" data-loader-text="Building import-ready MEB templates..." data-no-loader="true">
               <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(security_get_csrf_token(), ENT_QUOTES, 'UTF-8') ?>">
 
               <div class="form-group">
@@ -194,9 +177,13 @@ $savedOutputs = mebis_template_list_outputs($conn);
                       <td><?= htmlspecialchars((string) $entry['source_file'], ENT_QUOTES, 'UTF-8') ?></td>
                       <td><?= htmlspecialchars((string) $entry['created_at'], ENT_QUOTES, 'UTF-8') ?></td>
                       <td class="text-right pr-3">
-                        <a href="<?= htmlspecialchars(mebis_template_absolute_url('file?id=' . urlencode((string) $entry['token'])), ENT_QUOTES, 'UTF-8') ?>" class="btn btn-sm btn-outline-success">
+                        <a href="file_csv?id=<?= urlencode((string) $entry['token']) ?>" class="btn btn-sm btn-outline-success" download>
                           <i class="fas fa-download mr-1"></i>
-                          Download
+                          CSV
+                        </a>
+                        <a href="file?id=<?= urlencode((string) $entry['token']) ?>" class="btn btn-sm btn-outline-secondary ml-1" download>
+                          <i class="fas fa-file-excel mr-1"></i>
+                          XLSX
                         </a>
                       </td>
                     </tr>
@@ -340,6 +327,10 @@ $savedOutputs = mebis_template_list_outputs($conn);
         xhr.withCredentials = true;
         xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
         xhr.setRequestHeader('Accept', 'application/json');
+        const csrfTokenInput = form.querySelector('input[name="csrf_token"]');
+        if (csrfTokenInput && csrfTokenInput.value) {
+          xhr.setRequestHeader('X-CSRF-Token', csrfTokenInput.value);
+        }
 
         xhr.upload.addEventListener('progress', function (event) {
           if (!event.lengthComputable) {
@@ -367,15 +358,20 @@ $savedOutputs = mebis_template_list_outputs($conn);
             try {
               return JSON.parse(xhr.responseText || '{}');
             } catch (error) {
+              const responseText = (xhr.responseText || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+              const fallbackMessage = xhr.status === 413
+                ? 'The uploaded files are larger than the web server allows.'
+                : (responseText || 'The server returned an invalid response.');
+
               return {
                 success: false,
-                message: 'The server returned an invalid response.'
+                message: fallbackMessage
               };
             }
           })();
 
           if (xhr.status < 200 || xhr.status >= 300 || !payload.success) {
-            reject(new Error(payload.message || 'Unable to generate LGU template files.'));
+            reject(new Error(payload.message || `Unable to generate LGU template files. HTTP ${xhr.status}.`));
             return;
           }
 
@@ -434,6 +430,11 @@ $savedOutputs = mebis_template_list_outputs($conn);
     }
 
     form.addEventListener('submit', async function (event) {
+      if (!form.checkValidity()) {
+        form.reportValidity();
+        return;
+      }
+
       event.preventDefault();
 
       const formData = new FormData(form);

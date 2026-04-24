@@ -33,7 +33,6 @@ try {
 }
 
 security_require_method(['POST']);
-security_require_csrf_token();
 
 function mebis_template_is_ajax_request(): bool
 {
@@ -46,10 +45,22 @@ function mebis_template_is_ajax_request(): bool
 function mebis_template_finish(bool $success, string $message, int $statusCode = 200): void
 {
     if (mebis_template_is_ajax_request()) {
+        if (!$success) {
+            error_log(sprintf(
+                'MEBIS LGU template request failed: %s [status=%d, content_length=%s, post_max_size=%s, upload_max_filesize=%s]',
+                $message,
+                $statusCode,
+                (string) ($_SERVER['CONTENT_LENGTH'] ?? ''),
+                (string) ini_get('post_max_size'),
+                (string) ini_get('upload_max_filesize')
+            ));
+        }
+
         security_send_json([
             'success' => $success,
             'message' => $message,
-        ], $statusCode);
+            'status_code' => $statusCode,
+        ], $success ? $statusCode : 200);
     }
 
     if ($success) {
@@ -63,14 +74,65 @@ function mebis_template_finish(bool $success, string $message, int $statusCode =
     exit;
 }
 
+function mebis_template_ini_bytes(string $value): int
+{
+    $value = trim($value);
+    if ($value === '') {
+        return 0;
+    }
+
+    $unit = strtolower(substr($value, -1));
+    $bytes = (float) $value;
+
+    if ($unit === 'g') {
+        $bytes *= 1024;
+    }
+
+    if (in_array($unit, ['g', 'm'], true)) {
+        $bytes *= 1024;
+    }
+
+    if (in_array($unit, ['g', 'm', 'k'], true)) {
+        $bytes *= 1024;
+    }
+
+    return (int) $bytes;
+}
+
+function mebis_template_assert_post_body_available(): void
+{
+    $contentLength = (int) ($_SERVER['CONTENT_LENGTH'] ?? 0);
+    $postMaxBytes = mebis_template_ini_bytes((string) ini_get('post_max_size'));
+
+    if ($contentLength > 0 && $postMaxBytes > 0 && $contentLength > $postMaxBytes && $_POST === [] && $_FILES === []) {
+        mebis_template_finish(false, sprintf(
+            'The uploaded files are too large for the server limit. Current post_max_size is %s and upload_max_filesize is %s.',
+            (string) ini_get('post_max_size'),
+            (string) ini_get('upload_max_filesize')
+        ), 400);
+    }
+}
+
 function mebis_template_redirect_with_error(string $message): void
 {
     mebis_template_finish(false, $message, 400);
 }
 
+mebis_template_assert_post_body_available();
+security_require_csrf_token();
+
 function mebis_template_assert_uploaded_file(array $file, array $allowedExtensions, string $label): array
 {
-    if (($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+    $uploadError = (int) ($file['error'] ?? UPLOAD_ERR_NO_FILE);
+    if ($uploadError === UPLOAD_ERR_INI_SIZE || $uploadError === UPLOAD_ERR_FORM_SIZE) {
+        throw new RuntimeException(sprintf(
+            '%s is larger than the server upload limit. Current upload_max_filesize is %s.',
+            $label,
+            (string) ini_get('upload_max_filesize')
+        ));
+    }
+
+    if ($uploadError !== UPLOAD_ERR_OK) {
         throw new RuntimeException(sprintf('%s upload failed.', $label));
     }
 

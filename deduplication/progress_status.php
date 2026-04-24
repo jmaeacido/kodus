@@ -25,62 +25,90 @@ if ($jobId > 0 && !$job) {
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Running Deduplication</title>
   <script src="../plugins/sweetalert2/sweetalert2.min.js"></script>
-  <style>
-    #swal-progress {
-      width: 100%; background: #e0e0e0;
-      border-radius: 8px; overflow: hidden;
-      margin-top: 15px; height: 25px;
-      box-shadow: inset 0 1px 3px rgba(0,0,0,.2);
-    }
-    #swal-progress-bar {
-      width: 0%; height: 100%; text-align: center;
-      color: #fff; line-height: 25px; font-weight: bold;
-      border-radius: 8px 0 0 8px;
-      transition: width 0.8s ease, background-color 0.5s ease;
-      background-color: #3085d6;
-    }
-  </style>
 </head>
 <body>
 <script>
 const deduplicationCsrfToken = <?= json_encode(security_get_csrf_token()) ?>;
+const deduplicationJobId = <?= json_encode((string) $jobId) ?>;
 
 Swal.fire({
-  title: 'Processing Deduplication...',
-  html: `<div id="swal-progress"><div id="swal-progress-bar">0%</div></div>`,
+  title: 'Running Deduplication',
+  html: `
+    <div class="text-left">
+      <p class="mb-2">Please keep this tab open while we compare beneficiary records.</p>
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <strong id="dedupJobProgressStatus">Preparing job...</strong>
+        <span id="dedupJobProgressValue">0%</span>
+      </div>
+      <div class="progress" style="height: 0.85rem; border-radius: 999px; overflow: hidden;">
+        <div
+          id="dedupJobProgressBar"
+          class="progress-bar progress-bar-striped progress-bar-animated bg-primary"
+          role="progressbar"
+          style="width: 0%;"
+          aria-valuemin="0"
+          aria-valuemax="100"
+          aria-valuenow="0"
+        ></div>
+      </div>
+    </div>
+  `,
   allowOutsideClick: false,
   showCancelButton: true,
   cancelButtonText: 'Cancel',
   showConfirmButton: false,
   didOpen: () => {
-    const progressBar = Swal.getHtmlContainer().querySelector('#swal-progress-bar');
+    const progressBar = Swal.getHtmlContainer().querySelector('#dedupJobProgressBar');
+    const progressValue = Swal.getHtmlContainer().querySelector('#dedupJobProgressValue');
+    const progressStatus = Swal.getHtmlContainer().querySelector('#dedupJobProgressStatus');
     let lastProgress = 0;
 
+    function setProgress(value, statusText) {
+      const progress = Math.max(0, Math.min(100, Number(value || 0)));
+      progressBar.style.width = progress + '%';
+      progressBar.setAttribute('aria-valuenow', String(Math.round(progress)));
+      progressValue.textContent = Math.round(progress) + '%';
+      if (statusText) {
+        progressStatus.textContent = statusText;
+      }
+
+      progressBar.classList.remove('bg-primary', 'bg-warning', 'bg-success', 'bg-danger');
+      if (progress < 50) {
+        progressBar.classList.add('bg-primary');
+      } else if (progress < 90) {
+        progressBar.classList.add('bg-warning');
+      } else {
+        progressBar.classList.add('bg-success');
+      }
+    }
+
     const interval = setInterval(() => {
-      fetch('status_api.php?job=<?= $jobId ?>')
+      fetch('status_api.php?job=' + encodeURIComponent(deduplicationJobId))
         .then(res => res.json())
         .then(data => {
           let progress = data.progress ?? 0;
 
+          if (data.status === 'pending') {
+            setProgress(progress, 'Waiting for the worker to start...');
+          }
+
+          if (data.status === 'processing' && progress <= lastProgress) {
+            setProgress(progress, 'Comparing beneficiary records...');
+          }
+
           if (progress > lastProgress) {
-            progressBar.style.width = progress + '%';
-            progressBar.textContent = progress + '%';
+            setProgress(progress, progress < 100 ? 'Comparing beneficiary records...' : 'Finalizing results...');
             lastProgress = progress;
-            if (progress < 50) progressBar.style.backgroundColor = '#3085d6';
-            else if (progress < 90) progressBar.style.backgroundColor = '#ff9800';
-            else progressBar.style.backgroundColor = '#28a745';
           }
 
           if (data.status === 'done') {
             clearInterval(interval);
-            progressBar.style.width = '100%';
-            progressBar.textContent = '100%';
-            progressBar.style.backgroundColor = '#28a745';
+            setProgress(100, 'Deduplication complete.');
             setTimeout(() => {
               Swal.fire({
                 icon: 'success',
                 title: 'Deduplication Complete',
-                html: `Processed successfully.<br><a href="results.php?job=<?= $jobId ?>" class="btn btn-success mt-2">View Results</a>`,
+                html: `Processed successfully.<br><a href="results.php?job=${encodeURIComponent(deduplicationJobId)}" class="btn btn-success mt-2">View Results</a>`,
                 allowOutsideClick: false
               });
             }, 500);
@@ -88,7 +116,9 @@ Swal.fire({
 
           if (data.status === 'failed') {
             clearInterval(interval);
-            progressBar.style.backgroundColor = '#dc3545';
+            progressBar.classList.remove('bg-primary', 'bg-warning', 'bg-success');
+            progressBar.classList.add('bg-danger');
+            progressStatus.textContent = 'Deduplication failed.';
             Swal.fire({
               icon: 'error',
               title: 'Deduplication Failed',
@@ -101,7 +131,7 @@ Swal.fire({
 
     Swal.getCancelButton().addEventListener('click', () => {
       const cancelBody = new URLSearchParams({
-        job: '<?= $jobId ?>',
+        job: deduplicationJobId,
         csrf_token: deduplicationCsrfToken
       });
 

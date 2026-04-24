@@ -10,7 +10,7 @@ function app_notification_visibility_sql_for_current_user(): string
         return '';
     }
 
-    return " AND n.category <> 'first_login'";
+    return " AND n.category NOT IN ('first_login', 'users')";
 }
 
 function app_notification_ensure_schema(mysqli $conn): void

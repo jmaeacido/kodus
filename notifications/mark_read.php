@@ -20,12 +20,13 @@ $markedCount = 0;
 $unreadCount = 0;
 
 $countUnread = static function () use ($conn, $userId): int {
+    $visibilitySql = app_notification_visibility_sql_for_current_user();
     $stmt = $conn->prepare(
         'SELECT COUNT(*) AS unread
          FROM app_notifications n
          LEFT JOIN app_notification_reads r
            ON r.notification_id = n.id AND r.user_id = ?
-         WHERE r.notification_id IS NULL'
+         WHERE r.notification_id IS NULL' . $visibilitySql
     );
 
     if (!$stmt) {

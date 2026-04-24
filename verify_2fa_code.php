@@ -153,7 +153,7 @@ if ($login2faUserId !== null) {
     if (!empty($_SESSION['is_first_login'])) {
         $fullName = trim((string) ($user['first_name'] ?? '') . ' ' . (string) ($user['last_name'] ?? ''));
         app_notification_create($conn, [
-            'category' => 'users',
+            'category' => 'first_login',
             'title' => $isSetupMode ? 'First login completed with 2FA setup' : 'First login detected',
             'message' => $fullName . ($isSetupMode ? ' enrolled an authenticator app and completed first login.' : ' completed a first login with 2FA.'),
             'url' => app_notification_build_url('admin/users_management'),

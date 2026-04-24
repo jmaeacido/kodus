@@ -91,6 +91,7 @@ function sso_build_authorize_redirect(): string
 
     return $config['authorize_url'] . '?' . http_build_query([
         'response_type' => 'code',
+        'response_mode' => 'query',
         'client_id' => $config['client_id'],
         'redirect_uri' => $config['redirect_uri'],
         'scope' => $config['scope'],
@@ -182,18 +183,24 @@ function sso_http_request(string $method, string $url, array $options = []): arr
 
 function sso_validate_callback_request(): array
 {
-    if (!empty($_GET['error'])) {
-        $description = trim((string) ($_GET['error_description'] ?? ''));
-        $message = 'SSO provider error: ' . (string) $_GET['error'];
+    $requestData = $_SERVER['REQUEST_METHOD'] === 'POST' ? $_POST : $_GET;
+    if (!is_array($requestData) || $requestData === []) {
+        $requestData = $_REQUEST;
+    }
+
+    if (!empty($requestData['error'])) {
+        $description = trim((string) ($requestData['error_description'] ?? ''));
+        $message = 'SSO provider error: ' . (string) $requestData['error'];
         if ($description !== '') {
             $message .= ' (' . $description . ')';
         }
         throw new RuntimeException($message);
     }
 
-    $code = trim((string) ($_GET['code'] ?? ''));
-    $state = trim((string) ($_GET['state'] ?? ''));
+    $code = trim((string) ($requestData['code'] ?? ''));
+    $state = trim((string) ($requestData['state'] ?? ''));
     if ($code === '' || $state === '') {
+        error_log('SSO callback missing code/state. Method: ' . (string) ($_SERVER['REQUEST_METHOD'] ?? 'GET') . ' | GET keys: ' . implode(',', array_keys($_GET ?? [])) . ' | POST keys: ' . implode(',', array_keys($_POST ?? [])));
         throw new RuntimeException('Missing authorization response from Caraga Connect.');
     }
 
@@ -201,6 +208,7 @@ function sso_validate_callback_request(): array
     unset($_SESSION['sso_state']);
 
     if ($expectedState === '' || !hash_equals($expectedState, $state)) {
+        error_log('SSO callback state mismatch. Method: ' . (string) ($_SERVER['REQUEST_METHOD'] ?? 'GET') . ' | Expected state present: ' . ($expectedState !== '' ? 'yes' : 'no'));
         throw new RuntimeException('Invalid SSO state. Please try again.');
     }
 

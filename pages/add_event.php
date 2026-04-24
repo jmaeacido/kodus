@@ -106,7 +106,7 @@ try {
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         ");
         $stmt->bind_param(
-            "ssisssssii", 
+            "ssissssii", 
             $title, 
             $description, 
             $all_day, 
@@ -203,6 +203,6 @@ try {
         $stmt->close();
     }
 
-} catch (Exception $e) {
+} catch (Throwable $e) {
     echo json_encode(["success" => false, "message" => $e->getMessage()]);
 }

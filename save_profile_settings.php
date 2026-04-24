@@ -115,6 +115,9 @@ if ($result) {
     if (!empty($password)) {
         password_policy_mark_compliant($conn, (int) $userId);
     }
+    profile_review_mark_completed($conn, (int) $userId);
+    $_SESSION['profile_review_required'] = false;
+    unset($_SESSION['profile_review_login_prompt']);
     $_SESSION['settings_flash'] = [
         'type' => 'success',
         'title' => 'Changes Saved',

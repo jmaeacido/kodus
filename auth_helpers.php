@@ -46,6 +46,7 @@ function auth_store_user_session(array $user): void
     $_SESSION['picture'] = $user['picture'];
     $_SESSION['sso_avatar_url'] = $user['sso_avatar_url'] ?? '';
     $_SESSION['user_type'] = $user['userType'];
+    $_SESSION['profile_review_required'] = !empty($user['profile_review_required']);
     $themePreference = $user['theme_preference'] ?? 'light';
     theme_store_session_preference($themePreference);
     theme_store_client_preference($themePreference);
@@ -117,6 +118,10 @@ function auth_complete_login(mysqli $conn, array $user): void
 {
     auth_ensure_login_tracking_schema($conn);
     $_SESSION['is_first_login'] = empty($user['last_login_at']);
+    $profileReviewRequired = function_exists('profile_review_require_after_login')
+        ? profile_review_require_after_login($conn, $user, !empty($_SESSION['is_first_login']))
+        : false;
+    $user['profile_review_required'] = $profileReviewRequired ? 1 : 0;
 
     if (function_exists('two_factor_recovery_code_count') && !empty($user['two_fa_enabled'])) {
         $remainingRecoveryCodes = two_factor_recovery_code_count($user);
@@ -142,6 +147,12 @@ function auth_complete_login(mysqli $conn, array $user): void
 
     session_regenerate_id(true);
     auth_store_user_session($user);
+    $_SESSION['profile_review_required'] = $profileReviewRequired;
+    $_SESSION['profile_review_login_prompt'] = $profileReviewRequired ? [
+        'title' => 'Review Your Profile Information',
+        'message' => 'Please review and update your Profile Information in Settings. Some information from SSO may not match the required KODUS profile fields.',
+        'settings_url' => auth_relative_prefix_to_app_root() . 'settings',
+    ] : null;
 }
 
 function auth_issue_remember_me_token(mysqli $conn, int $userId): void

@@ -6,6 +6,7 @@
 	require_once __DIR__ . '/audit_helpers.php';
 	require_once __DIR__ . '/meb_change_history_helpers.php';
 	require_once __DIR__ . '/password_policy_helpers.php';
+	require_once __DIR__ . '/profile_review_helpers.php';
 	require_once __DIR__ . '/sso_helpers.php';
 	require_once __DIR__ . '/theme_helpers.php';
 	require_once __DIR__ . '/two_factor_helpers.php';
@@ -46,6 +47,7 @@
 
 	theme_ensure_schema($conn);
 	password_policy_ensure_schema($conn);
+	profile_review_ensure_schema($conn);
 	sso_ensure_schema($conn);
 	two_factor_ensure_schema($conn);
 	kodus_app_settings_ensure_schema($conn);

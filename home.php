@@ -18,6 +18,8 @@ $welcomeMessage = $isFirstLogin
     : 'Track beneficiaries, review coverage, and jump into the workflows your team uses every day.';
 $authNotice = is_array($_SESSION['auth_notice'] ?? null) ? $_SESSION['auth_notice'] : null;
 unset($_SESSION['auth_notice']);
+$profileReviewLoginPrompt = is_array($_SESSION['profile_review_login_prompt'] ?? null) ? $_SESSION['profile_review_login_prompt'] : null;
+unset($_SESSION['profile_review_login_prompt']);
 $lowRecoveryCodesNotice = is_array($_SESSION['low_recovery_codes_notice'] ?? null) ? $_SESSION['low_recovery_codes_notice'] : null;
 unset($_SESSION['low_recovery_codes_notice']);
 $currentUserType = auth_current_user_type();
@@ -430,23 +432,46 @@ if ($canViewOperations) {
 <script src="<?php echo $app_root; ?>plugins/chart.js/Chart.min.js"></script>
 <script src="<?php echo $app_root; ?>dist/js/adminlte.min.js"></script>
 <script src="<?php echo $app_root; ?>plugins/jquery-knob/jquery.knob.min.js"></script>
-<?php if ($authNotice): ?>
 <script>
   window.addEventListener('load', function () {
     if (window.KodusPageLoader) {
       window.KodusPageLoader.hide();
     }
 
-    Swal.fire({
-      icon: <?= json_encode($authNotice['icon'] ?? 'success') ?>,
-      title: <?= json_encode($authNotice['title'] ?? 'Welcome') ?>,
-      text: <?= json_encode($authNotice['text'] ?? '') ?>,
-      timer: 1800,
-      showConfirmButton: false
+    let chain = Promise.resolve();
+
+    <?php if ($authNotice): ?>
+    chain = chain.then(function () {
+      return Swal.fire({
+        icon: <?= json_encode($authNotice['icon'] ?? 'success') ?>,
+        title: <?= json_encode($authNotice['title'] ?? 'Welcome') ?>,
+        text: <?= json_encode($authNotice['text'] ?? '') ?>,
+        timer: 1800,
+        showConfirmButton: false
+      });
     });
+    <?php endif; ?>
+
+    <?php if ($profileReviewLoginPrompt): ?>
+    chain = chain.then(function () {
+      return Swal.fire({
+        icon: 'info',
+        title: <?= json_encode($profileReviewLoginPrompt['title'] ?? 'Review Your Profile Information') ?>,
+        text: <?= json_encode($profileReviewLoginPrompt['message'] ?? '') ?>,
+        showCloseButton: true,
+        showCancelButton: true,
+        confirmButtonText: 'Go to Settings',
+        cancelButtonText: 'Remind me later',
+        reverseButtons: true
+      }).then(function (result) {
+        if (result.isConfirmed) {
+          window.location.href = <?= json_encode($profileReviewLoginPrompt['settings_url'] ?? ($app_root . 'settings')) ?>;
+        }
+      });
+    });
+    <?php endif; ?>
   }, { once: true });
 </script>
-<?php endif; ?>
 <script>
   if ('scrollRestoration' in history) {
     history.scrollRestoration = 'manual';

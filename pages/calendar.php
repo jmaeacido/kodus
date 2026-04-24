@@ -1163,6 +1163,27 @@ $(function () {
     modal.modal('hide');
   }
 
+  $(document).on('click', '.calendar-modal-close', function(e) {
+    const modal = $(this).closest('.modal');
+    const activeElement = document.activeElement;
+
+    if (activeElement && modal.length && modal[0].contains(activeElement) && typeof activeElement.blur === 'function') {
+      activeElement.blur();
+    }
+
+    if (modal.length) {
+      e.preventDefault();
+      modal.modal('hide');
+    }
+  });
+
+  $('#eventModal, #viewEventModal').on('hide.bs.modal', function() {
+    const activeElement = document.activeElement;
+    if (activeElement && this.contains(activeElement) && typeof activeElement.blur === 'function') {
+      activeElement.blur();
+    }
+  });
+
   function confirmDeleteEvent(id, modalSelector) {
     if (!id) {
       return;

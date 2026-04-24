@@ -4,6 +4,7 @@ security_bootstrap_session();
 require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/../auth_helpers.php';
 require_once __DIR__ . '/../notification_helpers.php';
+require_once __DIR__ . '/../app_location_helpers.php';
 require_once __DIR__ . '/../sso_helpers.php';
 
 if (!sso_is_configured()) {
@@ -41,7 +42,12 @@ try {
     ];
 
     $ip = security_get_client_ip();
-    notification_log_audit($conn, (int) $user['id'], 'Login', 'SSO login via Caraga Connect. IP: ' . $ip, $ip);
+    $userAgent = $_SERVER['HTTP_USER_AGENT'] ?? 'Unknown';
+    $time = date('Y-m-d H:i:s');
+    $location = app_describe_client_location();
+    $mailResult = notification_send_login_alert($user, $ip, $time, $location);
+    notification_log_mail($conn, (string) ($user['email'] ?? ''), $mailResult['subject'], $mailResult['status'], $mailResult['message']);
+    notification_log_audit($conn, (int) $user['id'], 'Login', "SSO login via Caraga Connect. IP: {$ip}, Location: {$location}, User Agent: {$userAgent}", $ip);
 
     header('Location: ../home');
     exit;

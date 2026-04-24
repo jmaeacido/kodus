@@ -10,6 +10,7 @@ if (strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET')) !== 'POST') {
 
 require_once __DIR__ . '/notification_helpers.php';
 require_once __DIR__ . '/app_notification_helpers.php';
+require_once __DIR__ . '/app_location_helpers.php';
 require_once __DIR__ . '/theme_helpers.php';
 
 function redirect_with_login_error(string $message, bool $preserveFormValues = false): void
@@ -116,7 +117,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $ip = security_get_client_ip();
         $userAgent = $_SERVER['HTTP_USER_AGENT'] ?? 'Unknown';
         $time = date('Y-m-d H:i:s');
-        $location = 'Unavailable';
+        $location = app_describe_client_location();
 
         if (!empty($user['two_fa_enabled'])) {
             $_SESSION['2fa_user_id'] = $user['id'];

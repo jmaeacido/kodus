@@ -139,6 +139,127 @@ function app_current_coordinates(): ?array
     return null;
 }
 
+function app_location_reverse_geocode_label(float $latitude, float $longitude): ?string
+{
+    $url = sprintf(
+        'https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=%s&lon=%s&zoom=10&addressdetails=1',
+        rawurlencode(sprintf('%.6f', $latitude)),
+        rawurlencode(sprintf('%.6f', $longitude))
+    );
+
+    $responseBody = null;
+
+    if (function_exists('curl_init')) {
+        $curl = curl_init($url);
+        if ($curl !== false) {
+            curl_setopt_array($curl, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_FOLLOWLOCATION => false,
+                CURLOPT_TIMEOUT => 4,
+                CURLOPT_CONNECTTIMEOUT => 2,
+                CURLOPT_HTTPHEADER => [
+                    'Accept: application/json',
+                    'User-Agent: KODUS/1.0 (+https://kodus.local)',
+                ],
+            ]);
+
+            $result = curl_exec($curl);
+            $status = (int) curl_getinfo($curl, CURLINFO_HTTP_CODE);
+            curl_close($curl);
+
+            if (is_string($result) && $status >= 200 && $status < 300) {
+                $responseBody = $result;
+            }
+        }
+    }
+
+    if ($responseBody === null) {
+        $context = stream_context_create([
+            'http' => [
+                'method' => 'GET',
+                'timeout' => 4,
+                'header' => "Accept: application/json\r\nUser-Agent: KODUS/1.0 (+https://kodus.local)\r\n",
+            ],
+        ]);
+        $result = @file_get_contents($url, false, $context);
+        if (is_string($result) && $result !== '') {
+            $responseBody = $result;
+        }
+    }
+
+    if (!is_string($responseBody) || trim($responseBody) === '') {
+        return null;
+    }
+
+    $payload = json_decode($responseBody, true);
+    if (!is_array($payload)) {
+        return null;
+    }
+
+    $address = is_array($payload['address'] ?? null) ? $payload['address'] : [];
+    $locality = '';
+    foreach (['city', 'town', 'municipality', 'county', 'state'] as $key) {
+        $value = trim((string) ($address[$key] ?? ''));
+        if ($value !== '') {
+            $locality = $value;
+            break;
+        }
+    }
+
+    $country = trim((string) ($address['country'] ?? ''));
+    if ($locality !== '' && $country !== '') {
+        return $locality . ', ' . $country;
+    }
+    if ($locality !== '') {
+        return $locality;
+    }
+    if ($country !== '') {
+        return $country;
+    }
+
+    $displayName = trim((string) ($payload['display_name'] ?? ''));
+    if ($displayName !== '') {
+        $parts = array_filter(array_map('trim', explode(',', $displayName)));
+        return implode(', ', array_slice($parts, 0, 3));
+    }
+
+    return null;
+}
+
+function app_describe_client_location(): string
+{
+    $snapshot = app_location_session_snapshot();
+    $latitude = $snapshot['latitude'];
+    $longitude = $snapshot['longitude'];
+
+    if ($latitude === null || $longitude === null) {
+        return 'Unavailable';
+    }
+
+    $cachedLatitude = app_location_normalize_coordinate($_SESSION['app_client_location_label_latitude'] ?? null);
+    $cachedLongitude = app_location_normalize_coordinate($_SESSION['app_client_location_label_longitude'] ?? null);
+    $cachedLabel = trim((string) ($_SESSION['app_client_location_label'] ?? ''));
+
+    if ($cachedLabel !== '' && $cachedLatitude === $latitude && $cachedLongitude === $longitude) {
+        return $cachedLabel;
+    }
+
+    $resolvedLabel = app_location_reverse_geocode_label($latitude, $longitude);
+    if ($resolvedLabel !== null && $resolvedLabel !== '') {
+        $_SESSION['app_client_location_label'] = $resolvedLabel;
+        $_SESSION['app_client_location_label_latitude'] = $latitude;
+        $_SESSION['app_client_location_label_longitude'] = $longitude;
+        return $resolvedLabel;
+    }
+
+    $fallback = sprintf('Lat %.6f, Lng %.6f', $latitude, $longitude);
+    $_SESSION['app_client_location_label'] = $fallback;
+    $_SESSION['app_client_location_label_latitude'] = $latitude;
+    $_SESSION['app_client_location_label_longitude'] = $longitude;
+
+    return $fallback;
+}
+
 function app_store_client_location_context(array $input): bool
 {
     $changed = false;
@@ -163,6 +284,11 @@ function app_store_client_location_context(array $input): bool
         if ($storedLatitude !== $latitude || $storedLongitude !== $longitude) {
             $_SESSION['app_client_latitude'] = $latitude;
             $_SESSION['app_client_longitude'] = $longitude;
+            unset(
+                $_SESSION['app_client_location_label'],
+                $_SESSION['app_client_location_label_latitude'],
+                $_SESSION['app_client_location_label_longitude']
+            );
             $changed = true;
         }
     }
@@ -173,4 +299,3 @@ function app_store_client_location_context(array $input): bool
 
     return $changed;
 }
-

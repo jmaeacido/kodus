@@ -56,6 +56,7 @@ $stmt->close();
 
 $user = is_array($user) ? $user : [];
 $localProfileStatus = kodus_profile_completion_status($user);
+$profileReviewRequired = profile_review_is_required($user);
 $profileNotice = null;
 $ssoProfileDefaults = [];
 $profileFields = ['first_name', 'middle_name', 'last_name', 'ext', 'position', 'positionAbr', 'area', 'email', 'username'];
@@ -106,6 +107,7 @@ if ($needsSsoFallback && sso_is_configured()) {
 
 $user = array_merge($ssoProfileDefaults, $user);
 $showFirstTimeSsoProfilePrompt = $localProfileStatus['needs_attention']
+    && !$profileReviewRequired
     && !empty($_SESSION['is_first_login'])
     && !empty($_SESSION['is_sso_authenticated'])
     && empty($_SESSION['settings_sso_profile_prompt_shown']);
@@ -242,6 +244,16 @@ $hasCustomPosition = $currentPosition !== '' && !array_key_exists($currentPositi
                 <div class="alert alert-<?= htmlspecialchars((string) ($profileNotice['type'] ?? 'info'), ENT_QUOTES, 'UTF-8') ?> alert-dismissible fade show" role="alert">
                     <strong><?= htmlspecialchars((string) ($profileNotice['title'] ?? 'Profile Notice'), ENT_QUOTES, 'UTF-8') ?>:</strong>
                     <?= htmlspecialchars((string) ($profileNotice['message'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
+                    <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <?php endif; ?>
+
+                <?php if ($profileReviewRequired): ?>
+                <div class="alert alert-info alert-dismissible fade show" role="alert">
+                    <strong>Profile Review Reminder:</strong>
+                    Please review and update your Profile Information in Settings. Some information from SSO may not match the required KODUS profile fields.
                     <button type="button" class="close" data-dismiss="alert" aria-label="Close">
                         <span aria-hidden="true">&times;</span>
                     </button>
@@ -938,5 +950,4 @@ $(function () {
 </script>
 </body>
 </html>
-
 

@@ -188,7 +188,7 @@ if ($activeUsersResult) {
 }
 
 $deletedUsersResult = $conn->query("
-    SELECT id, username, email, first_name, middle_name, last_name, ext, picture, sso_avatar_url, deleted_at
+    SELECT id, username, email, userType, first_name, middle_name, last_name, ext, picture, sso_avatar_url, date_registered, last_activity, is_online, deleted_at
     FROM users
     WHERE deleted_at IS NOT NULL
     ORDER BY id ASC
@@ -199,6 +199,12 @@ if ($deletedUsersResult) {
     while ($row = $deletedUsersResult->fetch_assoc()) {
         $row['full_name'] = user_management_full_name($row);
         $row['avatar_url'] = user_management_avatar_url($row['picture'] ?? '', $row['sso_avatar_url'] ?? '', $base_url);
+        $row['presence'] = [
+            'label' => 'Deactivated / Deleted',
+            'badge' => 'danger',
+            'detail' => 'Deleted at ' . (string) ($row['deleted_at'] ?? ''),
+            'sort' => 3,
+        ];
         $deletedUsers[] = $row;
     }
 }
@@ -297,6 +303,21 @@ $deactivatedCount = count($deletedUsers);
     .users-management-page .small-box .inner p {
       font-weight: 600;
       letter-spacing: 0.01em;
+    }
+    .users-management-page .status-filter-card {
+      cursor: pointer;
+      border: 2px solid transparent;
+      transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease, filter 0.18s ease;
+    }
+    .users-management-page .status-filter-card:hover,
+    .users-management-page .status-filter-card:focus {
+      transform: translateY(-3px);
+      filter: brightness(1.04);
+      outline: none;
+    }
+    .users-management-page .status-filter-card.is-active {
+      border-color: rgba(255, 255, 255, 0.85);
+      box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.18), var(--users-soft-shadow);
     }
     .users-management-page .summary-note {
       border-radius: 0.95rem;
@@ -663,7 +684,7 @@ $deactivatedCount = count($deletedUsers);
 
         <div class="row mb-3">
           <div class="col-lg-3 col-md-6">
-            <div class="small-box bg-success">
+            <div class="small-box bg-success status-filter-card" role="button" tabindex="0" data-classification-filter="Online" aria-pressed="false" title="Filter Classification table by Online users">
               <div class="inner">
                 <h3 id="onlineCount"><?php echo (int) $statusSummary['Online']; ?></h3>
                 <p>Online</p>
@@ -672,7 +693,7 @@ $deactivatedCount = count($deletedUsers);
             </div>
           </div>
           <div class="col-lg-3 col-md-6">
-            <div class="small-box bg-warning">
+            <div class="small-box bg-warning status-filter-card" role="button" tabindex="0" data-classification-filter="Idle" aria-pressed="false" title="Filter Classification table by Idle users">
               <div class="inner">
                 <h3 id="idleCount"><?php echo (int) $statusSummary['Idle']; ?></h3>
                 <p>Idle</p>
@@ -681,7 +702,7 @@ $deactivatedCount = count($deletedUsers);
             </div>
           </div>
           <div class="col-lg-3 col-md-6">
-            <div class="small-box bg-secondary">
+            <div class="small-box bg-secondary status-filter-card" role="button" tabindex="0" data-classification-filter="Offline" aria-pressed="false" title="Filter Classification table by Offline users">
               <div class="inner">
                 <h3 id="offlineCount"><?php echo (int) $statusSummary['Offline']; ?></h3>
                 <p>Offline</p>
@@ -690,7 +711,7 @@ $deactivatedCount = count($deletedUsers);
             </div>
           </div>
           <div class="col-lg-3 col-md-6">
-            <div class="small-box bg-danger">
+            <div class="small-box bg-danger status-filter-card" role="button" tabindex="0" data-classification-filter="Deactivated / Deleted" aria-pressed="false" title="Filter Classification table by Deactivated / Deleted users">
               <div class="inner">
                 <h3 id="deactivatedCount"><?php echo (int) $deactivatedCount; ?></h3>
                 <p>Deactivated / Deleted</p>
@@ -777,7 +798,7 @@ $deactivatedCount = count($deletedUsers);
                   </thead>
                   <tbody>
                     <?php foreach ($activeUsers as $row): ?>
-                      <tr data-user-id="<?php echo (int) $row['id']; ?>">
+                      <tr data-user-id="<?php echo (int) $row['id']; ?>" data-classification-status="<?php echo htmlspecialchars((string) $row['presence']['label'], ENT_QUOTES); ?>">
                         <td class="username-cell">
                           <div class="user-cell">
                             <span class="user-avatar-frame" style="width:36px;height:36px;min-width:36px;max-width:36px;min-height:36px;max-height:36px;border-radius:50%;overflow:hidden;display:inline-block;vertical-align:middle;line-height:0;">
@@ -802,6 +823,36 @@ $deactivatedCount = count($deletedUsers);
                         <td>
                           <button class="btn btn-success btn-sm change-user-type-btn" data-id="<?php echo (int) $row['id']; ?>">
                             <i class="fas fa-user-tag mr-1"></i>Change User Type
+                          </button>
+                        </td>
+                      </tr>
+                    <?php endforeach; ?>
+                    <?php foreach ($deletedUsers as $row): ?>
+                      <tr data-user-id="<?php echo (int) $row['id']; ?>" data-deleted-user="1" data-classification-status="<?php echo htmlspecialchars((string) $row['presence']['label'], ENT_QUOTES); ?>">
+                        <td class="username-cell">
+                          <div class="user-cell">
+                            <span class="user-avatar-frame" style="width:36px;height:36px;min-width:36px;max-width:36px;min-height:36px;max-height:36px;border-radius:50%;overflow:hidden;display:inline-block;vertical-align:middle;line-height:0;">
+                              <img src="<?php echo htmlspecialchars((string) $row['avatar_url'], ENT_QUOTES); ?>" alt="<?php echo htmlspecialchars((string) $row['username'], ENT_QUOTES); ?>" class="user-avatar" width="36" height="36" style="width:36px;height:36px;min-width:36px;max-width:36px;min-height:36px;max-height:36px;display:block;border-radius:50%;object-fit:cover;object-position:center center;">
+                            </span>
+                            <span class="username-text"><?php echo htmlspecialchars((string) $row['username']); ?></span>
+                          </div>
+                        </td>
+                        <td><?php echo htmlspecialchars((string) $row['full_name']); ?></td>
+                        <td><?php echo htmlspecialchars((string) $row['email']); ?></td>
+                        <td><?php echo !empty($row['date_registered']) ? htmlspecialchars(date("F d, Y h:ia", strtotime((string) $row['date_registered']))) : 'Unavailable'; ?></td>
+                        <td><?php echo htmlspecialchars((string) ($row['userType'] ?? 'user')); ?></td>
+                        <td data-order="<?php echo htmlspecialchars((string) $row['presence']['sort']); ?>">
+                          <span class="badge badge-<?php echo htmlspecialchars((string) $row['presence']['badge']); ?> status-badge"><?php echo htmlspecialchars((string) $row['presence']['label']); ?></span>
+                        </td>
+                        <td class="activity-cell">
+                          <div class="font-weight-bold"><?php echo htmlspecialchars((string) $row['presence']['detail']); ?></div>
+                          <div class="small text-muted">
+                            <?php echo !empty($row['last_activity']) ? htmlspecialchars(date("F d, Y h:ia", strtotime((string) $row['last_activity']))) : 'No recent activity'; ?>
+                          </div>
+                        </td>
+                        <td>
+                          <button class="btn btn-success btn-sm restore-btn" data-id="<?php echo (int) $row['id']; ?>">
+                            <i class="fas fa-undo-alt mr-1"></i>Restore
                           </button>
                         </td>
                       </tr>
@@ -1084,6 +1135,16 @@ $(document).ready(function () {
   initUsersManagementTable('#deactivateTable');
   initUsersManagementTable('#restorationTable');
   const twoFactorTable = initUsersManagementTable('#twoFactorTable');
+  let classificationStatusFilter = '';
+
+  $.fn.dataTable.ext.search.push(function (settings, data, dataIndex) {
+    if (settings.nTable.id !== 'classificationTable' || !classificationStatusFilter) {
+      return true;
+    }
+
+    const rowNode = settings.aoData[dataIndex] ? settings.aoData[dataIndex].nTr : null;
+    return String($(rowNode).data('classification-status') || '') === classificationStatusFilter;
+  });
 
   function setStatusSummary(summary) {
     $('#onlineCount').text(summary.online || 0);
@@ -1098,6 +1159,32 @@ $(document).ready(function () {
   }
 
   setRefreshTimestamp();
+
+  function syncClassificationFilterCards(filterValue) {
+    $('.status-filter-card').each(function () {
+      const isActive = String($(this).data('classification-filter') || '') === filterValue;
+      $(this).toggleClass('is-active', isActive).attr('aria-pressed', isActive ? 'true' : 'false');
+    });
+  }
+
+  function applyClassificationStatusFilter(filterValue) {
+    const normalizedFilter = String(filterValue || '');
+    classificationStatusFilter = normalizedFilter;
+    syncClassificationFilterCards(normalizedFilter);
+
+    $('#classification-tab').tab('show');
+    classificationTable.column(5).search('', false, false).draw();
+  }
+
+  $('.status-filter-card').on('click keydown', function (event) {
+    if (event.type === 'keydown' && event.key !== 'Enter' && event.key !== ' ') {
+      return;
+    }
+
+    event.preventDefault();
+    const selectedFilter = String($(this).data('classification-filter') || '');
+    applyClassificationStatusFilter(classificationStatusFilter === selectedFilter ? '' : selectedFilter);
+  });
 
   $(document).on('click', '.change-user-type-btn', function () {
     const userId = $(this).data('id');
@@ -1250,8 +1337,9 @@ $(document).ready(function () {
 
         response.users.forEach(function (user) {
           const row = $('#classificationTable tbody tr[data-user-id="' + user.id + '"]');
-          if (!row.length) return;
+          if (!row.length || row.data('deleted-user')) return;
 
+          row.attr('data-classification-status', user.status).data('classification-status', user.status);
           classificationTable.cell(row, 5).data('<span class="badge badge-' + user.badge + ' status-badge">' + user.status + '</span>');
           classificationTable.cell(row, 6).data(
             '<div class="font-weight-bold">' + user.activity_detail + '</div>' +
@@ -1262,6 +1350,9 @@ $(document).ready(function () {
         setStatusSummary(response.summary || {});
         setRefreshTimestamp();
         classificationTable.rows().invalidate('dom').draw(false);
+        if (classificationStatusFilter) {
+          applyClassificationStatusFilter(classificationStatusFilter);
+        }
       }
     });
   }
@@ -1288,6 +1379,7 @@ $(document).ready(function () {
     if (target) {
       history.replaceState(null, '', target);
     }
+
   });
 
   $(document).on('click', '.reset-2fa-btn', function () {

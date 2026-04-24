@@ -142,7 +142,7 @@ function app_current_coordinates(): ?array
 function app_location_reverse_geocode_label(float $latitude, float $longitude): ?string
 {
     $url = sprintf(
-        'https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=%s&lon=%s&zoom=10&addressdetails=1',
+        'https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=%s&lon=%s&zoom=14&addressdetails=1',
         rawurlencode(sprintf('%.6f', $latitude)),
         rawurlencode(sprintf('%.6f', $longitude))
     );
@@ -197,24 +197,49 @@ function app_location_reverse_geocode_label(float $latitude, float $longitude): 
     }
 
     $address = is_array($payload['address'] ?? null) ? $payload['address'] : [];
-    $locality = '';
-    foreach (['city', 'town', 'municipality', 'county', 'state'] as $key) {
-        $value = trim((string) ($address[$key] ?? ''));
-        if ($value !== '') {
-            $locality = $value;
+    $labelParts = [];
+
+    $primaryLocality = '';
+    foreach (['city', 'town', 'municipality', 'city_district'] as $key) {
+        $primaryLocality = trim((string) ($address[$key] ?? ''));
+        if ($primaryLocality !== '') {
             break;
         }
     }
 
-    $country = trim((string) ($address['country'] ?? ''));
-    if ($locality !== '' && $country !== '') {
-        return $locality . ', ' . $country;
+    $localityKeys = $primaryLocality !== ''
+        ? ['city', 'town', 'municipality', 'city_district']
+        : ['village', 'suburb', 'quarter', 'neighbourhood'];
+
+    foreach ([
+        $localityKeys,
+        ['county', 'province', 'state', 'region'],
+        ['country'],
+    ] as $keyGroup) {
+        foreach ($keyGroup as $key) {
+            $value = trim((string) ($address[$key] ?? ''));
+            if ($value === '') {
+                continue;
+            }
+
+            $alreadyIncluded = false;
+            foreach ($labelParts as $part) {
+                if (strcasecmp($part, $value) === 0) {
+                    $alreadyIncluded = true;
+                    break;
+                }
+            }
+
+            if (!$alreadyIncluded) {
+                $labelParts[] = $value;
+            }
+
+            break;
+        }
     }
-    if ($locality !== '') {
-        return $locality;
-    }
-    if ($country !== '') {
-        return $country;
+
+    if ($labelParts !== []) {
+        return implode(', ', $labelParts);
     }
 
     $displayName = trim((string) ($payload['display_name'] ?? ''));
@@ -228,6 +253,7 @@ function app_location_reverse_geocode_label(float $latitude, float $longitude): 
 
 function app_describe_client_location(): string
 {
+    $labelCacheVersion = 2;
     $snapshot = app_location_session_snapshot();
     $latitude = $snapshot['latitude'];
     $longitude = $snapshot['longitude'];
@@ -239,8 +265,9 @@ function app_describe_client_location(): string
     $cachedLatitude = app_location_normalize_coordinate($_SESSION['app_client_location_label_latitude'] ?? null);
     $cachedLongitude = app_location_normalize_coordinate($_SESSION['app_client_location_label_longitude'] ?? null);
     $cachedLabel = trim((string) ($_SESSION['app_client_location_label'] ?? ''));
+    $cachedVersion = (int) ($_SESSION['app_client_location_label_version'] ?? 0);
 
-    if ($cachedLabel !== '' && $cachedLatitude === $latitude && $cachedLongitude === $longitude) {
+    if ($cachedLabel !== '' && $cachedLatitude === $latitude && $cachedLongitude === $longitude && $cachedVersion === $labelCacheVersion) {
         return $cachedLabel;
     }
 
@@ -249,6 +276,7 @@ function app_describe_client_location(): string
         $_SESSION['app_client_location_label'] = $resolvedLabel;
         $_SESSION['app_client_location_label_latitude'] = $latitude;
         $_SESSION['app_client_location_label_longitude'] = $longitude;
+        $_SESSION['app_client_location_label_version'] = $labelCacheVersion;
         return $resolvedLabel;
     }
 
@@ -256,6 +284,7 @@ function app_describe_client_location(): string
     $_SESSION['app_client_location_label'] = $fallback;
     $_SESSION['app_client_location_label_latitude'] = $latitude;
     $_SESSION['app_client_location_label_longitude'] = $longitude;
+    $_SESSION['app_client_location_label_version'] = $labelCacheVersion;
 
     return $fallback;
 }
@@ -287,7 +316,8 @@ function app_store_client_location_context(array $input): bool
             unset(
                 $_SESSION['app_client_location_label'],
                 $_SESSION['app_client_location_label_latitude'],
-                $_SESSION['app_client_location_label_longitude']
+                $_SESSION['app_client_location_label_longitude'],
+                $_SESSION['app_client_location_label_version']
             );
             $changed = true;
         }

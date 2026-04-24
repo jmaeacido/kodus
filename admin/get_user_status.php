@@ -97,10 +97,11 @@ if ($userType !== 'admin') {
     exit;
 }
 
-// Fetch all users with richer presence tracking
+// Fetch active users with richer presence tracking
 $users = $conn->query("
     SELECT id, last_activity, is_online
     FROM users
+    WHERE deleted_at IS NULL
     ORDER BY id ASC
 ");
 

@@ -24,6 +24,8 @@ if ($userType === 'admin') {
                COALESCE(mr.is_read, 0) AS user_read,
                sender_user.picture AS sender_picture,
                sender_user.sso_avatar_url AS sender_sso_avatar_url,
+               sender_user.last_activity AS sender_last_activity,
+               sender_user.is_online AS sender_is_online,
                TRIM(BOTH ', ' FROM CONCAT_WS(', ',
                    (
                        SELECT GROUP_CONCAT(DISTINCT u.username ORDER BY u.username SEPARATOR ', ')
@@ -47,7 +49,23 @@ if ($userType === 'admin') {
                    WHERE cmr.message_id = cm.id
                    ORDER BY u.username
                    LIMIT 1
-               ) AS recipient_sso_avatar_url
+               ) AS recipient_sso_avatar_url,
+               (
+                   SELECT u.last_activity
+                   FROM contact_message_recipients cmr
+                   INNER JOIN users u ON u.id = cmr.user_id
+                   WHERE cmr.message_id = cm.id
+                   ORDER BY u.username
+                   LIMIT 1
+               ) AS recipient_last_activity,
+               (
+                   SELECT u.is_online
+                   FROM contact_message_recipients cmr
+                   INNER JOIN users u ON u.id = cmr.user_id
+                   WHERE cmr.message_id = cm.id
+                   ORDER BY u.username
+                   LIMIT 1
+               ) AS recipient_is_online
         FROM contact_messages cm
         LEFT JOIN (
             SELECT message_id, MAX(sent_at) AS latest_reply_at
@@ -78,6 +96,8 @@ if ($userType === 'admin') {
                COALESCE(mr.is_read, 0) AS user_read,
                sender_user.picture AS sender_picture,
                sender_user.sso_avatar_url AS sender_sso_avatar_url,
+               sender_user.last_activity AS sender_last_activity,
+               sender_user.is_online AS sender_is_online,
                TRIM(BOTH ', ' FROM CONCAT_WS(', ',
                    (
                        SELECT GROUP_CONCAT(DISTINCT u.username ORDER BY u.username SEPARATOR ', ')
@@ -101,7 +121,23 @@ if ($userType === 'admin') {
                    WHERE cmr.message_id = cm.id
                    ORDER BY u.username
                    LIMIT 1
-               ) AS recipient_sso_avatar_url
+               ) AS recipient_sso_avatar_url,
+               (
+                   SELECT u.last_activity
+                   FROM contact_message_recipients cmr
+                   INNER JOIN users u ON u.id = cmr.user_id
+                   WHERE cmr.message_id = cm.id
+                   ORDER BY u.username
+                   LIMIT 1
+               ) AS recipient_last_activity,
+               (
+                   SELECT u.is_online
+                   FROM contact_message_recipients cmr
+                   INNER JOIN users u ON u.id = cmr.user_id
+                   WHERE cmr.message_id = cm.id
+                   ORDER BY u.username
+                   LIMIT 1
+               ) AS recipient_is_online
         FROM contact_messages cm
         LEFT JOIN (
             SELECT message_id, MAX(sent_at) AS latest_reply_at
@@ -127,6 +163,13 @@ if ($userType === 'admin') {
 
 $stmt->execute();
 $messages = db_stmt_fetch_all_assoc($stmt);
+$latestPreviews = mailboxLatestThreadPreviews(
+    $conn,
+    array_column($messages, 'id'),
+    (int) $userId,
+    (string) ($userEmail ?? ''),
+    (string) $userName
+);
 
 if ($messages === []): ?>
     <div class="mailbox-empty">
@@ -159,9 +202,16 @@ if ($messages === []): ?>
                     $displayPicture = $isSenderView ? ($row['recipient_picture'] ?? '') : ($row['sender_picture'] ?? '');
                     $displaySsoAvatar = $isSenderView ? ($row['recipient_sso_avatar_url'] ?? '') : ($row['sender_sso_avatar_url'] ?? '');
                     $avatarUrl = avatar_resolve_url($displayPicture, $displaySsoAvatar, $base_url, dirname(__DIR__));
+                    $presence = mailboxClassifyPresence(
+                        $isSenderView ? ($row['recipient_last_activity'] ?? null) : ($row['sender_last_activity'] ?? null),
+                        (int) ($isSenderView ? ($row['recipient_is_online'] ?? 0) : ($row['sender_is_online'] ?? 0))
+                    );
                     $subject = htmlspecialchars($row['subject'] ?? '(No Subject)');
-                    $messageText = trim(preg_replace('/\s+/', ' ', (string) ($row['message'] ?? '')));
-                    $snippet = htmlspecialchars(mb_strimwidth($messageText, 0, 28, '...'));
+                    $latestPreview = $latestPreviews[$messageId] ?? [
+                        'text' => mailboxPreviewText($row['message'] ?? '', $row['attachment'] ?? ''),
+                        'is_mine' => $isSenderView,
+                    ];
+                    $snippet = htmlspecialchars(mailboxFormatThreadPreview($latestPreview, 54));
                     $email = htmlspecialchars($row['user_email'] ?? '');
                     $activityAt = (string) ($row['latest_activity_at'] ?? $row['sent_at'] ?? '');
                     $sentAt = htmlspecialchars($activityAt);
@@ -190,7 +240,10 @@ if ($messages === []): ?>
                         <i class="fas fa-envelope <?= $rowClass ? 'text-warning' : 'text-muted' ?>"></i>
                     </td>
                     <td class="mailbox-avatar-cell text-center">
-                        <img src="<?= htmlspecialchars($avatarUrl) ?>" alt="<?= $name ?>" class="mailbox-avatar">
+                        <span class="mailbox-avatar-wrap" title="<?= htmlspecialchars($presence['detail']) ?>">
+                            <img src="<?= htmlspecialchars($avatarUrl) ?>" alt="<?= $name ?>" class="mailbox-avatar">
+                            <span class="mailbox-presence-dot mailbox-presence-<?= htmlspecialchars($presence['class']) ?>" aria-label="<?= htmlspecialchars($presence['detail']) ?>"></span>
+                        </span>
                     </td>
                     <td class="mailbox-name"><?= $name ?></td>
                     <td class="mailbox-subject">

@@ -35,7 +35,7 @@ $dashboardRoutes = [
     'summary' => $app_root . 'pages/summary/sectoral',
     'incoming' => $app_root . 'pages/data-tracking-in',
     'outgoing' => $app_root . 'pages/data-tracking-out',
-    'inbox' => $app_root . 'inbox/index',
+    'inbox' => $app_root . 'messenger/index',
     'fund_monitoring' => $app_root . 'pages/fund-monitoring',
     'program_targets' => $app_root . 'implementation-status/program-targets',
     'program_activities' => $app_root . 'implementation-status/program-activities',
@@ -194,7 +194,7 @@ if ($canViewOperations) {
     }
   </style>
 </head>
-<body class="hold-transition sidebar-mini">
+<body class="hold-transition sidebar-mini"><br><br>
 <div class="wrapper">
 
   <div class="content-wrapper">

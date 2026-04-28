@@ -479,7 +479,7 @@ if (isset($_SESSION['user_id']) && is_numeric($_SESSION['user_id'])) {
       </li>
       <?php if ($_SESSION['user_type'] !== 'admin'): ?>
         <li class="nav-item d-none d-sm-inline-block">
-          <a href="<?php echo $app_root; ?>inbox/?compose=1" class="nav-link">Contact Us</a>
+          <a href="<?php echo $app_root; ?>messenger/?compose=1" class="nav-link">Contact Us</a>
         </li>
       <?php endif; ?>
     </ul>
@@ -561,8 +561,14 @@ if (isset($_SESSION['user_id']) && is_numeric($_SESSION['user_id'])) {
               if ($userType === 'admin') {
                   // Admin: fetch latest unread messages visible to admins
                   $sql = "
-                      SELECT cm.*, u.first_name, u.last_name, u.picture, u.sso_avatar_url
+                      SELECT cm.*, u.first_name, u.last_name, u.picture, u.sso_avatar_url,
+                             COALESCE(reply_summary.latest_reply_at, cm.sent_at) AS latest_activity_at
                       FROM contact_messages cm
+                      LEFT JOIN (
+                          SELECT message_id, MAX(sent_at) AS latest_reply_at
+                          FROM contact_replies
+                          GROUP BY message_id
+                      ) reply_summary ON reply_summary.message_id = cm.id
                       LEFT JOIN users u ON u.email = cm.user_email
                       LEFT JOIN message_reads mr
                         ON cm.id = mr.message_id AND mr.user_id = ?
@@ -578,7 +584,7 @@ if (isset($_SESSION['user_id']) && is_numeric($_SESSION['user_id'])) {
                       )
                       AND COALESCE(mr.is_trashed, 0) = 0
                       AND (mr.is_read IS NULL OR mr.is_read = 0)
-                      ORDER BY cm.sent_at DESC
+                      ORDER BY latest_activity_at DESC, cm.id DESC
                       LIMIT 5
                   ";
                   $stmt = $conn->prepare($sql);
@@ -586,8 +592,14 @@ if (isset($_SESSION['user_id']) && is_numeric($_SESSION['user_id'])) {
               } else {
                   // Non-admin: fetch their unread messages
                   $sql = "
-                      SELECT cm.*, u.first_name, u.last_name, u.picture, u.sso_avatar_url
+                      SELECT cm.*, u.first_name, u.last_name, u.picture, u.sso_avatar_url,
+                             COALESCE(reply_summary.latest_reply_at, cm.sent_at) AS latest_activity_at
                       FROM contact_messages cm
+                      LEFT JOIN (
+                          SELECT message_id, MAX(sent_at) AS latest_reply_at
+                          FROM contact_replies
+                          GROUP BY message_id
+                      ) reply_summary ON reply_summary.message_id = cm.id
                       LEFT JOIN users u ON u.email = cm.user_email
                       LEFT JOIN message_reads mr 
                         ON cm.id = mr.message_id AND mr.user_id = ?
@@ -598,7 +610,7 @@ if (isset($_SESSION['user_id']) && is_numeric($_SESSION['user_id'])) {
                             AND LOWER(cmr.recipient_email) = LOWER(?)
                       ))
                         AND (mr.is_read IS NULL OR mr.is_read = 0)
-                      ORDER BY cm.sent_at DESC
+                      ORDER BY latest_activity_at DESC, cm.id DESC
                       LIMIT 5
                   ";
                   $stmt = $conn->prepare($sql);
@@ -607,6 +619,13 @@ if (isset($_SESSION['user_id']) && is_numeric($_SESSION['user_id'])) {
 
               $stmt->execute();
               $messages = db_stmt_fetch_all_assoc($stmt);
+              $latestPreviews = mailboxLatestThreadPreviews(
+                  $conn,
+                  array_column($messages, 'id'),
+                  (int) $userId,
+                  (string) $userEmail,
+                  (string) ($_SESSION['username'] ?? '')
+              );
 
               if ($messages === []): ?>
                   <span class="dropdown-item text-center text-muted">No unread messages</span>
@@ -617,18 +636,22 @@ if (isset($_SESSION['user_id']) && is_numeric($_SESSION['user_id'])) {
                           $senderName = htmlspecialchars($row['user_name'] ?? 'Unknown');
                       }
                       $subject = htmlspecialchars($row['subject'] ?? '(No Subject)');
-                      $snippet = htmlspecialchars(mb_strimwidth($row['message'] ?? '', 0, 40, '...'));
-                      $sentAt  = topbar_notification_time_label($row['sent_at'] ?? null);
+                      $latestPreview = $latestPreviews[(int) $row['id']] ?? [
+                          'text' => mailboxPreviewText($row['message'] ?? '', $row['attachment'] ?? ''),
+                          'is_mine' => mailboxOwnerMatchesCurrentUser((string) ($row['user_email'] ?? ''), (string) ($row['user_name'] ?? ''), (string) $userEmail, (string) ($_SESSION['username'] ?? '')),
+                      ];
+                      $snippet = htmlspecialchars(mailboxFormatThreadPreview($latestPreview, 40));
+                      $sentAt  = topbar_notification_time_label($row['latest_activity_at'] ?? null);
                       $avatar = topbar_notification_avatar($row, $base_url);
                   ?>
-                  <a href="<?php echo $app_root; ?>inbox/index.php?msg=<?= $row['id'] ?>" class="dropdown-item">
+                  <a href="<?php echo $app_root; ?>messenger/index.php?msg=<?= $row['id'] ?>" class="dropdown-item">
                     <div class="media">
                       <img src="<?= $avatar ?>" alt="User Avatar" class="img-size-50 mr-3 img-circle">
                       <div class="media-body">
                         <h3 class="dropdown-item-title">
                           <?= $senderName ?>
                         </h3>
-                        <p class="text-sm"><?= $subject ?></p>
+                        <p class="text-sm"><?= $snippet !== '' ? $snippet : $subject ?></p>
                         <p class="text-sm text-muted">
                           <i class="far fa-clock mr-1"></i> <?= $sentAt ?>
                         </p>
@@ -643,7 +666,7 @@ if (isset($_SESSION['user_id']) && is_numeric($_SESSION['user_id'])) {
           ?>
           </div>
           <div class="dropdown-divider"></div>
-          <a href="<?php echo $app_root; ?>inbox/index" class="dropdown-item dropdown-footer">See All Messages</a>
+          <a href="<?php echo $app_root; ?>messenger/" class="dropdown-item dropdown-footer">See All Messages</a>
         </div>
       </li>
 
@@ -1042,10 +1065,10 @@ if (isset($_SESSION['user_id']) && is_numeric($_SESSION['user_id'])) {
           <?php endif; ?>
           <li class="nav-header">Workspace</li>
           <li class="nav-item">
-            <a href="<?php echo $app_root; ?>inbox/" class="nav-link <?= ($current_dir == 'inbox' || $current_page == 'contact.php') ? 'active' : ''; ?>">
-              <i class="nav-icon fas fa-envelope"></i>
+            <a href="<?php echo $app_root; ?>messenger/" class="nav-link <?= (($current_dir == 'inbox' || $current_dir == 'messenger') || $current_page == 'contact.php') ? 'active' : ''; ?>">
+              <i class="nav-icon fas fa-comments"></i>
               <p>
-                Mail
+                Messenger
                 <?php if ($unreadCount > 0): ?>
                   <span class="right badge badge-danger" id="sidebarMailUnreadBadge"><?= $unreadCount ?></span>
                 <?php endif; ?>
@@ -1140,7 +1163,7 @@ function showMailAlert(item) {
 
   const toast = document.createElement('a');
   toast.className = 'mail-alert-toast';
-  toast.href = item.url || '<?= $app_root; ?>inbox/';
+  toast.href = item.url || '<?= $app_root; ?>messenger/';
   toast.innerHTML = `
     <img src="${escapeHtml(item.avatar || '')}" alt="">
     <div class="mail-alert-toast-copy">
@@ -1284,12 +1307,12 @@ function refreshKodusBaseDocumentTitle() {
 }
 
 function refreshUnreadCount() {
-  fetch("<?= $app_root; ?>inbox/get_notification_feed.php")
+  fetch("<?= $app_root; ?>messenger/get_notification_feed.php")
     .then(res => res.json())
     .then(data => {
       const badge = document.getElementById("topbarUnreadBadge");
       let sidebarBadge = document.getElementById("sidebarMailUnreadBadge");
-      const sidebarLabel = document.querySelector('a[href$="inbox/"] p');
+      const sidebarLabel = document.querySelector('a[href$="messenger/"] p');
       const toggle = document.getElementById("topbarChatToggle");
       const list = document.getElementById("topbarChatList");
       const label = document.getElementById("topbarChatRefreshLabel");

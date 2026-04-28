@@ -165,6 +165,13 @@ if ($userType === 'admin') {
 
 $feedStmt->execute();
 $feedRows = db_stmt_fetch_all_assoc($feedStmt);
+$latestPreviews = mailboxLatestThreadPreviews(
+    $conn,
+    array_column($feedRows, 'id'),
+    $userId,
+    (string) $userEmail,
+    (string) $userName
+);
 
 foreach ($feedRows as $row) {
     $senderName = trim((string) ($row['first_name'] ?? '') . ' ' . (string) ($row['last_name'] ?? ''));
@@ -172,14 +179,20 @@ foreach ($feedRows as $row) {
         $senderName = trim((string) ($row['user_name'] ?? 'Unknown'));
     }
 
+    $messageId = (int) $row['id'];
+    $latestPreview = $latestPreviews[$messageId] ?? [
+        'text' => mailboxPreviewText($row['message'] ?? '', ''),
+        'is_mine' => false,
+    ];
+
     $items[] = [
-        'id' => (int) $row['id'],
+        'id' => $messageId,
         'sender' => $senderName !== '' ? $senderName : 'Unknown',
         'subject' => (string) ($row['subject'] ?? '(No Subject)'),
-        'snippet' => mb_strimwidth(trim((string) ($row['message'] ?? '')), 0, 50, '...'),
+        'snippet' => mailboxFormatThreadPreview($latestPreview, 50),
         'sent_label' => notification_time_label($row['latest_activity_at'] ?? null),
         'avatar' => notification_avatar_url($row, $base_url),
-        'url' => $app_root . 'inbox/index.php?msg=' . (int) $row['id'],
+        'url' => $app_root . 'messenger/index.php?msg=' . $messageId,
     ];
 }
 

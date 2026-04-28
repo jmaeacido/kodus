@@ -262,6 +262,34 @@ if (
     exit;
 }
 
+$locationStmt = $conn->prepare("
+    SELECT 1
+    FROM provinces p
+    INNER JOIN municipality m
+        ON m.province_id = p.id
+    INNER JOIN barangay b
+        ON b.municipality_id = m.id
+    WHERE p.province_name = ?
+      AND m.municipality_name = ?
+      AND b.brgy_name = ?
+    LIMIT 1
+");
+if (!$locationStmt) {
+    http_response_code(500);
+    echo json_encode(['success' => false, 'message' => 'Could not validate the selected location.']);
+    exit;
+}
+$locationStmt->bind_param('sss', $province, $municipality, $barangay);
+$locationStmt->execute();
+$validLocation = db_stmt_fetch_one_assoc($locationStmt);
+$locationStmt->close();
+
+if (!$validLocation) {
+    http_response_code(400);
+    echo json_encode(['success' => false, 'message' => 'Please select a valid province, municipality, and barangay from the dropdowns.']);
+    exit;
+}
+
 if ($id > 0) {
     $existingStmt = $conn->prepare('SELECT id FROM project_lawa_binhi_targets WHERE id = ? AND fiscal_year = ? LIMIT 1');
     $existingStmt->bind_param('ii', $id, $selectedYear);

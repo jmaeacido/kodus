@@ -384,6 +384,96 @@ $(function() {
         return $('<div>').text(value ?? '').html();
     }
 
+    function renderLocationOptions(items, selectedValue, placeholder) {
+        const normalizedSelected = String(selectedValue || '').trim();
+        const options = Array.isArray(items) ? items : [];
+        const hasSelected = normalizedSelected !== '' && options.some((item) => String(item.value || '') === normalizedSelected);
+        return [
+            `<option value="">${escapeHtml(placeholder)}</option>`,
+            hasSelected ? '' : (normalizedSelected !== '' ? `<option value="${escapeHtml(normalizedSelected)}" selected>${escapeHtml(normalizedSelected)}</option>` : ''),
+            options.map((item) => {
+                const value = String(item.value || '');
+                const label = String(item.label || value);
+                return `<option value="${escapeHtml(value)}" ${value === normalizedSelected ? 'selected' : ''}>${escapeHtml(label)}</option>`;
+            }).join('')
+        ].join('');
+    }
+
+    function setLocationSelectLoading($select, placeholder) {
+        $select.prop('disabled', true).html(`<option value="">${escapeHtml(placeholder)}</option>`);
+    }
+
+    function loadLocationOptions(type, parent = '', province = '') {
+        const request = { type, parent };
+        if (province) {
+            request.province = province;
+        }
+        return $.getJSON('location-options.php', request).then(function(response) {
+            if (!response || response.success === false) {
+                throw new Error(response?.message || 'Could not load location options.');
+            }
+            return Array.isArray(response.items) ? response.items : [];
+        });
+    }
+
+    function populateProvinceSelect(selectedProvince = '') {
+        const $province = $('#target-province');
+        setLocationSelectLoading($province, 'Loading provinces...');
+        return loadLocationOptions('provinces').then(function(items) {
+            $province.html(renderLocationOptions(items, selectedProvince, 'Select province')).prop('disabled', false);
+        }).catch(function(error) {
+            $province.html(renderLocationOptions([], selectedProvince, 'Select province')).prop('disabled', false);
+            Swal.showValidationMessage(error.message || 'Could not load provinces.');
+        });
+    }
+
+    function populateMunicipalitySelect(province, selectedMunicipality = '') {
+        const $municipality = $('#target-municipality');
+        const $barangay = $('#target-barangay');
+        $barangay.html('<option value="">Select barangay</option>').prop('disabled', true);
+        if (!province) {
+            $municipality.html('<option value="">Select province first</option>').prop('disabled', true);
+            return $.Deferred().resolve().promise();
+        }
+        setLocationSelectLoading($municipality, 'Loading municipalities...');
+        return loadLocationOptions('municipalities', province).then(function(items) {
+            $municipality.html(renderLocationOptions(items, selectedMunicipality, 'Select municipality')).prop('disabled', false);
+        }).catch(function(error) {
+            $municipality.html(renderLocationOptions([], selectedMunicipality, 'Select municipality')).prop('disabled', false);
+            Swal.showValidationMessage(error.message || 'Could not load municipalities.');
+        });
+    }
+
+    function populateBarangaySelect(municipality, selectedBarangay = '', province = '') {
+        const $barangay = $('#target-barangay');
+        if (!municipality) {
+            $barangay.html('<option value="">Select municipality first</option>').prop('disabled', true);
+            return $.Deferred().resolve().promise();
+        }
+        setLocationSelectLoading($barangay, 'Loading barangays...');
+        return loadLocationOptions('barangays', municipality, province || $('#target-province').val()).then(function(items) {
+            $barangay.html(renderLocationOptions(items, selectedBarangay, 'Select barangay')).prop('disabled', false);
+        }).catch(function(error) {
+            $barangay.html(renderLocationOptions([], selectedBarangay, 'Select barangay')).prop('disabled', false);
+            Swal.showValidationMessage(error.message || 'Could not load barangays.');
+        });
+    }
+
+    function initializeLocationDropdowns(target) {
+        const selectedProvince = String(target?.province || '').trim();
+        const selectedMunicipality = String(target?.municipality || '').trim();
+        const selectedBarangay = String(target?.barangay || '').trim();
+
+        $('#target-municipality').html('<option value="">Select province first</option>').prop('disabled', true);
+        $('#target-barangay').html('<option value="">Select municipality first</option>').prop('disabled', true);
+
+        populateProvinceSelect(selectedProvince).then(function() {
+            return populateMunicipalitySelect($('#target-province').val(), selectedMunicipality);
+        }).then(function() {
+            return populateBarangaySelect($('#target-municipality').val(), selectedBarangay, $('#target-province').val());
+        });
+    }
+
     function registerProjectTypeOption(classification, typeValue) {
         const normalizedClassification = String(classification || '').trim().toUpperCase();
         const normalizedTypeValue = String(typeValue || '').trim();
@@ -995,15 +1085,21 @@ $(function() {
                         <div class="kodus-edit-grid">
                             <div class="kodus-edit-field">
                                 <label>Province</label>
-                                <input id="target-province" class="form-control" value="${escapeHtml(target.province || '')}">
+                                <select id="target-province" class="custom-select" required>
+                                    <option value="">Loading provinces...</option>
+                                </select>
                             </div>
                             <div class="kodus-edit-field">
                                 <label>Municipality</label>
-                                <input id="target-municipality" class="form-control" value="${escapeHtml(target.municipality || '')}">
+                                <select id="target-municipality" class="custom-select" required disabled>
+                                    <option value="">Select province first</option>
+                                </select>
                             </div>
                             <div class="kodus-edit-field">
                                 <label>Barangay</label>
-                                <input id="target-barangay" class="form-control" value="${escapeHtml(target.barangay || '')}">
+                                <select id="target-barangay" class="custom-select" required disabled>
+                                    <option value="">Select municipality first</option>
+                                </select>
                             </div>
                         </div>
                     </div>
@@ -1075,6 +1171,18 @@ $(function() {
             confirmButtonText: row ? '<i class="fas fa-save"></i>' : '<i class="fas fa-plus"></i>',
             didOpen: () => {
                 $(document).off('.targetModal');
+                initializeLocationDropdowns(target);
+                $(document).on('change.targetModal', '#target-province', function() {
+                    const province = String($(this).val() || '').trim();
+                    $('#target-municipality').html('<option value="">Select province first</option>').prop('disabled', true);
+                    $('#target-barangay').html('<option value="">Select municipality first</option>').prop('disabled', true);
+                    populateMunicipalitySelect(province);
+                });
+                $(document).on('change.targetModal', '#target-municipality', function() {
+                    const municipality = String($(this).val() || '').trim();
+                    $('#target-barangay').html('<option value="">Select municipality first</option>').prop('disabled', true);
+                    populateBarangaySelect(municipality, '', $('#target-province').val());
+                });
                 $(document).on('click.targetModal', '.add-entry-btn', function() {
                     const $currentRow = $(this).closest('.target-entry-item');
                     const classification = String($currentRow.find('.project-classification-input').val() || '').trim().toUpperCase();
@@ -1172,6 +1280,15 @@ $(function() {
                 $(document).off('.targetModal');
             },
             preConfirm: () => {
+                if ($('#target-province, #target-municipality, #target-barangay').filter(':disabled').length) {
+                    Swal.showValidationMessage('Please wait for the location dropdowns to finish loading.');
+                    return false;
+                }
+                if (!$('#target-province').val() || !$('#target-municipality').val() || !$('#target-barangay').val()) {
+                    Swal.showValidationMessage('Please select a province, municipality, and barangay.');
+                    return false;
+                }
+
                 const entries = [];
                 let hasAquaticValidationError = false;
                 $('#target-entry-list .target-entry-item').each(function() {

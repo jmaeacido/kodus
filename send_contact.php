@@ -18,6 +18,7 @@ ob_start();
 
 $expectsJson = strtolower((string) ($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '')) === 'xmlhttprequest'
     || str_contains(strtolower((string) ($_SERVER['HTTP_ACCEPT'] ?? '')), 'application/json');
+$responseFinished = false;
 
 function send_contact_respond(array $payload, int $statusCode = 200): void
 {
@@ -44,8 +45,9 @@ $userName  = $_SESSION['username'] ?? 'Anonymous';
 $subject   = trim($_POST['subject'] ?? '');
 $message   = trim($_POST['message'] ?? '');
 $sendCopy  = isset($_POST['send_copy']);
-$returnTo  = trim((string) ($_POST['return_to'] ?? 'inbox/'));
+$returnTo  = trim((string) ($_POST['return_to'] ?? 'messenger/'));
 $recipientInputRaw = $_POST['recipient'] ?? [];
+$deferMail = isset($_POST['defer_mail']) && (string) $_POST['defer_mail'] === '1';
 
 if (!is_array($recipientInputRaw)) {
     $recipientInputRaw = [$recipientInputRaw];
@@ -57,7 +59,16 @@ $recipientInputs = array_values(array_unique(array_filter(array_map(static funct
 })));
 
 if ($returnTo === '' || preg_match('/^(?:https?:)?\/\//i', $returnTo) || strpos($returnTo, '..') !== false || !preg_match('/^[A-Za-z0-9_\/\-\?\=&%.]+$/', $returnTo)) {
-    $returnTo = 'inbox/';
+    $returnTo = 'messenger/';
+}
+
+if ($subject === '') {
+    if ($message !== '') {
+        $normalizedMessage = preg_replace('/\s+/', ' ', $message);
+        $subject = trim((string) mb_strimwidth((string) $normalizedMessage, 0, 80, '...'));
+    } else {
+        $subject = 'New chat';
+    }
 }
 
 // ---------------------------
@@ -107,14 +118,14 @@ if (!empty($_FILES['attachments']['name'][0])) {
 
 $hasAttachments = !empty($filenamesForDB);
 
-if (empty($subject) || (empty($message) && !$hasAttachments)) {
+if (empty($message) && !$hasAttachments) {
     send_contact_respond([
         'success' => false,
         'title' => 'Missing Fields',
-        'message' => 'Subject is required, and your message needs either text or at least one attachment.',
+        'message' => 'Your chat needs either text or at least one attachment.',
         'icon' => 'warning',
         'script' => "
-            Swal.fire({ icon: 'warning', title: 'Missing Fields', text: 'Subject is required, and your message needs either text or at least one attachment.' })
+            Swal.fire({ icon: 'warning', title: 'Missing Fields', text: 'Your chat needs either text or at least one attachment.' })
             .then(() => window.location.href = '{$returnTo}');
         ",
     ], 422);
@@ -279,6 +290,21 @@ try {
         $autoReplyBody = null;
     }
 
+    if ($expectsJson && $deferMail) {
+        header('Content-Type: application/json; charset=utf-8');
+        notification_finish_response(json_encode([
+            'success' => true,
+            'title' => 'Chat started!',
+            'message' => 'Your chat has been saved. Email notification is being sent in the background.',
+            'icon' => 'success',
+            'message_id' => (int) $messageId,
+            'redirect' => $returnTo,
+            'send_copy' => $sendCopy,
+            'mail_deferred' => true,
+        ]));
+        $responseFinished = true;
+    }
+
     $mail->send();
 
     if ($sendAutoReply) {
@@ -290,6 +316,10 @@ try {
         $autoReply->Body    = $autoReplyBody;
         $autoReply->AltBody = "Thank you for contacting KODUS.\n\nWe received your message:\n\n$message";
         $autoReply->send();
+    }
+
+    if (!empty($responseFinished)) {
+        exit;
     }
 
     $successScript = "
@@ -319,6 +349,10 @@ try {
     notification_finish_response(renderHTML($successScript));
 
 } catch (RuntimeException $e) {
+    if (!empty($responseFinished)) {
+        notification_log_mail($conn, $userEmail, $subject ?: 'New chat', 'failed', 'Deferred mail config error: ' . $e->getMessage());
+        exit;
+    }
     $error = addslashes($e->getMessage());
     send_contact_respond([
         'success' => false,
@@ -331,6 +365,10 @@ try {
         ",
     ], 500);
 } catch (Exception $e) {
+    if (!empty($responseFinished)) {
+        notification_log_mail($conn, $userEmail, $subject ?: 'New chat', 'failed', 'Deferred mail error: ' . $mail->ErrorInfo);
+        exit;
+    }
     $error = addslashes($mail->ErrorInfo);
     send_contact_respond([
         'success' => false,

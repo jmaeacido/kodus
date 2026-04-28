@@ -2,6 +2,7 @@
 require_once __DIR__ . '/../security.php';
 require_once __DIR__ . '/../base_url.php';
 require_once __DIR__ . '/mailbox_helpers.php';
+
 security_bootstrap_session();
 include('../config.php');
 mailboxEnsureSchema($conn);
@@ -16,7 +17,7 @@ $onlyConversation = isset($_GET['only_conversation']) && ($_GET['only_conversati
 
 if (!$id || !$userId) {
     http_response_code(400);
-    echo "<p>Invalid request.</p>";
+    echo '<p>Invalid request.</p>';
     exit;
 }
 
@@ -24,12 +25,69 @@ $query = "
     SELECT cm.*,
            sender_user.picture AS sender_picture,
            sender_user.sso_avatar_url AS sender_sso_avatar_url,
+           sender_user.last_activity AS sender_last_activity,
+           sender_user.is_online AS sender_is_online,
+           (
+               SELECT COALESCE(NULLIF(u.username, ''), COALESCE(NULLIF(cmr.recipient_name, ''), cmr.recipient_email))
+               FROM contact_message_recipients cmr
+               LEFT JOIN users u ON u.id = cmr.user_id
+               WHERE cmr.message_id = cm.id
+               ORDER BY COALESCE(NULLIF(u.username, ''), COALESCE(NULLIF(cmr.recipient_name, ''), cmr.recipient_email))
+               LIMIT 1
+           ) AS primary_recipient_name,
+           (
+               SELECT u.picture
+               FROM contact_message_recipients cmr
+               LEFT JOIN users u ON u.id = cmr.user_id
+               WHERE cmr.message_id = cm.id
+               ORDER BY COALESCE(NULLIF(u.username, ''), COALESCE(NULLIF(cmr.recipient_name, ''), cmr.recipient_email))
+               LIMIT 1
+           ) AS primary_recipient_picture,
+           (
+               SELECT u.sso_avatar_url
+               FROM contact_message_recipients cmr
+               LEFT JOIN users u ON u.id = cmr.user_id
+               WHERE cmr.message_id = cm.id
+               ORDER BY COALESCE(NULLIF(u.username, ''), COALESCE(NULLIF(cmr.recipient_name, ''), cmr.recipient_email))
+               LIMIT 1
+           ) AS primary_recipient_sso_avatar_url,
+           (
+               SELECT u.last_activity
+               FROM contact_message_recipients cmr
+               LEFT JOIN users u ON u.id = cmr.user_id
+               WHERE cmr.message_id = cm.id
+               ORDER BY COALESCE(NULLIF(u.username, ''), COALESCE(NULLIF(cmr.recipient_name, ''), cmr.recipient_email))
+               LIMIT 1
+           ) AS primary_recipient_last_activity,
+           (
+               SELECT u.is_online
+               FROM contact_message_recipients cmr
+               LEFT JOIN users u ON u.id = cmr.user_id
+               WHERE cmr.message_id = cm.id
+               ORDER BY COALESCE(NULLIF(u.username, ''), COALESCE(NULLIF(cmr.recipient_name, ''), cmr.recipient_email))
+               LIMIT 1
+           ) AS primary_recipient_is_online,
            (
                SELECT GROUP_CONCAT(DISTINCT u.username ORDER BY u.username SEPARATOR ', ')
                FROM contact_message_recipients cmr
                INNER JOIN users u ON u.id = cmr.user_id
                WHERE cmr.message_id = cm.id
-           ) AS recipient_names
+           ) AS recipient_names,
+           (
+               SELECT GROUP_CONCAT(
+                   DISTINCT CONCAT(
+                       COALESCE(NULLIF(u.username, ''), COALESCE(NULLIF(cmr.recipient_name, ''), cmr.recipient_email)),
+                       ' <',
+                       cmr.recipient_email,
+                       '>'
+                   )
+                   ORDER BY COALESCE(NULLIF(u.username, ''), COALESCE(NULLIF(cmr.recipient_name, ''), cmr.recipient_email))
+                   SEPARATOR '||'
+               )
+               FROM contact_message_recipients cmr
+               LEFT JOIN users u ON u.id = cmr.user_id
+               WHERE cmr.message_id = cm.id
+           ) AS recipient_directory
     FROM contact_messages cm
     LEFT JOIN users sender_user ON sender_user.email = cm.user_email
     WHERE cm.id = ?
@@ -50,7 +108,7 @@ if ($userType === 'admin') {
       LIMIT 1
     ";
     $stmt = $conn->prepare($query);
-    $stmt->bind_param("is", $id, $userEmail);
+    $stmt->bind_param('is', $id, $userEmail);
 } else {
     $query .= " AND (cm.user_email = ? OR cm.user_name = ? OR EXISTS (
         SELECT 1
@@ -59,7 +117,7 @@ if ($userType === 'admin') {
           AND LOWER(cmr.recipient_email) = LOWER(?)
     )) LIMIT 1";
     $stmt = $conn->prepare($query);
-    $stmt->bind_param("isss", $id, $userEmail, $userName, $userEmail);
+    $stmt->bind_param('isss', $id, $userEmail, $userName, $userEmail);
 }
 
 $stmt->execute();
@@ -67,7 +125,7 @@ $message = db_stmt_fetch_one_assoc($stmt);
 $stmt->close();
 
 if (!$message) {
-    echo "<p>Message not found.</p>";
+    echo '<p>Message not found.</p>';
     exit;
 }
 
@@ -84,7 +142,6 @@ $originalReplyClass = $originalIsMine ? 'reply mine' : 'reply theirs';
 $originalDisplayName = $originalIsMine
     ? (trim((string) ($_SESSION['username'] ?? '')) !== '' ? (string) $_SESSION['username'] : 'You')
     : (trim((string) ($message['user_name'] ?? '')) !== '' ? (string) $message['user_name'] : $originalSenderEmail);
-$defaultAvatarUrl = $app_root . 'dist/img/default.webp';
 $originalAvatarUrl = avatar_resolve_url($message['sender_picture'] ?? '', $message['sender_sso_avatar_url'] ?? '', $base_url, dirname(__DIR__));
 $canDeleteForEveryone = $userType === 'admin'
     || mailboxOwnerMatchesCurrentUser(
@@ -102,22 +159,76 @@ $stmt = $conn->prepare("
     WHERE r.message_id = ?
     ORDER BY r.sent_at ASC
 ");
-$stmt->bind_param("i", $id);
+$stmt->bind_param('i', $id);
 $stmt->execute();
 $replies = db_stmt_fetch_all_assoc($stmt);
 $stmt->close();
 $replyCount = count($replies);
+
+$participantLabels = [];
+$participantMentions = [];
+$senderParticipantLabel = trim((string) ($message['user_name'] ?? '')) !== ''
+    ? (string) $message['user_name']
+    : (string) ($message['user_email'] ?? 'Unknown');
+$participantLabels[] = $senderParticipantLabel;
+$participantMentions[] = $senderParticipantLabel;
+
+$recipientDirectory = array_filter(array_map('trim', explode('||', (string) ($message['recipient_directory'] ?? ''))));
+foreach ($recipientDirectory as $recipientEntry) {
+    if ($recipientEntry === '') {
+        continue;
+    }
+
+    $displayName = trim((string) preg_replace('/\s*<[^>]+>\s*$/', '', $recipientEntry));
+    if ($displayName !== '') {
+        $participantLabels[] = $displayName;
+        $participantMentions[] = $displayName;
+    }
+}
+
+$participantLabels = array_values(array_unique(array_filter($participantLabels)));
+$participantMentions = array_values(array_unique(array_filter($participantMentions)));
+$recipientDisplay = trim((string) ($message['recipient_names'] ?? ''));
+$primaryRecipientName = trim((string) ($message['primary_recipient_name'] ?? ''));
+$primaryRecipientAvatarUrl = avatar_resolve_url(
+    $message['primary_recipient_picture'] ?? '',
+    $message['primary_recipient_sso_avatar_url'] ?? '',
+    $base_url,
+    dirname(__DIR__)
+);
+$chatTitle = $originalIsMine
+    ? ($primaryRecipientName !== '' ? $primaryRecipientName : ($recipientDisplay !== '' ? $recipientDisplay : 'Admin'))
+    : $originalDisplayName;
+
+if ($chatTitle === '' || strcasecmp($chatTitle, 'unknown') === 0) {
+    $chatTitle = 'Chat';
+}
+
+$chatAvatarUrl = $originalIsMine ? $primaryRecipientAvatarUrl : $originalAvatarUrl;
+if (trim((string) $chatAvatarUrl) === '') {
+    $chatAvatarUrl = $originalAvatarUrl;
+}
+
+$chatPresence = mailboxClassifyPresence(
+    $originalIsMine ? ($message['primary_recipient_last_activity'] ?? null) : ($message['sender_last_activity'] ?? null),
+    (int) ($originalIsMine ? ($message['primary_recipient_is_online'] ?? 0) : ($message['sender_is_online'] ?? 0))
+);
+$chatStatusCopy = $currentFolder === 'trash' ? 'Archived chat' : $chatPresence['detail'];
+$chatMetaCopy = $currentFolder === 'trash'
+    ? 'Restore this chat to send new updates.'
+    : '';
 
 $stmt = $conn->prepare("
     INSERT INTO message_reads (message_id, user_id, is_read, read_at)
     VALUES (?, ?, 1, NOW())
     ON DUPLICATE KEY UPDATE is_read=1, read_at=NOW()
 ");
-$stmt->bind_param("ii", $id, $userId);
+$stmt->bind_param('ii', $id, $userId);
 $stmt->execute();
 $stmt->close();
 
-function renderAttachments($attachmentCsv, $basePath, $type = 'contact') {
+function renderAttachments($attachmentCsv, $basePath, $type = 'contact')
+{
     if (empty($attachmentCsv)) {
         return '';
     }
@@ -135,7 +246,7 @@ function renderAttachments($attachmentCsv, $basePath, $type = 'contact') {
         $ext = strtolower(pathinfo($file, PATHINFO_EXTENSION));
         $html .= '<div class="attachment-thumb" data-attachments=\'' . $jsonFiles . '\' data-index="' . $i . '" data-type="' . $type . '">';
 
-        if (in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp', 'avif'])) {
+        if (in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp', 'avif'], true)) {
             $html .= '<img src="' . $path . '" alt="">';
         } else {
             $html .= '<div class="d-flex align-items-center justify-content-center" style="height:84px;"><i class="fas fa-file fa-2x text-secondary"></i></div>';
@@ -161,10 +272,44 @@ function renderAttachments($attachmentCsv, $basePath, $type = 'contact') {
     return $html;
 }
 
-function renderReply($row, $userId, $userType) {
+function renderReactionBar(array $summary, int $messageId, ?int $replyId): string
+{
+    $pickerEmojis = ['👍', '❤️', '😂', '🎉', '🔥', '👏', '🙏', '✅', '👀', '💡'];
+    ob_start();
+    ?>
+    <div class="chat-reactions" data-message-id="<?= $messageId ?>"<?= $replyId !== null ? ' data-reply-id="' . (int) $replyId . '"' : '' ?>>
+      <div class="chat-reaction-summary">
+        <?php foreach ($summary as $reaction): ?>
+          <button
+            type="button"
+            class="chat-reaction-chip<?= !empty($reaction['reacted']) ? ' is-active' : '' ?>"
+            data-emoji="<?= htmlspecialchars((string) ($reaction['emoji'] ?? ''), ENT_QUOTES) ?>"
+          >
+            <span class="chat-reaction-emoji"><?= htmlspecialchars((string) ($reaction['emoji'] ?? '')) ?></span>
+            <span class="chat-reaction-count"><?= (int) ($reaction['count'] ?? 0) ?></span>
+          </button>
+        <?php endforeach; ?>
+        <div class="chat-reaction-picker-wrap">
+          <button type="button" class="chat-reaction-trigger" aria-label="Add reaction" aria-expanded="false">
+            <i class="far fa-smile"></i>
+          </button>
+          <div class="chat-reaction-picker" hidden>
+            <?php foreach ($pickerEmojis as $emoji): ?>
+              <button type="button" class="chat-reaction-add" data-emoji="<?= htmlspecialchars($emoji, ENT_QUOTES) ?>"><?= htmlspecialchars($emoji) ?></button>
+            <?php endforeach; ?>
+          </div>
+        </div>
+      </div>
+    </div>
+    <?php
+    return ob_get_clean();
+}
+
+function renderReply($row, $userId, $userType, array $reactionSummary, int $messageId)
+{
     $isMine = ((int) $row['user_id'] === (int) $userId);
     $class = $isMine ? 'reply mine' : 'reply theirs';
-    global $base_url, $defaultAvatarUrl;
+    global $base_url;
     $avatarUrl = avatar_resolve_url($row['picture'] ?? '', $row['sso_avatar_url'] ?? '', $base_url, dirname(__DIR__));
     $isDeleted = !empty($row['deleted_for_everyone_at']);
     $canEdit = $isMine && !$isDeleted;
@@ -185,7 +330,7 @@ function renderReply($row, $userId, $userType) {
           <span><?= htmlspecialchars($row['userType']) ?></span>
           <span><?= htmlspecialchars($row['sent_at']) ?></span>
           <?php if ($isDeleted): ?>
-            <span class="badge badge-secondary">Deleted</span>
+            <span class="badge badge-secondary">Removed</span>
           <?php endif; ?>
         </div>
         <?php if ($canEdit || $canDelete): ?>
@@ -193,7 +338,7 @@ function renderReply($row, $userId, $userType) {
             <button
               type="button"
               class="btn btn-xs btn-outline-light reply-menu-trigger"
-              aria-label="Reply actions"
+              aria-label="Message actions"
               aria-expanded="false"
             >
               <i class="fas fa-ellipsis-h"></i>
@@ -211,7 +356,7 @@ function renderReply($row, $userId, $userType) {
               <?php endif; ?>
               <?php if ($canDelete): ?>
                 <button type="button" class="reply-menu-item reply-menu-item-danger reply-delete-trigger" data-reply-id="<?= (int) $row['id'] ?>">
-                  Delete
+                  Remove
                 </button>
               <?php endif; ?>
             </div>
@@ -220,14 +365,15 @@ function renderReply($row, $userId, $userType) {
       </div>
       <?php if ($isDeleted): ?>
         <div class="reply-deleted-copy">
-          This reply was deleted for everyone<?= !empty($row['deleted_by_username']) ? ' by ' . htmlspecialchars((string) $row['deleted_by_username']) : '' ?>.
+          This message was removed for everyone<?= !empty($row['deleted_by_username']) ? ' by ' . htmlspecialchars((string) $row['deleted_by_username']) : '' ?>.
         </div>
       <?php else: ?>
-        <div><?= nl2br(htmlspecialchars($row['reply'])) ?></div>
+        <div class="chat-bubble-body"><?= nl2br(htmlspecialchars($row['reply'])) ?></div>
         <?php
         if (!empty($row['attachment'])) {
             echo renderAttachments($row['attachment'], 'uploads/reply_attachments/', 'reply');
         }
+        echo renderReactionBar($reactionSummary, $messageId, (int) ($row['id'] ?? 0));
         ?>
       <?php endif; ?>
     </div>
@@ -235,7 +381,8 @@ function renderReply($row, $userId, $userType) {
     return ob_get_clean();
 }
 
-function renderOriginalMessageBubble($message, $originalReplyClass, $originalAvatarUrl, $originalDisplayName) {
+function renderOriginalMessageBubble($message, $originalReplyClass, $originalAvatarUrl, $originalDisplayName, array $reactionSummary)
+{
     ob_start();
     ?>
     <div class="<?= htmlspecialchars($originalReplyClass, ENT_QUOTES) ?>">
@@ -247,141 +394,176 @@ function renderOriginalMessageBubble($message, $originalReplyClass, $originalAva
           <span><?= htmlspecialchars($message['sent_at']) ?></span>
         </div>
       </div>
-      <div><?= nl2br(htmlspecialchars($message['message'])) ?></div>
+      <div class="chat-bubble-body"><?= nl2br(htmlspecialchars($message['message'])) ?></div>
       <?php
       if (!empty($message['attachment'])) {
           echo renderAttachments($message['attachment'], 'uploads/contact_attachments/', 'contact');
       }
+      echo renderReactionBar($reactionSummary, (int) ($message['id'] ?? 0), null);
       ?>
     </div>
     <?php
     return ob_get_clean();
 }
 
+$messageReactionSummary = mailboxFetchReactionSummary($conn, (int) $message['id'], null, $userId);
+$replyReactionSummary = [];
+foreach ($replies as $reply) {
+    $replyReactionSummary[(int) ($reply['id'] ?? 0)] = mailboxFetchReactionSummary(
+        $conn,
+        (int) $message['id'],
+        (int) ($reply['id'] ?? 0),
+        $userId
+    );
+}
+
 if ($onlyConversation) {
     ?>
     <div id="conversationWrapper" class="mt-4">
       <div class="conversation-scroll">
-        <?= renderOriginalMessageBubble($message, $originalReplyClass, $originalAvatarUrl, $originalDisplayName) ?>
-        <?php if ($replyCount > 0): ?>
-            <?php foreach ($replies as $reply): ?>
-                <?= renderReply($reply, $userId, (string) $userType) ?>
-            <?php endforeach; ?>
-        <?php endif; ?>
+        <?= renderOriginalMessageBubble($message, $originalReplyClass, $originalAvatarUrl, $originalDisplayName, $messageReactionSummary) ?>
+        <?php foreach ($replies as $reply): ?>
+            <?= renderReply($reply, $userId, (string) $userType, $replyReactionSummary[(int) ($reply['id'] ?? 0)] ?? [], (int) $message['id']) ?>
+        <?php endforeach; ?>
       </div>
     </div>
     <?php
     exit;
 }
 ?>
-<div class="mailbox-read-info mailbox-read-info--compact">
-  <div class="mailbox-read-meta">
-    <div class="mailbox-read-meta-item">
-      <span>From</span>
-      <strong><?= htmlspecialchars($message['user_name']) ?> &lt;<?= htmlspecialchars($message['user_email']) ?>&gt;</strong>
+<div class="chat-shell" data-message-id="<?= (int) $id ?>" data-participants="<?= htmlspecialchars(json_encode($participantMentions), ENT_QUOTES, 'UTF-8') ?>">
+  <div class="mailbox-read-info mailbox-read-info--compact chat-thread-header">
+    <div class="chat-thread-hero">
+      <div class="chat-thread-primary">
+        <div class="chat-thread-avatar-wrap">
+          <img src="<?= htmlspecialchars($chatAvatarUrl) ?>" alt="<?= htmlspecialchars($chatTitle) ?>" class="chat-thread-avatar">
+          <span class="chat-thread-status-dot is-<?= htmlspecialchars($currentFolder === 'trash' ? 'offline' : $chatPresence['class']) ?>" aria-hidden="true"></span>
+        </div>
+        <div>
+          <h2 class="mailbox-read-subject"><?= htmlspecialchars($chatTitle) ?></h2>
+          <div class="chat-thread-presence"><?= htmlspecialchars($chatStatusCopy) ?></div>
+          <div class="chat-thread-meta-line">
+            <span><?= htmlspecialchars((string) ($message['sent_at'] ?? '')) ?></span>
+            <?php if ($chatMetaCopy !== ''): ?>
+              <span><?= htmlspecialchars($chatMetaCopy) ?></span>
+            <?php endif; ?>
+          </div>
+        </div>
+      </div>
     </div>
-    <div class="mailbox-read-meta-item">
-      <span>To</span>
-      <strong><?= htmlspecialchars(trim((string) ($message['recipient_names'] ?? '')) !== '' ? $message['recipient_names'] : 'Admin') ?></strong>
-    </div>
-    <div class="mailbox-read-meta-item">
-      <span>Sent</span>
-      <strong><?= htmlspecialchars($message['sent_at']) ?></strong>
+    <div class="mailbox-read-meta chat-thread-participants">
+      <div class="mailbox-read-meta-item">
+        <span>Started by</span>
+        <strong><?= htmlspecialchars($message['user_name']) ?></strong>
+      </div>
+      <div class="mailbox-read-meta-item">
+        <span>Conversation with</span>
+        <strong><?= htmlspecialchars(trim((string) ($message['recipient_names'] ?? '')) !== '' ? $message['recipient_names'] : 'Admin') ?></strong>
+      </div>
+      <div class="mailbox-read-meta-item">
+        <span>Members</span>
+        <strong><?= htmlspecialchars(implode(', ', $participantLabels)) ?></strong>
+      </div>
     </div>
   </div>
-</div>
 
-<div class="mailbox-controls with-border text-right mb-3 mailbox-detail-actions">
-  <div class="btn-group mailbox-tools">
-    <a href="?compose=1" class="btn btn-default btn-sm mailbox-compose-trigger"><i class="fas fa-pen mr-1"></i> New Message</a>
-    <?php if ($currentFolder === 'trash'): ?>
-      <button type="button" class="btn btn-success btn-sm mailbox-restore-trigger" data-id="<?= (int) $id ?>">
-        <i class="fas fa-undo mr-1"></i> Restore
-      </button>
-      <?php if ($canDeleteForEveryone): ?>
-        <button type="button" class="btn btn-danger btn-sm mailbox-delete-trigger" data-id="<?= (int) $id ?>" data-can-delete-everyone="1">
-          <i class="fas fa-trash-alt mr-1"></i> Delete
+  <div class="mailbox-controls with-border text-right mb-3 mailbox-detail-actions">
+    <div class="btn-group mailbox-tools">
+      <a href="?compose=1" class="btn btn-default btn-sm mailbox-compose-trigger"><i class="fas fa-pen mr-1"></i> New chat</a>
+      <?php if ($currentFolder === 'trash'): ?>
+        <button type="button" class="btn btn-success btn-sm mailbox-restore-trigger" data-id="<?= (int) $id ?>">
+          <i class="fas fa-undo mr-1"></i> Restore
+        </button>
+        <?php if ($canDeleteForEveryone): ?>
+          <button type="button" class="btn btn-danger btn-sm mailbox-delete-trigger" data-id="<?= (int) $id ?>" data-can-delete-everyone="1">
+            <i class="fas fa-trash-alt mr-1"></i> Delete forever
+          </button>
+        <?php endif; ?>
+      <?php else: ?>
+        <button type="button" class="btn btn-default btn-sm mailbox-delete-trigger" data-id="<?= (int) $id ?>" data-can-delete-everyone="<?= $canDeleteForEveryone ? '1' : '0' ?>">
+          <i class="far fa-trash-alt mr-1"></i> Archive
         </button>
       <?php endif; ?>
-    <?php else: ?>
-      <button type="button" class="btn btn-default btn-sm mailbox-delete-trigger" data-id="<?= (int) $id ?>" data-can-delete-everyone="<?= $canDeleteForEveryone ? '1' : '0' ?>">
-        <i class="far fa-trash-alt mr-1"></i> Delete
-      </button>
-    <?php endif; ?>
+    </div>
   </div>
-</div>
 
-<div id="conversationWrapper" class="mt-4">
-  <div class="mailbox-thread-heading">
-    <h6 class="text-uppercase">Conversation</h6>
-    <span class="mailbox-thread-count"><?= (int) ($replyCount + 1) ?> message<?= (int) ($replyCount + 1) === 1 ? '' : 's' ?></span>
+  <div class="chat-status-row">
+    <div class="mailbox-thread-heading">
+      <h6 class="text-uppercase">Chat flow</h6>
+    </div>
+    <div class="chat-typing-indicator" id="threadTypingIndicator" hidden>
+      <span class="chat-typing-dots"><span></span><span></span><span></span></span>
+      <span class="chat-typing-copy">Someone is typing...</span>
+    </div>
   </div>
-  <div class="conversation-scroll">
-    <?= renderOriginalMessageBubble($message, $originalReplyClass, $originalAvatarUrl, $originalDisplayName) ?>
-    <?php if ($replyCount > 0): ?>
-        <?php foreach ($replies as $reply): ?>
-            <?= renderReply($reply, $userId, (string) $userType) ?>
-        <?php endforeach; ?>
-    <?php endif; ?>
+
+  <div id="conversationWrapper" class="mt-4">
+    <div class="conversation-scroll">
+      <?= renderOriginalMessageBubble($message, $originalReplyClass, $originalAvatarUrl, $originalDisplayName, $messageReactionSummary) ?>
+      <?php foreach ($replies as $reply): ?>
+          <?= renderReply($reply, $userId, (string) $userType, $replyReactionSummary[(int) ($reply['id'] ?? 0)] ?? [], (int) $message['id']) ?>
+      <?php endforeach; ?>
+    </div>
   </div>
-</div>
 
-<?php if ($currentFolder !== 'trash'): ?>
-  <div class="mt-4">
-    <form id="replyForm" enctype="multipart/form-data" class="reply-form-shell" data-no-loader="true">
-      <div class="reply-form-header">
-        <h6>Reply</h6>
-        <span class="reply-form-hint">Keep the thread focused and attach files only when needed.</span>
-      </div>
-      <div class="reply-compose-tools mb-2">
-        <div class="emoji-tools">
-          <button type="button" class="btn btn-default btn-sm emoji-trigger" id="replyEmojiTrigger" aria-label="Insert emoji" aria-expanded="false">
-            <i class="far fa-smile mr-1"></i> Emoji
-          </button>
-          <div class="emoji-menu" id="replyEmojiMenu" hidden></div>
-        </div>
-      </div>
-      <textarea id="replyText" name="reply" class="form-control" rows="4" placeholder="Write your reply..."></textarea>
-
-      <div id="replyFilePreview" class="file-preview"></div>
-
-      <div class="reply-actions">
-        <div>
-          <input type="file" name="replyAttachments[]" id="replyAttachments" multiple hidden>
-          <button type="button" class="btn btn-default btn-sm" id="attachBtn">
-            <i class="fas fa-paperclip mr-1"></i> Attach files
-          </button>
+  <?php if ($currentFolder !== 'trash'): ?>
+    <div class="mt-3">
+      <form id="replyForm" enctype="multipart/form-data" class="reply-form-shell chat-composer-shell" data-no-loader="true">
+        <div class="chat-mentions-shell">
+          <textarea id="replyText" name="reply" class="form-control chat-reply-textarea" rows="2" placeholder="Write a message, use @ to mention someone..."></textarea>
+          <div class="chat-composer-tool-stack">
+            <button type="button" class="chat-composer-tool-btn" id="attachBtn" aria-label="Attach files" title="Attach files">
+              <i class="fas fa-paperclip"></i>
+            </button>
+            <button type="button" class="chat-composer-tool-btn emoji-trigger" id="replyEmojiTrigger" aria-label="Open emoji picker" aria-expanded="false" aria-controls="replyEmojiMenu" title="Emoji">
+              <i class="far fa-smile"></i>
+            </button>
+            <div class="emoji-menu" id="replyEmojiMenu" hidden></div>
+          </div>
+          <div class="chat-mention-menu" id="replyMentionMenu" hidden></div>
         </div>
 
-        <button type="submit" class="btn btn-primary btn-sm">
-          <i class="fas fa-paper-plane mr-1"></i> Send Reply
-        </button>
-      </div>
+        <input type="file" name="replyAttachments[]" id="replyAttachments" multiple hidden>
+        <div id="replyFilePreview" class="file-preview"></div>
 
-      <input type="hidden" name="id" value="<?= (int) $id ?>">
-      <input type="hidden" name="email" value="<?= htmlspecialchars($message['user_email'], ENT_QUOTES) ?>">
-      <input type="hidden" name="subject" value="<?= htmlspecialchars($message['subject'], ENT_QUOTES) ?>">
-      <input type="hidden" name="message" value="<?= htmlspecialchars($message['message'], ENT_QUOTES) ?>">
-      <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(security_get_csrf_token(), ENT_QUOTES) ?>">
-    </form>
-  </div>
-<?php else: ?>
-  <div class="alert alert-light border mt-4 mb-0">
-    This conversation is in Trash. Restore it if you want to reply again.
-  </div>
-<?php endif; ?>
+        <input type="hidden" name="id" value="<?= (int) $id ?>">
+        <input type="hidden" name="email" value="<?= htmlspecialchars($message['user_email'], ENT_QUOTES) ?>">
+        <input type="hidden" name="subject" value="<?= htmlspecialchars($message['subject'], ENT_QUOTES) ?>">
+        <input type="hidden" name="message" value="<?= htmlspecialchars($message['message'], ENT_QUOTES) ?>">
+        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(security_get_csrf_token(), ENT_QUOTES) ?>">
+      </form>
+    </div>
+  <?php else: ?>
+    <div class="alert alert-light border mt-4 mb-0">
+      This chat is archived. Restore it if you want to jump back in.
+    </div>
+  <?php endif; ?>
+</div>
 
 <script>
 (function() {
+    const replyForm = document.getElementById('replyForm');
     const attachBtn = document.getElementById('attachBtn');
     const fileInput = document.getElementById('replyAttachments');
     const preview = document.getElementById('replyFilePreview');
     const replyText = document.getElementById('replyText');
     const emojiTrigger = document.getElementById('replyEmojiTrigger');
     const emojiMenu = document.getElementById('replyEmojiMenu');
-    const emojis = ['😀','😂','😊','😍','😉','👍','👏','🙏','🎉','🔥','❤️','✨','📎','📩','✅','🤝','🙌','😎','📌','💡'];
+    const mentionMenu = document.getElementById('replyMentionMenu');
+    const shell = document.querySelector('.chat-shell');
+    const participantData = (() => {
+        if (!shell) {
+            return [];
+        }
+        try {
+            return JSON.parse(shell.getAttribute('data-participants') || '[]');
+        } catch (error) {
+            return [];
+        }
+    })();
+    const emojis = ['😀', '😂', '😊', '😍', '😉', '👍', '👏', '🙏', '🎉', '🔥', '❤️', '✨', '📎', '📩', '✅', '🤝', '🙌', '😎', '📌', '💡'];
 
-    if (!attachBtn || !fileInput || !preview || !replyText || !emojiTrigger || !emojiMenu) {
+    if (!replyForm || !attachBtn || !fileInput || !preview || !replyText || !emojiTrigger || !emojiMenu || !mentionMenu) {
         return;
     }
 
@@ -396,8 +578,59 @@ if ($onlyConversation) {
     }
 
     function closeEmojiMenu() {
-        emojiMenu.hidden = true;
-        emojiTrigger.setAttribute('aria-expanded', 'false');
+        window.KODUSEmojiPicker?.close(emojiTrigger, emojiMenu);
+    }
+
+    function positionReplyEmojiMenu() {
+        window.KODUSEmojiPicker?.position(emojiTrigger, emojiMenu);
+    }
+
+    function closeMentionMenu() {
+        mentionMenu.hidden = true;
+        mentionMenu.innerHTML = '';
+    }
+
+    function replaceMentionToken(field, mentionValue) {
+        const caret = field.selectionStart ?? field.value.length;
+        const before = field.value.slice(0, caret);
+        const after = field.value.slice(caret);
+        const match = before.match(/(^|\s)@([^\s@]*)$/);
+        if (!match) {
+            return;
+        }
+        const startIndex = before.length - match[0].length + match[1].length;
+        field.value = before.slice(0, startIndex) + '@' + mentionValue + ' ' + after;
+        const nextCaret = startIndex + mentionValue.length + 2;
+        field.focus();
+        field.setSelectionRange(nextCaret, nextCaret);
+        field.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+
+    function renderMentionMenu(query) {
+        const normalizedQuery = String(query || '').toLowerCase();
+        const matches = participantData.filter(function(name) {
+            return String(name || '').toLowerCase().includes(normalizedQuery);
+        }).slice(0, 6);
+
+        if (!matches.length) {
+            closeMentionMenu();
+            return;
+        }
+
+        mentionMenu.innerHTML = '';
+        matches.forEach(function(name) {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'chat-mention-item';
+            button.textContent = '@' + name;
+            button.addEventListener('click', function(event) {
+                event.preventDefault();
+                replaceMentionToken(replyText, name);
+                closeMentionMenu();
+            });
+            mentionMenu.appendChild(button);
+        });
+        mentionMenu.hidden = false;
     }
 
     emojis.forEach(function(emoji) {
@@ -405,61 +638,95 @@ if ($onlyConversation) {
         button.type = 'button';
         button.className = 'emoji-item';
         button.textContent = emoji;
-        button.addEventListener('click', function(e) {
-            e.preventDefault();
+        button.addEventListener('click', function(event) {
+            event.preventDefault();
             insertTextAtCursor(replyText, emoji);
             closeEmojiMenu();
         });
         emojiMenu.appendChild(button);
     });
+    window.KODUSEmojiPicker?.enhance(emojiMenu);
 
     attachBtn.addEventListener('click', function() {
         fileInput.click();
     });
 
-    emojiTrigger.addEventListener('click', function(e) {
-        e.preventDefault();
-        e.stopPropagation();
-        const shouldOpen = emojiMenu.hidden;
-        closeEmojiMenu();
-        emojiMenu.hidden = !shouldOpen;
-        emojiTrigger.setAttribute('aria-expanded', shouldOpen ? 'true' : 'false');
+    replyText.addEventListener('input', function() {
+        const caret = replyText.selectionStart ?? replyText.value.length;
+        const before = replyText.value.slice(0, caret);
+        const match = before.match(/(^|\s)@([^\s@]*)$/);
+        if (!match) {
+            closeMentionMenu();
+            return;
+        }
+        renderMentionMenu(match[2] || '');
     });
 
-    emojiMenu.addEventListener('click', function(e) {
-        e.stopPropagation();
+    replyText.addEventListener('keydown', function(event) {
+        if (event.key === 'Escape') {
+            closeEmojiMenu();
+            closeMentionMenu();
+            return;
+        }
+
+        if (event.key === 'Enter' && !event.shiftKey) {
+            event.preventDefault();
+            closeMentionMenu();
+            replyForm.requestSubmit();
+        }
     });
 
-    document.addEventListener('click', closeEmojiMenu);
+    emojiTrigger.addEventListener('click', function(event) {
+        event.preventDefault();
+        event.stopPropagation();
+        closeMentionMenu();
+        window.KODUSEmojiPicker?.toggle(emojiTrigger, emojiMenu);
+    });
+
+    window.addEventListener('resize', function() {
+        if (!emojiMenu.hidden) {
+            positionReplyEmojiMenu();
+        }
+    }, { passive: true });
+
+    document.addEventListener('click', function(event) {
+        if (!emojiMenu.contains(event.target) && event.target !== emojiTrigger && !emojiTrigger.contains(event.target)) {
+            closeEmojiMenu();
+        }
+        if (!mentionMenu.contains(event.target) && event.target !== replyText) {
+            closeMentionMenu();
+        }
+    });
 
     fileInput.addEventListener('change', function() {
         preview.innerHTML = '';
-        const files = [...this.files];
-        const maxPreview = 3;
+        const files = Array.from(fileInput.files || []);
+        files.forEach(function(file, index) {
+            if (index >= 4) {
+                return;
+            }
 
-        files.slice(0, maxPreview).forEach(function(file) {
             const card = document.createElement('div');
-            card.classList.add('file-card');
-            const ext = file.name.split('.').pop().toLowerCase();
+            card.className = 'file-card';
 
-            if (file.type.startsWith('image/') || ['avif', 'webp', 'jpg', 'jpeg', 'png', 'gif'].includes(ext)) {
+            if (file.type.startsWith('image/')) {
                 const img = document.createElement('img');
                 img.src = URL.createObjectURL(file);
                 card.appendChild(img);
             } else {
                 const icon = document.createElement('i');
-                icon.classList.add('fas', 'fa-file');
+                icon.className = 'fas fa-file';
                 card.appendChild(icon);
             }
 
             preview.appendChild(card);
         });
 
-        if (files.length > maxPreview) {
-            const moreCard = document.createElement('div');
-            moreCard.classList.add('file-card', 'more');
-            moreCard.textContent = `+${files.length - maxPreview}`;
-            preview.appendChild(moreCard);
+        if (files.length > 4) {
+            const more = document.createElement('div');
+            more.className = 'file-card more';
+            more.textContent = '+' + (files.length - 4);
+            preview.appendChild(more);
         }
     });
 })();

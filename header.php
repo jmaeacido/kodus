@@ -1882,9 +1882,9 @@ function pollRoleChangeState() {
 // UNREAD COUNT POLLING
 // ----------------------
 function updateUnreadCount() {
-  $.getJSON("<?php echo $app_root; ?>inbox/get_unread_count.php", function(data) {
+  $.getJSON("<?php echo $app_root; ?>messenger/get_unread_count.php", function(data) {
     let badge = $('#sidebarMailUnreadBadge');
-    const mailNavLabel = $('.nav-item a[href$="inbox/"] p');
+    const mailNavLabel = $('.nav-item a[href$="messenger/"] p');
 
     if (data.count > 0) {
       if (badge.length) {

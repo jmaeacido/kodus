@@ -14,7 +14,7 @@ function mailbox_user_avatar_url(?string $picture, ?string $ssoAvatarUrl, string
 $userId = $_SESSION['user_id'] ?? null;
 $currentFolder = mailboxGetFolder($_GET['folder'] ?? 'inbox');
 $trashPredicate = mailboxTrashPredicate($currentFolder, 'mr');
-$folderTitle = $currentFolder === 'trash' ? 'Trash' : 'Inbox';
+$folderTitle = $currentFolder === 'trash' ? 'Archived' : 'Chats';
 $currentUsername = trim((string) ($_SESSION['username'] ?? ''));
 
 if (!$userId) {
@@ -35,6 +35,9 @@ if ($userType === 'admin') {
                COALESCE(reply_summary.latest_reply_at, cm.sent_at) AS latest_activity_at,
                COALESCE(mr.is_read, 0) AS user_read,
                sender_user.picture AS sender_picture,
+               sender_user.sso_avatar_url AS sender_sso_avatar_url,
+               sender_user.last_activity AS sender_last_activity,
+               sender_user.is_online AS sender_is_online,
                (
                    SELECT GROUP_CONCAT(DISTINCT u.username ORDER BY u.username SEPARATOR ', ')
                    FROM contact_message_recipients cmr
@@ -48,7 +51,31 @@ if ($userType === 'admin') {
                    WHERE cmr.message_id = cm.id
                    ORDER BY u.username
                    LIMIT 1
-               ) AS recipient_picture
+               ) AS recipient_picture,
+               (
+                   SELECT u.sso_avatar_url
+                   FROM contact_message_recipients cmr
+                   INNER JOIN users u ON u.id = cmr.user_id
+                   WHERE cmr.message_id = cm.id
+                   ORDER BY u.username
+                   LIMIT 1
+               ) AS recipient_sso_avatar_url,
+               (
+                   SELECT u.last_activity
+                   FROM contact_message_recipients cmr
+                   INNER JOIN users u ON u.id = cmr.user_id
+                   WHERE cmr.message_id = cm.id
+                   ORDER BY u.username
+                   LIMIT 1
+               ) AS recipient_last_activity,
+               (
+                   SELECT u.is_online
+                   FROM contact_message_recipients cmr
+                   INNER JOIN users u ON u.id = cmr.user_id
+                   WHERE cmr.message_id = cm.id
+                   ORDER BY u.username
+                   LIMIT 1
+               ) AS recipient_is_online
         FROM contact_messages cm
         LEFT JOIN (
             SELECT message_id, MAX(sent_at) AS latest_reply_at
@@ -79,6 +106,9 @@ if ($userType === 'admin') {
                COALESCE(reply_summary.latest_reply_at, cm.sent_at) AS latest_activity_at,
                COALESCE(mr.is_read, 0) AS user_read,
                sender_user.picture AS sender_picture,
+               sender_user.sso_avatar_url AS sender_sso_avatar_url,
+               sender_user.last_activity AS sender_last_activity,
+               sender_user.is_online AS sender_is_online,
                (
                    SELECT GROUP_CONCAT(DISTINCT u.username ORDER BY u.username SEPARATOR ', ')
                    FROM contact_message_recipients cmr
@@ -92,7 +122,31 @@ if ($userType === 'admin') {
                    WHERE cmr.message_id = cm.id
                    ORDER BY u.username
                    LIMIT 1
-               ) AS recipient_picture
+               ) AS recipient_picture,
+               (
+                   SELECT u.sso_avatar_url
+                   FROM contact_message_recipients cmr
+                   INNER JOIN users u ON u.id = cmr.user_id
+                   WHERE cmr.message_id = cm.id
+                   ORDER BY u.username
+                   LIMIT 1
+               ) AS recipient_sso_avatar_url,
+               (
+                   SELECT u.last_activity
+                   FROM contact_message_recipients cmr
+                   INNER JOIN users u ON u.id = cmr.user_id
+                   WHERE cmr.message_id = cm.id
+                   ORDER BY u.username
+                   LIMIT 1
+               ) AS recipient_last_activity,
+               (
+                   SELECT u.is_online
+                   FROM contact_message_recipients cmr
+                   INNER JOIN users u ON u.id = cmr.user_id
+                   WHERE cmr.message_id = cm.id
+                   ORDER BY u.username
+                   LIMIT 1
+               ) AS recipient_is_online
         FROM contact_messages cm
         LEFT JOIN (
             SELECT message_id, MAX(sent_at) AS latest_reply_at
@@ -119,6 +173,13 @@ if ($userType === 'admin') {
 $stmt->execute();
 $messages = db_stmt_fetch_all_assoc($stmt);
 $stmt->close();
+$latestPreviews = mailboxLatestThreadPreviews(
+    $conn,
+    array_column($messages, 'id'),
+    (int) $userId,
+    (string) ($_SESSION['email'] ?? ''),
+    $currentUsername
+);
 
 $messageCount = count($messages);
 $unreadCount = 0;
@@ -187,7 +248,7 @@ $composeCsrfToken = security_get_csrf_token();
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>KODUS | Mailbox</title>
+  <title>KODUS | Messenger</title>
   <link rel="stylesheet" href="<?php echo app_url('plugins/select2/css/select2.min.css'); ?>">
   <link rel="stylesheet" href="<?php echo app_url('plugins/select2-bootstrap4-theme/select2-bootstrap4.min.css'); ?>">
   <style>
@@ -202,6 +263,20 @@ $composeCsrfToken = security_get_csrf_token();
       --mailbox-accent-soft: rgba(13, 110, 253, 0.1);
       --mailbox-accent-strong: #2563eb;
       --mailbox-shadow: 0 16px 36px rgba(15, 23, 42, 0.08);
+      --messenger-bg: #eef2f7;
+      --messenger-panel: #ffffff;
+      --messenger-panel-strong: #f8fafc;
+      --messenger-panel-soft: rgba(15, 23, 42, 0.04);
+      --messenger-divider: rgba(15, 23, 42, 0.08);
+      --messenger-text: #18212f;
+      --messenger-muted: #667085;
+      --messenger-accent: #2374e1;
+      --messenger-accent-soft: rgba(35, 116, 225, 0.14);
+      --messenger-chip: rgba(15, 23, 42, 0.06);
+      --messenger-bubble: #f1f5f9;
+      --messenger-bubble-mine: linear-gradient(135deg, #2563eb, #7c3aed);
+      --messenger-success: #31a24c;
+      --messenger-shadow: 0 20px 48px rgba(15, 23, 42, 0.12);
     }
 
     body.dark-mode .mailbox-app,
@@ -218,6 +293,20 @@ $composeCsrfToken = security_get_csrf_token();
       --mailbox-accent-soft: rgba(96, 165, 250, 0.18);
       --mailbox-accent-strong: #93c5fd;
       --mailbox-shadow: 0 18px 36px rgba(0, 0, 0, 0.22);
+      --messenger-bg: #18191a;
+      --messenger-panel: #242526;
+      --messenger-panel-strong: #1f2021;
+      --messenger-panel-soft: rgba(255, 255, 255, 0.05);
+      --messenger-divider: rgba(255, 255, 255, 0.06);
+      --messenger-text: #f5f7fb;
+      --messenger-muted: #aeb4bd;
+      --messenger-accent: #2374e1;
+      --messenger-accent-soft: rgba(35, 116, 225, 0.18);
+      --messenger-chip: rgba(255, 255, 255, 0.08);
+      --messenger-bubble: #2f3031;
+      --messenger-bubble-mine: linear-gradient(135deg, #2563eb, #7c3aed);
+      --messenger-success: #31a24c;
+      --messenger-shadow: 0 24px 56px rgba(0, 0, 0, 0.28);
     }
 
     body.dark-mode .mailbox-app .mailbox-read-info,
@@ -328,6 +417,20 @@ $composeCsrfToken = security_get_csrf_token();
     .mailbox-app .message-item.unread .mailbox-name,
     .mailbox-app .message-item.unread .mailbox-subject {
       font-weight: 700;
+    }
+
+    .mailbox-app .mailbox-chat-badge {
+      display: inline-flex;
+      align-items: center;
+      margin-left: 0.45rem;
+      padding: 0.18rem 0.45rem;
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--messenger-accent) 14%, transparent);
+      color: var(--messenger-accent);
+      font-size: 0.68rem;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+      vertical-align: middle;
     }
 
     .mailbox-app .mailbox-name {
@@ -699,6 +802,104 @@ $composeCsrfToken = security_get_csrf_token();
       padding: 0.35rem 0.65rem;
     }
 
+    .mailbox-app .chat-shell {
+      display: grid;
+      gap: 1rem;
+    }
+
+    .mailbox-app .chat-thread-header {
+      display: grid;
+      gap: 1rem;
+    }
+
+    .mailbox-app .chat-thread-hero {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .mailbox-app .chat-thread-kicker {
+      margin: 0 0 0.35rem;
+      font-size: 0.74rem;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--mailbox-text-muted);
+    }
+
+    .mailbox-app .chat-thread-meta-line {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.45rem 0.8rem;
+      margin-top: 0.55rem;
+      color: var(--mailbox-text-muted);
+      font-size: 0.84rem;
+    }
+
+    .mailbox-app .chat-thread-search {
+      flex: 1 1 240px;
+      max-width: 320px;
+      min-width: min(100%, 220px);
+    }
+
+    .mailbox-app .chat-thread-search .form-control {
+      border-radius: 999px;
+    }
+
+    .mailbox-app .chat-thread-search-status {
+      margin-top: 0.4rem;
+      color: var(--mailbox-text-muted);
+      font-size: 0.78rem;
+      text-align: right;
+    }
+
+    .mailbox-app .chat-status-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+    }
+
+    .mailbox-app .chat-typing-indicator {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.65rem;
+      min-height: 2rem;
+      color: var(--mailbox-text-muted);
+      font-size: 0.82rem;
+      font-weight: 600;
+    }
+
+    .mailbox-app .chat-typing-dots {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.2rem;
+    }
+
+    .mailbox-app .chat-typing-dots span {
+      width: 0.42rem;
+      height: 0.42rem;
+      border-radius: 999px;
+      background: #60a5fa;
+      animation: mailboxTypingBounce 1s infinite ease-in-out;
+    }
+
+    .mailbox-app .chat-typing-dots span:nth-child(2) {
+      animation-delay: 0.15s;
+    }
+
+    .mailbox-app .chat-typing-dots span:nth-child(3) {
+      animation-delay: 0.3s;
+    }
+
+    @keyframes mailboxTypingBounce {
+      0%, 80%, 100% { transform: translateY(0); opacity: 0.45; }
+      40% { transform: translateY(-3px); opacity: 1; }
+    }
+
     .mailbox-app .mailbox-detail-actions {
       margin: 0.9rem 0 1rem;
     }
@@ -723,6 +924,12 @@ $composeCsrfToken = security_get_csrf_token();
       border-radius: 0.75rem;
       word-break: break-word;
       box-shadow: 0 12px 20px rgba(15, 23, 42, 0.06);
+    }
+
+    .mailbox-app .chat-bubble-body {
+      white-space: normal;
+      line-height: 1.5;
+      font-size: 0.95rem;
     }
 
     .mailbox-app .reply.mine {
@@ -885,6 +1092,13 @@ $composeCsrfToken = security_get_csrf_token();
       box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
     }
 
+    .mailbox-app .chat-composer-shell {
+      position: sticky;
+      bottom: 0;
+      z-index: 2;
+      border-radius: 1rem;
+    }
+
     .mailbox-app .reply-compose-tools {
       display: flex;
       justify-content: flex-end;
@@ -895,40 +1109,112 @@ $composeCsrfToken = security_get_csrf_token();
       display: inline-flex;
     }
 
-    .mailbox-app .emoji-menu {
-      position: absolute;
-      right: 0;
-      top: calc(100% + 0.4rem);
-      width: 214px;
-      padding: 0.6rem;
-      border-radius: 0.85rem;
-      background: #1f2937;
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      box-shadow: 0 12px 28px rgba(15, 23, 42, 0.28);
-      display: grid;
-      grid-template-columns: repeat(5, minmax(0, 1fr));
-      gap: 0.35rem;
-      z-index: 25;
+    .mailbox-app .emoji-menu,
+    .compose-modal .emoji-menu {
+      position: fixed;
+      width: min(268px, calc(100vw - 1.5rem));
+      padding: 0.65rem;
+      border-radius: 0.95rem;
+      background: color-mix(in srgb, var(--messenger-panel-strong) 88%, rgba(15, 23, 42, 0.86) 12%);
+      border: 1px solid color-mix(in srgb, var(--messenger-divider) 72%, rgba(255, 255, 255, 0.18) 28%);
+      box-shadow: 0 18px 42px rgba(0, 0, 0, 0.28);
+      display: block;
+      z-index: 1075;
+      color: var(--messenger-text);
+      backdrop-filter: blur(12px);
     }
 
-    .mailbox-app .emoji-menu[hidden] {
+    .compose-modal .emoji-menu.is-modal-bound {
+      position: absolute;
+    }
+
+    .mailbox-app .emoji-menu[hidden],
+    .compose-modal .emoji-menu[hidden] {
       display: none;
     }
 
-    .mailbox-app .emoji-item {
+    .mailbox-app .emoji-item,
+    .compose-modal .emoji-item {
       border: 0;
       background: transparent;
       border-radius: 0.55rem;
-      padding: 0.35rem;
-      font-size: 1.08rem;
+      width: 2rem;
+      height: 2rem;
+      padding: 0;
+      font-size: 1.1rem;
       line-height: 1;
       color: inherit;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
     }
 
     .mailbox-app .emoji-item:hover,
-    .mailbox-app .emoji-item:focus {
-      background: rgba(255, 255, 255, 0.08);
+    .mailbox-app .emoji-item:focus,
+    .compose-modal .emoji-item:hover,
+    .compose-modal .emoji-item:focus {
+      background: color-mix(in srgb, var(--messenger-accent) 16%, transparent);
       outline: none;
+    }
+
+    .mailbox-app .emoji-panel-head,
+    .compose-modal .emoji-panel-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+      margin-bottom: 0.5rem;
+      color: var(--messenger-muted);
+      font-size: 0.74rem;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+    }
+
+    .mailbox-app .emoji-panel-cats,
+    .compose-modal .emoji-panel-cats {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.18rem;
+      color: var(--messenger-muted);
+    }
+
+    .mailbox-app .emoji-panel-cat,
+    .compose-modal .emoji-panel-cat {
+      width: 1.55rem;
+      height: 1.55rem;
+      border-radius: 999px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: color-mix(in srgb, var(--messenger-chip) 82%, transparent);
+      font-size: 0.82rem;
+    }
+
+    .mailbox-app .emoji-panel-search,
+    .compose-modal .emoji-panel-search {
+      width: 100%;
+      height: 2rem;
+      border-radius: 0.7rem;
+      border: 1px solid var(--messenger-divider);
+      background: color-mix(in srgb, var(--messenger-chip) 84%, transparent);
+      color: var(--messenger-text);
+      font-size: 0.82rem;
+      padding: 0.35rem 0.65rem;
+      margin-bottom: 0.55rem;
+      box-shadow: none;
+    }
+
+    .mailbox-app .emoji-panel-search::placeholder,
+    .compose-modal .emoji-panel-search::placeholder {
+      color: var(--messenger-muted);
+    }
+
+    .mailbox-app .emoji-grid,
+    .compose-modal .emoji-grid {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: 0.28rem;
     }
 
     .mailbox-app .reply-actions {
@@ -954,9 +1240,142 @@ $composeCsrfToken = security_get_csrf_token();
       color: var(--mailbox-text);
     }
 
+    .mailbox-app .reply-form-caption {
+      margin-top: 0.2rem;
+      color: var(--mailbox-text-muted);
+      font-size: 0.8rem;
+    }
+
     .mailbox-app .reply-form-hint {
       color: var(--mailbox-text-muted);
       font-size: 0.82rem;
+    }
+
+    .mailbox-app .chat-mentions-shell {
+      position: relative;
+    }
+
+    .mailbox-app .chat-reply-textarea {
+      min-height: 104px;
+      border-radius: 1rem;
+      resize: vertical;
+    }
+
+    .mailbox-app .chat-mention-menu {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: calc(100% + 0.45rem);
+      border: 1px solid var(--mailbox-border);
+      border-radius: 0.85rem;
+      background: var(--mailbox-surface-elevated);
+      box-shadow: var(--mailbox-shadow);
+      padding: 0.35rem;
+      display: grid;
+      gap: 0.25rem;
+      z-index: 35;
+    }
+
+    .mailbox-app .chat-mention-menu[hidden] {
+      display: none;
+    }
+
+    .mailbox-app .chat-mention-item {
+      border: 0;
+      background: transparent;
+      color: var(--mailbox-text);
+      text-align: left;
+      border-radius: 0.65rem;
+      padding: 0.55rem 0.75rem;
+      font-size: 0.9rem;
+      font-weight: 600;
+    }
+
+    .mailbox-app .chat-mention-item:hover,
+    .mailbox-app .chat-mention-item:focus {
+      background: color-mix(in srgb, var(--mailbox-accent-soft) 84%, transparent);
+      outline: none;
+    }
+
+    .mailbox-app .chat-reactions {
+      margin-top: 0.75rem;
+    }
+
+    .mailbox-app .chat-reaction-summary {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.35rem;
+      align-items: center;
+    }
+
+    .mailbox-app .chat-reaction-chip,
+    .mailbox-app .chat-reaction-add,
+    .mailbox-app .chat-reaction-trigger {
+      border: 1px solid var(--mailbox-border);
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--mailbox-surface) 94%, transparent);
+      color: var(--mailbox-text);
+      min-height: 30px;
+      padding: 0.2rem 0.55rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+      font-size: 0.8rem;
+      font-weight: 700;
+      line-height: 1;
+    }
+
+    .mailbox-app .chat-reaction-chip.is-active {
+      border-color: rgba(37, 99, 235, 0.36);
+      background: linear-gradient(135deg, rgba(37, 99, 235, 0.16), rgba(15, 118, 110, 0.14));
+      color: color-mix(in srgb, var(--mailbox-text) 30%, #2563eb 70%);
+    }
+
+    .mailbox-app .chat-reaction-add,
+    .mailbox-app .chat-reaction-trigger {
+      font-size: 0.95rem;
+      padding-inline: 0.45rem;
+    }
+
+    .mailbox-app .chat-reaction-picker-wrap {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+    }
+
+    .mailbox-app .chat-reaction-trigger {
+      justify-content: center;
+      min-width: 30px;
+      cursor: pointer;
+    }
+
+    .mailbox-app .chat-reaction-picker {
+      position: absolute;
+      left: 0;
+      top: calc(100% + 0.45rem);
+      width: 214px;
+      padding: 0.6rem;
+      border-radius: 0.85rem;
+      background: var(--messenger-panel-strong);
+      border: 1px solid var(--messenger-divider);
+      box-shadow: 0 12px 28px color-mix(in srgb, var(--messenger-text) 14%, transparent);
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 0.35rem;
+      z-index: 20;
+      color: var(--messenger-text);
+    }
+
+    .mailbox-app .chat-reaction-picker[hidden] {
+      display: none;
+    }
+
+    .mailbox-app .chat-search-hit {
+      background: rgba(250, 204, 21, 0.3);
+      color: inherit;
+      border-radius: 0.25rem;
+      padding: 0 0.1rem;
+      box-shadow: 0 0 0 1px rgba(250, 204, 21, 0.22);
     }
 
     .compose-modal .modal-dialog {
@@ -1096,36 +1515,48 @@ $composeCsrfToken = security_get_csrf_token();
       box-shadow: 0 0 0 0.22rem color-mix(in srgb, var(--mailbox-accent-soft) 88%, transparent);
     }
 
-    .compose-modal .compose-toolbar {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 0.75rem;
-      margin-bottom: 0.45rem;
+    .compose-modal .compose-message-shell {
+      position: relative;
     }
 
-    .compose-modal .compose-toolbar .btn {
+    .compose-modal .compose-message-shell .form-control {
+      min-height: 154px;
+      padding-right: 3.4rem;
+    }
+
+    .compose-modal .compose-tool-stack {
+      position: absolute;
+      right: 0.7rem;
+      bottom: 0.55rem;
+      display: inline-flex;
+      flex-direction: column;
+      gap: 0.4rem;
+      z-index: 4;
+    }
+
+    .compose-modal .compose-tool-btn {
+      width: 2.2rem;
+      height: 2.2rem;
+      border: 1px solid var(--mailbox-border);
       border-radius: 999px;
-    }
-
-    .compose-modal .compose-toolbar-copy {
-      color: var(--mailbox-text-muted);
-      font-size: 0.82rem;
-    }
-
-    .compose-modal .compose-attachment-wrap {
-      margin-top: 0.95rem;
-    }
-
-    .compose-modal .compose-attachment-label {
-      display: flex;
+      display: inline-flex;
       align-items: center;
-      justify-content: space-between;
-      gap: 1rem;
-      padding: 0.9rem 1rem;
-      cursor: pointer;
-      margin: 0;
-      border-style: dashed;
+      justify-content: center;
+      background: color-mix(in srgb, var(--mailbox-surface) 94%, transparent);
+      color: var(--mailbox-text-muted);
+      transition: background-color 0.18s ease, color 0.18s ease, border-color 0.18s ease;
+    }
+
+    .compose-modal .compose-tool-btn:hover,
+    .compose-modal .compose-tool-btn:focus {
+      outline: none;
+      color: var(--mailbox-accent-strong);
+      border-color: color-mix(in srgb, var(--mailbox-accent-strong) 45%, var(--mailbox-border));
+      background: color-mix(in srgb, var(--mailbox-accent-soft) 78%, transparent);
+    }
+
+    .compose-modal .compose-message-shell .emoji-menu {
+      z-index: 1080;
     }
 
     .compose-modal .compose-file-summary {
@@ -1424,6 +1855,621 @@ $composeCsrfToken = security_get_csrf_token();
       white-space: nowrap;
     }
 
+    .mailbox-app {
+      min-height: 100vh;
+      background: var(--messenger-bg);
+    }
+
+    .mailbox-app .content-wrapper {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at top left, color-mix(in srgb, var(--messenger-accent) 12%, transparent), transparent 25%),
+        radial-gradient(circle at bottom right, rgba(168, 85, 247, 0.08), transparent 28%),
+        linear-gradient(180deg, color-mix(in srgb, var(--messenger-bg) 92%, #ffffff 8%) 0%, color-mix(in srgb, var(--messenger-bg) 98%, #000000 2%) 100%);
+    }
+
+    .mailbox-app .content-header {
+      display: none;
+    }
+
+    .mailbox-app .container-fluid {
+      max-width: 1480px;
+    }
+
+    .mailbox-app .mailbox-sidebar-card,
+    .mailbox-app .mailbox-pane-card {
+      border-radius: 1.25rem;
+      border-color: var(--messenger-divider);
+      background: linear-gradient(180deg, var(--messenger-panel) 0%, var(--messenger-panel-strong) 100%);
+      box-shadow: var(--messenger-shadow);
+    }
+
+    .mailbox-app .mailbox-pane-card {
+      min-height: calc(100vh - 2rem);
+    }
+
+    .mailbox-app .messenger-sidebar-shell,
+    .mailbox-app .mailbox-read-pane {
+      background: transparent;
+    }
+
+    .mailbox-app .messenger-sidebar-top,
+    .mailbox-app .messenger-detail-frame {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.9rem;
+    }
+
+    .mailbox-app .messenger-sidebar-title {
+      margin: 0;
+      font-size: 1.9rem;
+      line-height: 1.05;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      color: var(--messenger-text);
+    }
+
+    .mailbox-app .messenger-sidebar-subtitle {
+      margin: 0.25rem 0 0;
+      color: var(--messenger-muted);
+      font-size: 0.84rem;
+    }
+
+    .mailbox-app .messenger-sidebar-actions,
+    .mailbox-app .messenger-detail-actions {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .mailbox-app .messenger-icon-btn {
+      width: 2.5rem;
+      height: 2.5rem;
+      border: 0;
+      border-radius: 999px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--messenger-chip);
+      color: var(--messenger-muted);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+    }
+
+    .mailbox-app .messenger-icon-btn:hover,
+    .mailbox-app .messenger-icon-btn:focus {
+      background: color-mix(in srgb, var(--messenger-accent) 18%, transparent);
+      color: var(--messenger-text);
+      outline: none;
+    }
+
+    .mailbox-app .messenger-sidebar-search {
+      margin: 1rem 0 0.95rem;
+    }
+
+    .mailbox-app .messenger-search-shell {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      min-height: 2.9rem;
+      padding: 0 1rem;
+      border-radius: 1rem;
+      background: color-mix(in srgb, var(--messenger-chip) 92%, transparent);
+      border: 1px solid transparent;
+      transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .mailbox-app .messenger-search-shell:focus-within {
+      border-color: color-mix(in srgb, var(--messenger-accent) 28%, transparent);
+      background: color-mix(in srgb, var(--messenger-panel) 90%, transparent);
+      box-shadow: 0 0 0 0.2rem color-mix(in srgb, var(--messenger-accent) 16%, transparent);
+    }
+
+    .mailbox-app .messenger-search-shell > i {
+      color: var(--messenger-muted);
+      font-size: 0.9rem;
+      flex: 0 0 auto;
+    }
+
+    .mailbox-app .messenger-sidebar-search .form-control {
+      width: 100% !important;
+      height: 2.8rem;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      color: var(--messenger-text);
+      box-shadow: none;
+      border-radius: 0;
+    }
+
+    .mailbox-app .messenger-sidebar-search .form-control:focus {
+      box-shadow: none;
+    }
+
+    .mailbox-app .messenger-sidebar-search .form-control::placeholder {
+      color: var(--messenger-muted);
+    }
+
+    .mailbox-app .messenger-chip-row {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+      overflow-x: auto;
+      padding-bottom: 0.2rem;
+    }
+
+    .mailbox-app .messenger-filter-chip {
+      border: 0;
+      border-radius: 999px;
+      min-height: 2.2rem;
+      padding: 0.45rem 0.9rem;
+      background: transparent;
+      color: var(--messenger-muted);
+      font-size: 0.88rem;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .mailbox-app .messenger-filter-chip.active {
+      background: var(--messenger-accent);
+      color: #fff;
+      box-shadow: 0 10px 20px color-mix(in srgb, var(--messenger-accent) 28%, transparent);
+    }
+
+    .mailbox-app .mailbox-folder-nav {
+      display: none;
+    }
+
+    .mailbox-app .messenger-sidebar-summary {
+      margin-top: 0.5rem;
+      border-radius: 1rem;
+      background: var(--messenger-panel-soft);
+      border-color: var(--messenger-divider);
+      color: var(--messenger-muted);
+    }
+
+    .mailbox-app .messenger-list-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.9rem;
+      border-bottom-color: var(--messenger-divider);
+    }
+
+    .mailbox-app .messenger-list-header .card-title,
+    .mailbox-app .messenger-detail-frame .card-title {
+      color: var(--messenger-text);
+      font-size: 1.08rem;
+    }
+
+    .mailbox-app .messenger-list-header-copy {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.55rem;
+      color: var(--messenger-muted);
+      font-size: 0.82rem;
+      font-weight: 600;
+    }
+
+    .mailbox-app .messenger-toolbar,
+    .mailbox-app .messenger-bulk-row {
+      display: none;
+    }
+
+    .mailbox-app .messenger-toolbar {
+      background: transparent;
+      border-bottom-color: var(--messenger-divider);
+      padding-top: 0.7rem;
+      padding-bottom: 0.7rem;
+    }
+
+    .mailbox-app .messenger-bulk-row {
+      background: transparent;
+      border-bottom-color: var(--messenger-divider);
+      padding-top: 0.4rem;
+    }
+
+    .mailbox-app .mailbox-toolbar-copy,
+    .mailbox-app .mailbox-bulk-summary,
+    .mailbox-app .mailbox-select-toggle,
+    .mailbox-app .mailbox-read-pane,
+    .mailbox-app .reply-placeholder,
+    .mailbox-app .mailbox-empty-detail {
+      color: var(--messenger-muted);
+    }
+
+    .mailbox-app .mailbox-messages-wrap {
+      max-height: calc(100vh - 13.8rem);
+      background: transparent;
+      border-top-color: var(--messenger-divider);
+    }
+
+    .mailbox-app .mailbox-messages-wrap tbody {
+      gap: 0.5rem;
+      padding: 0.65rem;
+    }
+
+    .mailbox-app .mailbox-messages-wrap tr.message-item {
+      background: transparent;
+      border: 0;
+      border-radius: 1rem;
+      box-shadow: none;
+      min-height: 90px;
+      height: 90px;
+      padding: 0.85rem 0.9rem;
+      position: relative;
+    }
+
+    .mailbox-app .mailbox-messages-wrap tr.message-item .mailbox-name {
+      margin-bottom: 0.22rem;
+    }
+
+    .mailbox-app .mailbox-messages-wrap tr.message-item:hover {
+      background: var(--messenger-panel-soft);
+      transform: none;
+    }
+
+    .mailbox-app .mailbox-messages-wrap tr.message-item.active {
+      background: var(--messenger-accent-soft);
+      border: 1px solid color-mix(in srgb, var(--messenger-accent) 22%, transparent);
+      box-shadow: none;
+    }
+
+    .mailbox-app .mailbox-messages-wrap tr.message-item::after {
+      content: "";
+      position: absolute;
+      left: 3.55rem;
+      right: 0.8rem;
+      bottom: 0;
+      height: 1px;
+      background: var(--messenger-divider);
+    }
+
+    .mailbox-app .mailbox-messages-wrap tr.message-item.active::after {
+      display: none;
+    }
+
+    .mailbox-app .mailbox-name {
+      color: var(--messenger-text);
+      font-size: 0.98rem;
+      font-weight: 700;
+    }
+
+    .mailbox-app .mailbox-subject,
+    .mailbox-app .mailbox-subject .mailbox-subject-line,
+    .mailbox-app .mailbox-subject .mailbox-snippet,
+    .mailbox-app .mailbox-date {
+      color: var(--messenger-muted);
+    }
+
+    .mailbox-app .mailbox-subject .mailbox-subject-line {
+      display: none !important;
+    }
+
+    .mailbox-app .mailbox-subject .mailbox-snippet {
+      display: inline-block;
+      max-width: 100%;
+      font-size: 0.88rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .mailbox-app .message-item.unread .mailbox-name,
+    .mailbox-app .message-item.unread .mailbox-subject,
+    .mailbox-app .message-item.unread .mailbox-date {
+      color: var(--messenger-text);
+    }
+
+    .mailbox-app .mailbox-avatar {
+      width: 52px;
+      height: 52px;
+      border: 0;
+      box-shadow: 0 8px 22px rgba(0, 0, 0, 0.3);
+    }
+
+    .mailbox-app .mailbox-avatar-cell {
+      position: relative;
+      width: 60px;
+    }
+
+    .mailbox-app .mailbox-avatar-wrap {
+      position: relative;
+      display: inline-flex;
+    }
+
+    .mailbox-app .mailbox-presence-dot,
+    .mailbox-app .chat-thread-status-dot {
+      content: "";
+      position: absolute;
+      right: 0.2rem;
+      bottom: 0.1rem;
+      width: 0.9rem;
+      height: 0.9rem;
+      border-radius: 999px;
+      background: var(--messenger-success);
+      border: 2px solid var(--messenger-panel);
+    }
+
+    .mailbox-app .mailbox-presence-idle,
+    .mailbox-app .chat-thread-status-dot.is-idle {
+      background: #f59e0b;
+    }
+
+    .mailbox-app .mailbox-presence-offline,
+    .mailbox-app .chat-thread-status-dot.is-offline {
+      background: #94a3b8;
+    }
+
+    .mailbox-app .mailbox-star {
+      display: none !important;
+    }
+
+    .mailbox-app .mailbox-select-cell {
+      display: none !important;
+    }
+
+    .mailbox-app .mailbox-empty,
+    .mailbox-app .mailbox-empty-detail {
+      color: #b6bcc5;
+    }
+
+    .mailbox-app .mailbox-read-pane {
+      background: linear-gradient(180deg, var(--messenger-panel) 0%, var(--messenger-panel-strong) 100%);
+    }
+
+    .mailbox-app .mailbox-detail-header {
+      padding: 0.95rem 1.15rem;
+    }
+
+    .mailbox-app .messenger-detail-frame {
+      border-bottom-color: var(--messenger-divider);
+    }
+
+    .mailbox-app .messenger-detail-actions {
+      margin-left: auto;
+    }
+
+    .mailbox-app .chat-shell {
+      gap: 0.75rem;
+    }
+
+    .mailbox-app .mailbox-detail-actions {
+      display: none;
+    }
+
+    .mailbox-app .chat-thread-header {
+      padding: 0;
+      border: 0;
+      background: transparent;
+      box-shadow: none;
+    }
+
+    .mailbox-app .chat-thread-kicker,
+    .mailbox-app .chat-thread-participants {
+      display: none;
+    }
+
+    .mailbox-app .chat-thread-hero {
+      align-items: center;
+      padding: 0 0 0.4rem;
+    }
+
+    .mailbox-app .chat-thread-primary {
+      display: flex;
+      align-items: center;
+      gap: 0.9rem;
+      min-width: 0;
+    }
+
+    .mailbox-app .chat-thread-avatar-wrap {
+      position: relative;
+      flex: 0 0 auto;
+    }
+
+    .mailbox-app .chat-thread-avatar {
+      width: 52px;
+      height: 52px;
+      border-radius: 999px;
+      object-fit: cover;
+      box-shadow: 0 10px 26px rgba(15, 23, 42, 0.18);
+      border: 2px solid color-mix(in srgb, var(--messenger-panel) 86%, transparent);
+    }
+
+    .mailbox-app .chat-thread-status-dot {
+      position: absolute;
+      right: 0.1rem;
+      bottom: 0.1rem;
+      width: 0.9rem;
+      height: 0.9rem;
+      border-radius: 999px;
+      background: var(--messenger-success);
+      border: 2px solid var(--messenger-panel);
+    }
+
+    .mailbox-app .chat-thread-status-dot.is-idle {
+      background: #f59e0b;
+    }
+
+    .mailbox-app .chat-thread-status-dot.is-offline {
+      background: #94a3b8;
+    }
+
+    .mailbox-app .mailbox-read-subject {
+      font-size: 1.28rem;
+      color: var(--messenger-text);
+    }
+
+    .mailbox-app .chat-thread-presence {
+      margin-top: 0.1rem;
+      font-size: 0.84rem;
+      font-weight: 600;
+      color: var(--messenger-muted);
+    }
+
+    .mailbox-app .chat-thread-meta-line {
+      margin-top: 0.15rem;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.35rem 0.55rem;
+      font-size: 0.82rem;
+      color: var(--messenger-muted);
+    }
+
+    .mailbox-app .chat-thread-meta-line span {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.2rem 0.55rem;
+      border-radius: 999px;
+      background: var(--messenger-chip);
+    }
+
+    .mailbox-app .chat-thread-search {
+      max-width: 240px;
+    }
+
+    .mailbox-app .chat-thread-search .form-control {
+      background: var(--messenger-chip);
+      border: 0;
+      color: var(--messenger-text);
+    }
+
+    .mailbox-app .chat-thread-search-status {
+      color: var(--messenger-muted);
+      font-size: 0.74rem;
+    }
+
+    .mailbox-app .chat-status-row {
+      display: none;
+    }
+
+    .mailbox-app #conversationWrapper {
+      margin-top: 0 !important;
+      border-radius: 1.1rem;
+      background: color-mix(in srgb, var(--messenger-panel-strong) 88%, transparent);
+      border: 1px solid var(--messenger-divider);
+      padding: 1rem 1rem 0.25rem;
+    }
+
+    .mailbox-app .conversation-scroll {
+      max-height: calc(100vh - 21rem);
+      padding-right: 0.35rem;
+    }
+
+    .mailbox-app .reply {
+      max-width: min(78%, 720px);
+      margin-bottom: 0.85rem;
+      border-radius: 1.1rem;
+      box-shadow: none;
+    }
+
+    .mailbox-app .reply.theirs {
+      background: var(--messenger-bubble);
+      border: 0;
+      color: var(--messenger-text);
+    }
+
+    .mailbox-app .reply.mine {
+      background: var(--messenger-bubble-mine);
+      border: 0;
+      color: #fff;
+    }
+
+    .mailbox-app .reply.mine .reply-meta,
+    .mailbox-app .reply.mine .chat-reaction-chip,
+    .mailbox-app .reply.mine .chat-reaction-add {
+      color: rgba(255, 255, 255, 0.88);
+    }
+
+    .mailbox-app .reply-meta {
+      font-size: 0.74rem;
+    }
+
+    .mailbox-app .reply-meta strong {
+      font-size: 0.82rem;
+    }
+
+    .mailbox-app .reply.mine .reply-avatar,
+    .mailbox-app .reply.mine .reply-meta strong {
+      display: none;
+    }
+
+    .mailbox-app .reply.mine .reply-head {
+      justify-content: flex-end;
+      margin-bottom: 0.25rem;
+    }
+
+    .mailbox-app .reply.mine .reply-meta {
+      justify-content: flex-end;
+      text-align: right;
+    }
+
+    .mailbox-app .reply.theirs .reply-head {
+      margin-bottom: 0.45rem;
+    }
+
+    .mailbox-app .chat-bubble-body {
+      font-size: 0.97rem;
+      line-height: 1.55;
+    }
+
+    .mailbox-app .attachments .font-weight-bold.small.mb-2 {
+      display: none;
+    }
+
+    .mailbox-app .attachment-thumb {
+      background: var(--messenger-panel);
+      border-color: var(--messenger-divider);
+      color: var(--messenger-text);
+      border-radius: 0.9rem;
+    }
+
+    .mailbox-app .chat-composer-shell {
+      margin-top: 0.8rem !important;
+      border-radius: 1rem;
+      background: color-mix(in srgb, var(--messenger-panel-strong) 92%, transparent);
+      border-color: var(--messenger-divider);
+      box-shadow: none;
+    }
+
+    .mailbox-app .reply-form-header {
+      display: none !important;
+      margin-bottom: 0;
+    }
+
+    .mailbox-app .reply-form-header h6,
+    .mailbox-app .reply-form-caption {
+      display: none;
+    }
+
+    .mailbox-app .chat-reply-textarea {
+      min-height: 46px;
+      max-height: 120px;
+      border: 0;
+      background: var(--messenger-chip);
+      color: var(--messenger-text);
+      padding: 0.78rem 0.95rem;
+      box-shadow: none;
+    }
+
+    .mailbox-app .chat-reply-textarea::placeholder {
+      color: var(--messenger-muted);
+    }
+
+    .mailbox-app .reply-actions {
+      margin-top: 0.65rem;
+      gap: 0.65rem;
+    }
+
+    .mailbox-app .reply-actions .btn {
+      border-radius: 999px;
+    }
+
     .mailbox-app .select2-results__option .compose-recipient-name,
     .compose-modal .select2-results__option .compose-recipient-name {
       max-width: 240px;
@@ -1527,6 +2573,15 @@ $composeCsrfToken = security_get_csrf_token();
 
       .mailbox-app .reply {
         max-width: 100%;
+      }
+
+      .mailbox-app .chat-thread-hero {
+        flex-direction: column;
+      }
+
+      .mailbox-app .chat-thread-search {
+        width: 100%;
+        max-width: none;
       }
 
       .mailbox-app .card-header .card-tools {
@@ -1749,6 +2804,10 @@ $composeCsrfToken = security_get_csrf_token();
         padding: 0.8rem 0.85rem;
       }
 
+      .mailbox-app .chat-bubble-body {
+        font-size: 0.92rem;
+      }
+
       .mailbox-app .reply-head,
       .mailbox-app .reply-meta {
         gap: 0.4rem;
@@ -1793,6 +2852,11 @@ $composeCsrfToken = security_get_csrf_token();
       .mailbox-app .reply-actions {
         flex-direction: column;
         align-items: stretch;
+      }
+
+      .mailbox-app .chat-reaction-picker {
+        overflow-x: auto;
+        padding-bottom: 0.1rem;
       }
 
       .mailbox-app .mailbox-read-meta {
@@ -1877,13 +2941,577 @@ $composeCsrfToken = security_get_csrf_token();
         max-height: 260px;
       }
 
+      .mailbox-app .chat-thread-search-status {
+        text-align: left;
+      }
+
       .mailbox-app .attachment-thumb {
         width: 100%;
       }
     }
+
+    html.messenger-page-root,
+    body.messenger-page {
+      height: 100%;
+      overflow: hidden;
+      background: var(--messenger-bg);
+    }
+
+    .messenger-page .wrapper.mailbox-app {
+      --messenger-shell-height: 100vh;
+      --messenger-top-offset: 0px;
+      --messenger-footer-offset: 0px;
+      margin-top: var(--messenger-top-offset);
+      height: var(--messenger-shell-height);
+      min-height: var(--messenger-shell-height);
+      overflow: hidden;
+    }
+
+    .messenger-page .wrapper.mailbox-app > .content-wrapper {
+      height: 100%;
+      min-height: 100%;
+      overflow: hidden;
+    }
+
+    .mailbox-app .messenger-content,
+    .mailbox-app .messenger-container,
+    .mailbox-app .messenger-layout,
+    .mailbox-app .messenger-conversations-column,
+    .mailbox-app .messenger-thread-column,
+    .mailbox-app .messenger-conversations-card,
+    .mailbox-app .messenger-thread-card {
+      min-height: 0;
+    }
+
+    .mailbox-app .messenger-conversations-column,
+    .mailbox-app .messenger-thread-column {
+      height: 100%;
+      overflow: hidden;
+    }
+
+    .mailbox-app .messenger-content,
+    .mailbox-app .messenger-container {
+      height: 100%;
+    }
+
+    .mailbox-app .messenger-content {
+      flex: 1 1 auto;
+      min-height: 0;
+      padding-top: 0.15rem;
+      padding-bottom: 0;
+    }
+
+    .mailbox-app .messenger-container {
+      padding-top: 1rem;
+      padding-bottom: 1rem;
+    }
+
+    .mailbox-app .messenger-layout {
+      display: grid;
+      grid-template-columns: minmax(320px, 348px) minmax(0, 1fr);
+      gap: 1rem;
+      height: 100%;
+      overflow: hidden;
+    }
+
+    .mailbox-app .messenger-conversations-card,
+    .mailbox-app .messenger-thread-card {
+      height: 100%;
+      margin-bottom: 0;
+      overflow: hidden;
+    }
+
+    .mailbox-app .messenger-conversations-card > .card-body,
+    .mailbox-app .messenger-thread-card > .card-body {
+      height: 100%;
+      min-height: 0;
+    }
+
+    .mailbox-app .messenger-conversations-card > .card-body {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .mailbox-app .messenger-conversations-head {
+      flex: 0 0 auto;
+      padding: 1.15rem 1rem 0.9rem;
+      border-bottom: 1px solid var(--messenger-divider);
+      background: linear-gradient(180deg, color-mix(in srgb, var(--messenger-panel) 94%, transparent) 0%, color-mix(in srgb, var(--messenger-panel-strong) 98%, transparent) 100%);
+    }
+
+    .mailbox-app .messenger-folder-row {
+      display: flex;
+      align-items: center;
+      gap: 0.55rem;
+      margin-bottom: 0.9rem;
+      overflow-x: auto;
+      padding-bottom: 0.15rem;
+    }
+
+    .mailbox-app .messenger-folder-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+      min-height: 2.35rem;
+      padding: 0.5rem 0.85rem;
+      border-radius: 999px;
+      border: 1px solid var(--messenger-divider);
+      background: var(--messenger-panel-soft);
+      color: var(--messenger-text);
+      font-size: 0.84rem;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .mailbox-app .messenger-folder-pill:hover,
+    .mailbox-app .messenger-folder-pill:focus {
+      color: var(--messenger-text);
+      text-decoration: none;
+      background: color-mix(in srgb, var(--messenger-accent) 10%, transparent);
+      outline: none;
+    }
+
+    .mailbox-app .messenger-folder-pill.active {
+      background: color-mix(in srgb, var(--messenger-accent) 16%, transparent);
+      border-color: color-mix(in srgb, var(--messenger-accent) 28%, transparent);
+      color: var(--messenger-text);
+    }
+
+    .mailbox-app .messenger-folder-pill--action {
+      border: 0;
+      background: linear-gradient(135deg, color-mix(in srgb, var(--messenger-accent) 86%, #0f766e 14%), color-mix(in srgb, var(--messenger-accent) 72%, #1d4ed8 28%));
+      color: #fff;
+      margin-left: auto;
+      box-shadow: 0 10px 24px color-mix(in srgb, var(--messenger-accent) 28%, transparent);
+    }
+
+    .mailbox-app .messenger-folder-pill--action:hover,
+    .mailbox-app .messenger-folder-pill--action:focus {
+      color: #fff;
+      background: linear-gradient(135deg, color-mix(in srgb, var(--messenger-accent) 90%, #0f766e 10%), color-mix(in srgb, var(--messenger-accent) 78%, #1d4ed8 22%));
+    }
+
+    .mailbox-app .messenger-compose-icon {
+      width: 2.35rem;
+      min-width: 2.35rem;
+      padding-inline: 0;
+      justify-content: center;
+    }
+
+    .mailbox-app .messenger-sidebar-summary {
+      padding: 0.9rem 1rem;
+      margin-bottom: 0.9rem;
+    }
+
+    .mailbox-app .messenger-list-header {
+      padding: 0;
+      border: 0;
+      margin-bottom: 0.15rem;
+    }
+
+    .mailbox-app .messenger-conversation-list {
+      flex: 1 1 auto;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .mailbox-app .mailbox-messages-wrap {
+      flex: 1 1 auto;
+      min-height: 0;
+      max-height: none;
+      overflow-y: auto;
+      overflow-x: hidden;
+      scrollbar-gutter: stable;
+      padding: 0.5rem 0.45rem 0.55rem;
+    }
+
+    .mailbox-app .mailbox-messages-wrap .table-responsive {
+      overflow: visible;
+    }
+
+    .mailbox-app .mailbox-messages-wrap table {
+      margin: 0;
+      table-layout: fixed;
+      width: 100%;
+    }
+
+    .mailbox-app .mailbox-messages-wrap tbody {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+      padding: 0;
+    }
+
+    .mailbox-app .mailbox-messages-wrap tr.message-item {
+      display: grid;
+      grid-template-columns: 56px minmax(0, 1fr) auto;
+      grid-template-areas:
+        "avatar name date"
+        "avatar subject subject";
+      gap: 0.12rem 0.8rem;
+      align-items: center;
+      min-height: 78px;
+      height: auto;
+      padding: 0.85rem 0.9rem;
+      border-radius: 1rem;
+    }
+
+    .mailbox-app .mailbox-messages-wrap tr.message-item td {
+      display: block;
+      padding: 0 !important;
+      border-top: 0 !important;
+      background: transparent !important;
+      min-width: 0;
+    }
+
+    .mailbox-app .mailbox-messages-wrap tr.message-item .mailbox-avatar-cell {
+      grid-area: avatar;
+      align-self: start;
+    }
+
+    .mailbox-app .mailbox-messages-wrap tr.message-item .mailbox-name {
+      grid-area: name;
+      width: auto;
+      min-width: 0;
+      margin: 0;
+    }
+
+    .mailbox-app .mailbox-messages-wrap tr.message-item .mailbox-subject {
+      grid-area: subject;
+      min-width: 0;
+      width: auto;
+    }
+
+    .mailbox-app .mailbox-messages-wrap tr.message-item .mailbox-date {
+      grid-area: date;
+      width: auto;
+      text-align: right;
+      align-self: start;
+      padding-left: 0.5rem;
+      font-size: 0.76rem;
+    }
+
+    .mailbox-app .mailbox-messages-wrap tr.message-item .mailbox-attachment {
+      display: none;
+    }
+
+    .mailbox-app .mailbox-messages-wrap tr.message-item::after {
+      display: none;
+    }
+
+    .mailbox-app .messenger-thread-card {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .mailbox-app .messenger-thread-card .mailbox-detail-header {
+      display: none;
+      flex: 0 0 auto;
+      padding: 1rem 1.15rem;
+      border-bottom: 1px solid var(--messenger-divider);
+      background: linear-gradient(180deg, color-mix(in srgb, var(--messenger-panel) 96%, transparent) 0%, color-mix(in srgb, var(--messenger-panel-strong) 98%, transparent) 100%);
+    }
+
+    .mailbox-app .messenger-thread-card #messageDetail {
+      flex: 1 1 auto;
+      height: 100%;
+      min-height: 0;
+      padding: 0;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .mailbox-app .reply-placeholder,
+    .mailbox-app .mailbox-empty-detail {
+      flex: 1 1 auto;
+      min-height: 0;
+      margin: 0;
+      padding: 2rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+    }
+
+    .mailbox-app #messageDetail > .chat-shell {
+      flex: 1 1 auto;
+      height: 100%;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      padding: 1rem 1.15rem 1.1rem;
+    }
+
+    .mailbox-app .chat-thread-header {
+      flex: 0 0 auto;
+      padding-bottom: 0;
+      margin-bottom: 0;
+    }
+
+    .mailbox-app .chat-thread-hero {
+      align-items: flex-start;
+      gap: 1rem;
+    }
+
+    .mailbox-app .chat-thread-search {
+      display: none !important;
+    }
+
+    .mailbox-app #conversationWrapper {
+      flex: 1 1 auto;
+      height: 100%;
+      min-height: 0;
+      margin: 0 !important;
+      padding: 0;
+      border: 0;
+      background: transparent;
+    }
+
+    .mailbox-app .conversation-scroll {
+      height: 100%;
+      max-height: none;
+      min-height: 0;
+      overflow-y: auto;
+      overflow-x: hidden;
+      scrollbar-gutter: stable;
+      padding: 0 3.5rem 0.85rem 3.5rem;
+      scroll-behavior: auto;
+    }
+
+    .mailbox-app .reply {
+      width: fit-content;
+      max-width: min(68%, 680px);
+      padding: 0.8rem 0.95rem;
+      margin-bottom: 1.35rem;
+      border-radius: 1.25rem;
+      box-shadow: 0 8px 22px color-mix(in srgb, var(--messenger-text) 8%, transparent);
+      position: relative;
+      overflow: visible;
+    }
+
+    .mailbox-app .reply.mine {
+      margin-left: auto;
+      border-bottom-right-radius: 0.4rem;
+    }
+
+    .mailbox-app .reply.theirs {
+      margin-right: auto;
+      border-bottom-left-radius: 0.4rem;
+    }
+
+    .mailbox-app .reply-meta {
+      margin-bottom: 0.3rem;
+    }
+
+    .mailbox-app .chat-bubble-body {
+      word-break: break-word;
+    }
+
+    .mailbox-app .reply .chat-reactions {
+      position: absolute;
+      top: 50%;
+      bottom: auto;
+      margin-top: 0;
+      z-index: 5;
+      width: max-content;
+      max-width: 12rem;
+    }
+
+    .mailbox-app .reply.mine .chat-reactions {
+      left: -0.55rem;
+      right: auto;
+      transform: translate(-100%, -50%);
+    }
+
+    .mailbox-app .reply.theirs .chat-reactions {
+      right: -0.55rem;
+      left: auto;
+      transform: translate(100%, -50%);
+    }
+
+    .mailbox-app .reply .chat-reaction-summary {
+      justify-content: flex-start;
+      flex-wrap: nowrap;
+    }
+
+    .mailbox-app .reply.theirs .chat-reaction-summary {
+      justify-content: flex-end;
+    }
+
+    .mailbox-app .reply.theirs .chat-reaction-picker {
+      left: 0;
+      right: auto;
+    }
+
+    .mailbox-app .reply.mine .chat-reaction-picker {
+      left: auto;
+      right: 0;
+    }
+
+    .mailbox-app .chat-composer-shell {
+      flex: 0 0 auto;
+      margin: 0 !important;
+      padding: 0.65rem 0.8rem;
+      border-radius: 1.1rem;
+      position: relative;
+      z-index: 2;
+    }
+
+    .mailbox-app .chat-mentions-shell {
+      position: relative;
+    }
+
+    .mailbox-app .chat-reply-textarea {
+      min-height: 46px;
+      max-height: 120px;
+      resize: none;
+      border-radius: 1rem;
+      padding-right: 3.25rem;
+    }
+
+    .mailbox-app .chat-composer-tool-stack {
+      position: absolute;
+      right: 0.55rem;
+      bottom: 0.4rem;
+      z-index: 4;
+      display: inline-flex;
+      flex-direction: column;
+      gap: 0.35rem;
+    }
+
+    .mailbox-app .chat-composer-tool-btn {
+      width: 2rem;
+      height: 2rem;
+      border: 0;
+      border-radius: 999px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: transparent;
+      color: var(--messenger-muted);
+      transition: background-color 0.18s ease, color 0.18s ease;
+    }
+
+    .mailbox-app .chat-composer-tool-btn:hover,
+    .mailbox-app .chat-composer-tool-btn:focus {
+      background: color-mix(in srgb, var(--messenger-accent) 16%, transparent);
+      color: var(--messenger-accent);
+      outline: none;
+    }
+
+    .mailbox-app .chat-composer-tool-stack .emoji-menu {
+      z-index: 1075;
+    }
+
+    .mailbox-app .reply-actions {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+      margin-top: 0.55rem;
+      flex-wrap: wrap;
+    }
+
+    .mailbox-app .reply-actions > div {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .mailbox-app .file-preview {
+      margin-top: 0.65rem;
+    }
+
+    @media (max-width: 1199.98px) {
+      .mailbox-app .messenger-layout {
+        grid-template-columns: minmax(300px, 332px) minmax(0, 1fr);
+      }
+
+      .mailbox-app .reply {
+        max-width: min(72%, 620px);
+      }
+    }
+
+    @media (max-width: 991.98px) {
+      .mailbox-app .messenger-container {
+        padding-inline: 0.85rem;
+      }
+
+      .mailbox-app .messenger-layout {
+        grid-template-columns: 320px minmax(0, 1fr);
+      }
+
+      .mailbox-app .reply {
+        max-width: 76%;
+      }
+    }
+
+    @media (max-width: 767.98px) {
+      html.messenger-page-root,
+      body.messenger-page {
+        overflow: hidden;
+      }
+
+      .messenger-page .wrapper.mailbox-app,
+      .messenger-page .wrapper.mailbox-app > .content-wrapper {
+        height: var(--messenger-shell-height);
+        min-height: var(--messenger-shell-height);
+      }
+
+      .mailbox-app .messenger-container {
+        padding: 0.65rem;
+      }
+
+      .mailbox-app .messenger-layout {
+        grid-template-columns: 1fr;
+      }
+
+      .mailbox-app.mobile-thread-list #mailboxDetailColumn,
+      .mailbox-app.mobile-thread-detail #mailboxSidebarColumn {
+        display: none;
+      }
+
+      .mailbox-app .messenger-conversations-head {
+        padding: 1rem 0.85rem 0.8rem;
+      }
+
+      .mailbox-app .messenger-thread-card .mailbox-detail-header {
+        display: flex;
+        padding-inline: 0.85rem;
+      }
+
+      .mailbox-app #messageDetail > .chat-shell {
+        padding: 0.85rem;
+      }
+
+      .mailbox-app .chat-thread-hero {
+        flex-direction: column;
+      }
+
+      .mailbox-app .reply {
+        max-width: 74%;
+      }
+
+      .mailbox-app .mobile-only {
+        display: inline-flex;
+        align-items: center;
+      }
+    }
   </style>
 </head>
-<body>
+<script>
+  if (document.documentElement) {
+    document.documentElement.classList.add('messenger-page-root');
+  }
+  if (document.body) {
+    document.body.classList.add('messenger-page');
+  }
+</script>
 <div class="wrapper mailbox-app">
 
   <div class="content-wrapper">
@@ -1903,226 +3531,219 @@ $composeCsrfToken = security_get_csrf_token();
       </div>
     </div>
 
-    <div class="content">
-      <div class="container-fluid">
-        <div class="row">
-          <div class="col-lg-3 col-xl-2" id="mailboxSidebarColumn">
-            <div class="card card-primary card-outline mailbox-sidebar-card">
-              <div class="card-body box-profile">
-                <button type="button" class="btn btn-primary btn-block mb-3 mailbox-compose-trigger">
-                  <i class="fas fa-pen mr-1"></i> Compose
-                </button>
-
-                <div class="nav flex-column mailbox-folder-nav">
-                  <a href="?folder=inbox" class="nav-link mailbox-folder-link <?= $currentFolder === 'inbox' ? 'active' : '' ?>">
-                    <span><i class="fas fa-inbox mr-2"></i> Inbox</span>
-                    <span class="badge bg-primary" id="sidebarUnreadBadge"><?= $unreadCount ?></span>
-                  </a>
-                  <a href="?folder=trash" class="nav-link mailbox-folder-link <?= $currentFolder === 'trash' ? 'active' : '' ?>">
-                    <span><i class="far fa-trash-alt mr-2"></i> Trash</span>
-                    <span class="badge bg-secondary" id="sidebarTrashBadge"><?= $trashCount ?></span>
-                  </a>
-                  <a href="?compose=1" class="nav-link mailbox-folder-link mailbox-compose-trigger">
-                    <span><i class="far fa-envelope mr-2"></i> New Message</span>
-                    <i class="fas fa-chevron-right small text-muted"></i>
-                  </a>
-                </div>
-
-                <hr>
-
-                <div class="text-muted small mailbox-sidebar-summary">
-                  <div class="d-flex justify-content-between mb-2">
-                    <span><?= $currentFolder === 'trash' ? 'Trashed conversations' : 'Total conversations' ?></span>
-                    <strong id="messageCountLabel"><?= $messageCount ?></strong>
-                  </div>
-                  <div class="d-flex justify-content-between">
-                    <span>Unread</span>
-                    <strong id="unreadCountLabel"><?= $unreadCount ?></strong>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div class="col-lg-9 col-xl-10">
-            <div class="row">
-              <div class="col-xl-5" id="mailboxListColumn">
-                <div class="card card-primary card-outline mailbox-pane-card">
-                  <div class="card-header">
-                    <h3 class="card-title" id="mailboxListTitle"><?= htmlspecialchars($folderTitle) ?></h3>
-
-                    <div class="card-tools mailbox-search">
-                      <div class="input-group input-group-sm" style="width: 220px;">
-                        <input type="text" class="form-control" id="mailboxSearch" placeholder="Search mail">
-                        <div class="input-group-append">
-                          <button type="button" class="btn btn-default">
-                            <i class="fas fa-search"></i>
-                          </button>
-                        </div>
-                      </div>
+    <div class="content messenger-content">
+      <div class="container-fluid messenger-container">
+        <div class="messenger-layout">
+          <aside class="messenger-conversations-column" id="mailboxSidebarColumn">
+            <div class="card card-primary card-outline mailbox-pane-card messenger-conversations-card">
+              <div class="card-body p-0">
+                <div class="messenger-conversations-head">
+                  <div class="messenger-sidebar-top">
+                    <div>
+                      <h2 class="messenger-sidebar-title">Chats</h2>
+                      <p class="messenger-sidebar-subtitle">KODUS communication hub</p>
                     </div>
                   </div>
 
-                  <div class="card-body p-0">
-                  <div class="mailbox-controls mailbox-toolbar">
-                      <div class="mailbox-toolbar-copy">
-                        <strong><?= htmlspecialchars($folderTitle) ?></strong>
-                        <span><?= $messageCount ?> conversation<?= $messageCount === 1 ? '' : 's' ?></span>
-                        <span><?= $unreadCount ?> unread</span>
-                      </div>
-                      <div class="mailbox-toolbar-copy">
-                        <span class="mailbox-live-indicator">Live updates</span>
-                        <span id="mailboxRefreshLabel">Live</span>
-                      </div>
-                    </div>
-                    <div class="mailbox-filter-group">
-                      <?php if (in_array($currentFolder, ['inbox', 'trash'], true)): ?>
-                      <div class="mailbox-bulk-toolbar d-flex align-items-center justify-content-between">
-                        <div class="mailbox-bulk-actions d-flex align-items-center">
-                          <label class="mailbox-select-toggle" for="mailboxSelectAll">
-                            <input type="checkbox" id="mailboxSelectAll">
-                            <span>Select all</span>
-                          </label>
-                          <select class="form-control form-control-sm mailbox-bulk-select" id="mailboxBulkAction">
-                            <option value="">Bulk actions</option>
-                            <?php if ($currentFolder === 'trash'): ?>
-                            <option value="restore">Restore</option>
-                            <option value="delete_permanent">Delete</option>
-                            <?php else: ?>
-                            <option value="delete">Delete</option>
-                            <?php endif; ?>
-                            <option value="mark_read">Mark as Read</option>
-                          </select>
-                          <button type="button" class="btn btn-default btn-sm mailbox-bulk-apply" id="mailboxBulkApply" disabled>
-                            <i class="fas fa-check mr-1"></i> Apply
-                          </button>
-                        </div>
-                        <div class="mailbox-bulk-summary" id="mailboxBulkSummary">0 selected</div>
-                      </div>
-                      <?php endif; ?>
-                      <div class="btn-group btn-group-sm" role="group" aria-label="<?= htmlspecialchars($folderTitle) ?> filters">
-                        <button type="button" class="btn btn-outline-primary mailbox-filter active" data-filter="all">All</button>
-                        <button type="button" class="btn btn-outline-primary mailbox-filter" data-filter="unread">Unread</button>
-                        <button type="button" class="btn btn-outline-primary mailbox-filter" data-filter="attachments">Attachments</button>
-                      </div>
-                    </div>
-
-                    <div class="mailbox-messages-wrap" id="messageList">
-                      <?php if ($messageCount > 0): ?>
-                        <div class="table-responsive">
-                          <table class="table table-hover table-striped mb-0">
-                            <tbody>
-                            <?php foreach ($messages as $row): ?>
-                              <?php
-                                $messageId = (int) $row['id'];
-                                $recipientLabel = trim((string) ($row['recipient_names'] ?? ''));
-                                $senderLabel = trim((string) ($row['user_name'] ?? ''));
-                                if ($senderLabel === '') {
-                                    $senderLabel = trim((string) ($row['user_email'] ?? 'Unknown'));
-                                }
-                                $isSenderView = !empty($_SESSION['email']) && strcasecmp((string) ($row['user_email'] ?? ''), (string) $_SESSION['email']) === 0;
-                                $displayLabel = $isSenderView
-                                    ? ($recipientLabel !== '' ? $recipientLabel : 'Admin')
-                                    : $senderLabel;
-                                $name = htmlspecialchars($displayLabel);
-                                $displayPicture = $isSenderView ? ($row['recipient_picture'] ?? '') : ($row['sender_picture'] ?? '');
-                                $avatarUrl = app_url('dist/img/' . rawurlencode((string) $displayPicture));
-                                $avatarPath = __DIR__ . '/../dist/img/' . (string) $displayPicture;
-                                if (empty($displayPicture) || !file_exists($avatarPath)) {
-                                    $avatarUrl = app_url('dist/img/default.webp');
-                                }
-                                $subject = htmlspecialchars($row['subject'] ?? '(No Subject)');
-                                $messageText = trim(preg_replace('/\s+/', ' ', (string) ($row['message'] ?? '')));
-                                $snippet = htmlspecialchars(mb_strimwidth($messageText, 0, 28, '...'));
-                                $email = htmlspecialchars($row['user_email'] ?? '');
-                                $activityAt = (string) ($row['latest_activity_at'] ?? $row['sent_at'] ?? '');
-                                $sentAt = htmlspecialchars($activityAt);
-                                $timestamp = $activityAt !== '' ? strtotime($activityAt) : false;
-                                $dateLabel = $timestamp ? date('M d', $timestamp) : '';
-                                $hasAttachment = !empty($row['attachment']);
-                                $rowClass = ((int) ($row['user_read'] ?? 0) === 0) ? 'unread' : '';
-                              ?>
-                              <tr class="message-item <?= $rowClass ?>"
-                                  data-id="<?= $messageId ?>"
-                                  data-email="<?= $email ?>"
-                                  data-name="<?= $name ?>"
-                                  data-subject="<?= $subject ?>"
-                                  data-message="<?= htmlspecialchars($row['message'] ?? '') ?>"
-                                  data-sent="<?= $sentAt ?>"
-                                  data-unread="<?= $rowClass ? '1' : '0' ?>"
-                                  data-has-attachment="<?= $hasAttachment ? '1' : '0' ?>">
-                                <?php if (in_array($currentFolder, ['inbox', 'trash'], true)): ?>
-                                <td class="mailbox-select-cell">
-                                  <label class="mailbox-row-select mb-0">
-                                    <input type="checkbox" class="mailbox-message-select" value="<?= $messageId ?>" aria-label="Select conversation <?= $messageId ?>">
-                                  </label>
-                                </td>
-                                <?php endif; ?>
-                                <td class="mailbox-star text-center" style="width:40px;">
-                                  <i class="fas fa-envelope <?= $rowClass ? 'text-warning' : 'text-muted' ?>"></i>
-                                </td>
-                                <td class="mailbox-avatar-cell text-center">
-                                  <img src="<?= htmlspecialchars($avatarUrl) ?>" alt="<?= $name ?>" class="mailbox-avatar">
-                                </td>
-                                <td class="mailbox-name"><?= $name ?></td>
-                                <td class="mailbox-subject">
-                                  <span class="mailbox-subject-line"><?= $subject ?></span><?php if ($snippet !== ''): ?><span class="mailbox-snippet"> - <?= $snippet ?></span><?php endif; ?>
-                                </td>
-                                <td class="mailbox-attachment text-center" style="width:40px;">
-                                  <?php if ($hasAttachment): ?>
-                                    <i class="fas fa-paperclip text-muted"></i>
-                                  <?php endif; ?>
-                                </td>
-                                <td class="mailbox-date" title="<?= htmlspecialchars($activityAt) ?>"><?= htmlspecialchars($dateLabel) ?></td>
-                              </tr>
-                            <?php endforeach; ?>
-                            </tbody>
-                          </table>
-                        </div>
-                        <div class="mailbox-empty" id="mailboxNoResults" style="display:none;">
-                          <i class="far fa-envelope-open fa-3x mb-3"></i>
-                          <p class="mb-1"><strong>No matching messages</strong></p>
-                          <p class="mb-0">Try another search or filter.</p>
-                        </div>
-                      <?php else: ?>
-                        <div class="mailbox-empty">
-                          <img src="<?php echo app_url('dist/img/empty-inbox.png'); ?>" alt="Empty Inbox">
-                          <p class="mb-1"><strong><?= $currentFolder === 'trash' ? 'Trash is empty' : 'No messages yet' ?></strong></p>
-                          <p class="mb-0"><?= $currentFolder === 'trash' ? 'Messages you delete for yourself will show up here.' : 'New conversations will show up here.' ?></p>
-                        </div>
-                      <?php endif; ?>
+                  <div class="mailbox-search messenger-sidebar-search">
+                    <label for="mailboxSearch" class="sr-only">Search chats</label>
+                    <div class="messenger-search-shell">
+                      <i class="fas fa-search" aria-hidden="true"></i>
+                      <input type="text" class="form-control" id="mailboxSearch" placeholder="Search chats">
                     </div>
                   </div>
-                </div>
-              </div>
 
-              <div class="col-xl-7" id="mailboxDetailColumn">
-                <div class="card card-primary card-outline mailbox-pane-card">
-                  <div class="card-header mailbox-detail-header">
-                    <button type="button" class="btn btn-outline-secondary btn-sm mobile-only" id="mobileBackToList">
-                      <i class="fas fa-arrow-left mr-1"></i> Back
+                  <div class="messenger-folder-row">
+                    <a href="?folder=inbox" class="messenger-folder-pill <?= $currentFolder === 'inbox' ? 'active' : '' ?>">
+                      <span>Chats</span>
+                      <span class="badge bg-primary" id="sidebarUnreadBadge"><?= $unreadCount ?></span>
+                    </a>
+                    <a href="?folder=trash" class="messenger-folder-pill <?= $currentFolder === 'trash' ? 'active' : '' ?>">
+                      <span>Archive</span>
+                      <span class="badge bg-secondary" id="sidebarTrashBadge"><?= $trashCount ?></span>
+                    </a>
+                    <button type="button" class="messenger-folder-pill messenger-folder-pill--action messenger-compose-icon mailbox-compose-trigger" aria-label="New chat" title="New chat">
+                      <i class="fas fa-edit" aria-hidden="true"></i>
+                      <span class="sr-only">New chat</span>
                     </button>
-                    <h3 class="card-title mb-0" id="mailboxDetailTitle">Read Mail</h3>
                   </div>
-                  <div class="card-body mailbox-read-pane" id="messageDetail">
+
+                  <div class="messenger-chip-row" role="tablist" aria-label="Conversation filters">
+                    <button type="button" class="btn messenger-filter-chip mailbox-filter active" data-filter="all">All</button>
+                    <button type="button" class="btn messenger-filter-chip mailbox-filter" data-filter="unread">Unread</button>
+                  </div>
+
+                  <div class="text-muted small messenger-sidebar-summary">
+                    <div class="d-flex justify-content-between mb-2">
+                      <span><?= $currentFolder === 'trash' ? 'Archived chats' : 'Active chats' ?></span>
+                      <strong id="messageCountLabel"><?= $messageCount ?></strong>
+                    </div>
+                    <div class="d-flex justify-content-between">
+                      <span>Unseen</span>
+                      <strong id="unreadCountLabel"><?= $unreadCount ?></strong>
+                    </div>
+                  </div>
+
+                  <div class="messenger-list-header">
+                    <h3 class="card-title mb-0" id="mailboxListTitle"><?= htmlspecialchars($folderTitle) ?></h3>
+                    <div class="messenger-list-header-copy">
+                      <span><?= $messageCount ?> chat<?= $messageCount === 1 ? '' : 's' ?></span>
+                      <span id="mailboxRefreshLabel">Synced</span>
+                    </div>
+                  </div>
+
+                  <div class="mailbox-filter-group messenger-bulk-row">
+                    <?php if (in_array($currentFolder, ['inbox', 'trash'], true)): ?>
+                    <div class="mailbox-bulk-toolbar d-flex align-items-center justify-content-between">
+                      <div class="mailbox-bulk-actions d-flex align-items-center">
+                        <label class="mailbox-select-toggle" for="mailboxSelectAll">
+                          <input type="checkbox" id="mailboxSelectAll">
+                          <span>Select chats</span>
+                        </label>
+                        <select class="form-control form-control-sm mailbox-bulk-select" id="mailboxBulkAction">
+                          <option value="">Chat actions</option>
+                          <?php if ($currentFolder === 'trash'): ?>
+                          <option value="restore">Restore</option>
+                          <option value="delete_permanent">Delete forever</option>
+                          <?php else: ?>
+                          <option value="delete">Archive</option>
+                          <?php endif; ?>
+                          <option value="mark_read">Mark as seen</option>
+                        </select>
+                        <button type="button" class="btn btn-default btn-sm mailbox-bulk-apply" id="mailboxBulkApply" disabled>
+                          <i class="fas fa-check mr-1"></i> Go
+                        </button>
+                      </div>
+                      <div class="mailbox-bulk-summary" id="mailboxBulkSummary">0 selected</div>
+                    </div>
+                    <?php endif; ?>
+                  </div>
+                </div>
+
+                <div class="messenger-conversation-list" id="mailboxListColumn">
+                  <div class="mailbox-messages-wrap" id="messageList">
                     <?php if ($messageCount > 0): ?>
-                      <div class="reply-placeholder">
-                        <i class="far fa-envelope-open fa-3x mb-3"></i>
-                        <p class="mb-1"><?= $currentFolder === 'trash' ? 'Select a trashed message to review it.' : 'Select a message to read the conversation.' ?></p>
-                        <p class="mb-0 small"><?= $currentFolder === 'trash' ? 'You can restore it or leave it in Trash.' : 'Replies and attachments will appear here.' ?></p>
+                      <div class="table-responsive">
+                        <table class="table table-hover table-striped mb-0">
+                          <tbody>
+                          <?php foreach ($messages as $row): ?>
+                            <?php
+                              $messageId = (int) $row['id'];
+                              $recipientLabel = trim((string) ($row['recipient_names'] ?? ''));
+                              $senderLabel = trim((string) ($row['user_name'] ?? ''));
+                              if ($senderLabel === '') {
+                                  $senderLabel = trim((string) ($row['user_email'] ?? 'Unknown'));
+                              }
+                              $isSenderView = !empty($_SESSION['email']) && strcasecmp((string) ($row['user_email'] ?? ''), (string) $_SESSION['email']) === 0;
+                              $displayLabel = $isSenderView
+                                  ? ($recipientLabel !== '' ? $recipientLabel : 'Admin')
+                                  : $senderLabel;
+                              $name = htmlspecialchars($displayLabel);
+                              $displayPicture = $isSenderView ? ($row['recipient_picture'] ?? '') : ($row['sender_picture'] ?? '');
+                              $displaySsoAvatar = $isSenderView ? ($row['recipient_sso_avatar_url'] ?? '') : ($row['sender_sso_avatar_url'] ?? '');
+                              $avatarUrl = avatar_resolve_url($displayPicture, $displaySsoAvatar, $base_url, dirname(__DIR__));
+                              $presence = mailboxClassifyPresence(
+                                  $isSenderView ? ($row['recipient_last_activity'] ?? null) : ($row['sender_last_activity'] ?? null),
+                                  (int) ($isSenderView ? ($row['recipient_is_online'] ?? 0) : ($row['sender_is_online'] ?? 0))
+                              );
+                              $subjectRaw = trim((string) ($row['subject'] ?? ''));
+                              $subject = htmlspecialchars($subjectRaw !== '' ? $subjectRaw : 'Quick chat');
+                              $latestPreview = $latestPreviews[$messageId] ?? [
+                                  'text' => mailboxPreviewText($row['message'] ?? '', $row['attachment'] ?? ''),
+                                  'is_mine' => $isSenderView,
+                              ];
+                              $snippet = htmlspecialchars(mailboxFormatThreadPreview($latestPreview, 54));
+                              $email = htmlspecialchars($row['user_email'] ?? '');
+                              $activityAt = (string) ($row['latest_activity_at'] ?? $row['sent_at'] ?? '');
+                              $sentAt = htmlspecialchars($activityAt);
+                              $timestamp = $activityAt !== '' ? strtotime($activityAt) : false;
+                              $dateLabel = $timestamp ? date('g:i A', $timestamp) : '';
+                              $hasAttachment = !empty($row['attachment']);
+                              $rowClass = ((int) ($row['user_read'] ?? 0) === 0) ? 'unread' : '';
+                            ?>
+                            <tr class="message-item <?= $rowClass ?>"
+                                data-id="<?= $messageId ?>"
+                                data-email="<?= $email ?>"
+                                data-name="<?= $name ?>"
+                                data-subject="<?= $subject ?>"
+                                data-message="<?= htmlspecialchars($row['message'] ?? '') ?>"
+                                data-sent="<?= $sentAt ?>"
+                                data-unread="<?= $rowClass ? '1' : '0' ?>"
+                                data-has-attachment="<?= $hasAttachment ? '1' : '0' ?>">
+                              <?php if (in_array($currentFolder, ['inbox', 'trash'], true)): ?>
+                              <td class="mailbox-select-cell">
+                                <label class="mailbox-row-select mb-0">
+                                  <input type="checkbox" class="mailbox-message-select" value="<?= $messageId ?>" aria-label="Select conversation <?= $messageId ?>">
+                                </label>
+                              </td>
+                              <?php endif; ?>
+                              <td class="mailbox-star text-center" style="width:40px;">
+                                <i class="fas fa-envelope <?= $rowClass ? 'text-warning' : 'text-muted' ?>"></i>
+                              </td>
+                              <td class="mailbox-avatar-cell text-center">
+                                <span class="mailbox-avatar-wrap" title="<?= htmlspecialchars($presence['detail']) ?>">
+                                  <img src="<?= htmlspecialchars($avatarUrl) ?>" alt="<?= $name ?>" class="mailbox-avatar">
+                                  <span class="mailbox-presence-dot mailbox-presence-<?= htmlspecialchars($presence['class']) ?>" aria-label="<?= htmlspecialchars($presence['detail']) ?>"></span>
+                                </span>
+                              </td>
+                              <td class="mailbox-name"><?= $name ?></td>
+                              <td class="mailbox-subject">
+                                <?php if ($snippet !== ''): ?><span class="mailbox-snippet"><?= $snippet ?></span><?php endif; ?>
+                                <?php if ($hasAttachment): ?><span class="mailbox-chat-badge">Attachment</span><?php endif; ?>
+                              </td>
+                              <td class="mailbox-attachment text-center" style="width:40px;">
+                                <?php if ($hasAttachment): ?>
+                                  <i class="fas fa-paperclip text-muted"></i>
+                                <?php endif; ?>
+                              </td>
+                              <td class="mailbox-date" title="<?= htmlspecialchars($activityAt) ?>"><?= htmlspecialchars($dateLabel) ?></td>
+                            </tr>
+                          <?php endforeach; ?>
+                          </tbody>
+                        </table>
+                      </div>
+                      <div class="mailbox-empty" id="mailboxNoResults" style="display:none;">
+                        <i class="far fa-comment-dots fa-3x mb-3"></i>
+                        <p class="mb-1"><strong>No matching chats</strong></p>
+                        <p class="mb-0">Try another search or filter.</p>
                       </div>
                     <?php else: ?>
-                      <div class="mailbox-empty-detail">
-                        <i class="far fa-envelope-open fa-3x mb-3"></i>
-                        <p class="mb-1"><strong>No message selected</strong></p>
-                        <p class="mb-0"><?= $currentFolder === 'trash' ? 'Your trash is currently empty.' : 'Your inbox is currently empty.' ?></p>
+                      <div class="mailbox-empty">
+                        <img src="<?php echo app_url('dist/img/empty-inbox.png'); ?>" alt="No chats yet">
+                        <p class="mb-1"><strong><?= $currentFolder === 'trash' ? 'Archive is empty' : 'No chats yet' ?></strong></p>
+                        <p class="mb-0"><?= $currentFolder === 'trash' ? 'Chats you remove from your main list will stay here.' : 'New conversations will show up here.' ?></p>
                       </div>
                     <?php endif; ?>
                   </div>
                 </div>
               </div>
             </div>
-          </div>
+          </aside>
+
+          <section class="messenger-thread-column" id="mailboxDetailColumn">
+            <div class="card card-primary card-outline mailbox-pane-card messenger-thread-card">
+              <div class="card-header mailbox-detail-header messenger-detail-frame">
+                <button type="button" class="btn btn-outline-secondary btn-sm mobile-only" id="mobileBackToList">
+                  <i class="fas fa-arrow-left mr-1"></i> Back
+                </button>
+              </div>
+              <div class="card-body mailbox-read-pane" id="messageDetail">
+                <?php if ($messageCount > 0): ?>
+                  <div class="reply-placeholder">
+                    <i class="far fa-comment-dots fa-3x mb-3"></i>
+                    <p class="mb-1"><?= $currentFolder === 'trash' ? 'Open an archived chat to review it.' : 'Open a chat to see the conversation.' ?></p>
+                    <p class="mb-0 small"><?= $currentFolder === 'trash' ? 'You can restore it or remove it forever.' : 'Messages, reactions, and attachments will appear here.' ?></p>
+                  </div>
+                <?php else: ?>
+                  <div class="mailbox-empty-detail">
+                    <i class="far fa-comment-dots fa-3x mb-3"></i>
+                    <p class="mb-1"><strong>No chat selected</strong></p>
+                    <p class="mb-0"><?= $currentFolder === 'trash' ? 'Your archive is currently empty.' : 'Your chat list is currently empty.' ?></p>
+                  </div>
+                <?php endif; ?>
+              </div>
+            </div>
+          </section>
         </div>
       </div>
     </div>
@@ -2135,8 +3756,8 @@ $composeCsrfToken = security_get_csrf_token();
       <form id="composeForm" action="../send_contact.php" method="POST" enctype="multipart/form-data">
         <div class="modal-header">
           <div>
-            <h5 class="modal-title" id="composeModalLabel">New Message</h5>
-            <p class="compose-meta">Compose and send without leaving your inbox.</p>
+            <h5 class="modal-title" id="composeModalLabel">New chat</h5>
+            <p class="compose-meta">Start a conversation without leaving Messenger.</p>
           </div>
           <button type="button" class="close text-reset" id="composeModalClose" data-dismiss="modal" aria-label="Close">
             <span aria-hidden="true">&times;</span>
@@ -2146,13 +3767,13 @@ $composeCsrfToken = security_get_csrf_token();
           <div class="compose-panel">
             <div class="compose-panel-head">
               <div>
-                <h4>Compose</h4>
-                <p>Start a conversation.</p>
+                <h4>Start chat</h4>
+                <p>Pick people, type your first message, and send.</p>
               </div>
-              <span class="compose-pill"><i class="fas fa-bolt"></i> Fast send</span>
+              <span class="compose-pill"><i class="fas fa-bolt"></i> Instant send</span>
             </div>
             <div class="compose-field">
-              <label for="composeRecipient">Recipients</label>
+              <label for="composeRecipient">People</label>
               <select name="recipient[]" id="composeRecipient" class="form-control" multiple required>
                 <?php if ($userType === 'admin'): ?>
                   <option value="all" data-avatar="<?php echo htmlspecialchars(app_url('dist/img/default.webp')); ?>" data-kind="group">All Users & Admins</option>
@@ -2172,52 +3793,43 @@ $composeCsrfToken = security_get_csrf_token();
                     <?php endforeach; ?>
                   </select>
               <div class="compose-stats">
-                <span class="compose-stat-pill" id="composeRecipientSummary">Choose one or more recipients</span>
+                <span class="compose-stat-pill" id="composeRecipientSummary">Choose one or more people</span>
               </div>
             </div>
-            <div class="compose-field">
-              <label for="composeSubject">Topic</label>
-              <input type="text" name="subject" id="composeSubject" class="form-control" maxlength="180" placeholder="Type a conversation topic..." required>
-            </div>
+            <input type="hidden" name="subject" id="composeSubject" value="">
             <div class="compose-body">
-              <div class="compose-toolbar">
-                <label for="composeMessage" class="mb-0">Message</label>
-                <div class="d-flex align-items-center" style="gap:0.5rem;">
-                  <button type="button" class="btn btn-outline-secondary btn-sm" id="composeEmojiTrigger" aria-label="Insert emoji" aria-expanded="false">
-                    <i class="far fa-smile mr-1"></i> Emoji
+              <label for="composeMessage" class="mb-2">Opening message</label>
+              <div class="compose-message-shell">
+                <textarea name="message" id="composeMessage" class="form-control" rows="6" maxlength="5000" placeholder="Write your first message..."></textarea>
+                <div class="compose-tool-stack">
+                  <button type="button" class="compose-tool-btn" id="composeAttachTrigger" aria-label="Attach files" title="Attach files">
+                    <i class="fas fa-paperclip"></i>
+                  </button>
+                  <button type="button" class="compose-tool-btn" id="composeEmojiTrigger" aria-label="Insert emoji" aria-expanded="false" aria-controls="composeEmojiMenu" title="Emoji">
+                    <i class="far fa-smile"></i>
                   </button>
                   <div class="emoji-menu" id="composeEmojiMenu" hidden></div>
                 </div>
               </div>
-              <textarea name="message" id="composeMessage" class="form-control" rows="6" maxlength="5000" placeholder="Write your message..."></textarea>
               <div class="compose-stats">
-                <span class="compose-stat-pill"><strong id="composeSubjectCount">0</strong>/180 topic</span>
-                <span class="compose-stat-pill"><strong id="composeMessageCount">0</strong>/5000 message</span>
+                <span class="compose-stat-pill"><strong id="composeMessageCount">0</strong>/5000 text</span>
               </div>
-              <div class="compose-attachment-wrap">
-                <input type="file" name="attachments[]" id="composeAttachments" multiple hidden>
-                <label class="compose-attachment-label" for="composeAttachments">
-                  <span><i class="fas fa-paperclip mr-2"></i> Attach files</span>
-                  <span class="small text-muted">Optional</span>
-                </label>
-                <div class="compose-file-summary" id="composeFileSummary">No files selected</div>
-                <div class="compose-file-preview" id="composeFilePreview"></div>
-              </div>
+              <input type="file" name="attachments[]" id="composeAttachments" multiple hidden>
+              <div class="compose-file-summary" id="composeFileSummary">No files selected</div>
+              <div class="compose-file-preview" id="composeFilePreview"></div>
             </div>
           </div>
 
           <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($composeCsrfToken, ENT_QUOTES) ?>">
-          <input type="hidden" name="return_to" value="inbox/">
+          <input type="hidden" name="return_to" value="messenger/">
+          <input type="hidden" name="defer_mail" value="1">
         </div>
         <div class="modal-footer justify-content-between">
-          <div class="custom-control custom-checkbox">
-            <input class="custom-control-input" type="checkbox" name="send_copy" id="composeSendCopy" value="1">
-            <label class="custom-control-label" for="composeSendCopy">Send me a copy of this message</label>
-          </div>
+          <div class="small text-muted">Your new chat will appear instantly in Messenger.</div>
           <div class="d-flex align-items-center" style="gap:0.65rem;">
             <button type="button" class="btn btn-outline-secondary" id="composeResetBtn">Clear</button>
             <button type="submit" class="btn btn-primary">
-              <i class="fas fa-paper-plane mr-1"></i> Send
+              <i class="fas fa-paper-plane mr-1"></i> Start chat
             </button>
           </div>
         </div>
@@ -2234,27 +3846,211 @@ $composeCsrfToken = security_get_csrf_token();
 
 <script>
 let lastOpenedId = null;
-let userIsScrolling = false;
-let scrollTimeout = null;
-let forceScrollNext = false;
 let firstLoadDone = false;
+let typingHeartbeatTimer = null;
+let typingStopTimer = null;
+let lastTypingMessageId = null;
 let mailboxStateToken = null;
 let mailboxStatePollInFlight = false;
 const currentMailboxFolder = <?= json_encode($currentFolder, JSON_UNESCAPED_SLASHES) ?>;
 const canReplyInCurrentFolder = currentMailboxFolder !== 'trash';
 const shouldOpenCompose = <?= $composeOpen ? 'true' : 'false' ?>;
 
+function enhanceEmojiMenu(menu) {
+    if (!menu || menu.dataset.enhanced === '1') {
+        return;
+    }
+
+    const buttons = Array.from(menu.querySelectorAll('.emoji-item'));
+    const grid = document.createElement('div');
+    grid.className = 'emoji-grid';
+    buttons.forEach(button => grid.appendChild(button));
+
+    const head = document.createElement('div');
+    head.className = 'emoji-panel-head';
+    head.innerHTML = `
+      <span>Emoji</span>
+      <span class="emoji-panel-cats" aria-hidden="true">
+        <span class="emoji-panel-cat">☺</span>
+        <span class="emoji-panel-cat">★</span>
+        <span class="emoji-panel-cat">✓</span>
+      </span>
+    `;
+
+    const search = document.createElement('input');
+    search.type = 'search';
+    search.className = 'emoji-panel-search';
+    search.placeholder = 'Search emoji';
+    search.setAttribute('aria-label', 'Search emoji');
+    search.addEventListener('input', function() {
+        const query = this.value.trim().toLowerCase();
+        grid.querySelectorAll('.emoji-item').forEach(function(button) {
+            button.hidden = query !== '' && !button.textContent.toLowerCase().includes(query);
+        });
+    });
+
+    menu.replaceChildren(head, search, grid);
+    menu.dataset.enhanced = '1';
+}
+
+function positionEmojiMenu(trigger, menu) {
+    if (!trigger || !menu || menu.hidden) {
+        return;
+    }
+
+    enhanceEmojiMenu(menu);
+
+    const modalContent = trigger.closest?.('.modal-content') || null;
+    const modalRect = modalContent ? modalContent.getBoundingClientRect() : null;
+
+    if (modalContent) {
+        if (menu.parentElement !== modalContent) {
+            modalContent.appendChild(menu);
+        }
+        menu.classList.add('is-modal-bound');
+    } else {
+        menu.classList.remove('is-modal-bound');
+    }
+
+    const triggerRect = trigger.getBoundingClientRect();
+    const menuRect = menu.getBoundingClientRect();
+    const gap = 8;
+    const bounds = modalRect
+        ? {
+            left: 12,
+            top: 12,
+            right: Math.max(12, modalRect.width - 12),
+            bottom: Math.max(12, modalRect.height - 12)
+        }
+        : {
+            left: 8,
+            top: 8,
+            right: window.innerWidth - 8,
+            bottom: window.innerHeight - 8
+        };
+    const localTrigger = modalRect
+        ? {
+            left: triggerRect.left - modalRect.left,
+            right: triggerRect.right - modalRect.left,
+            top: triggerRect.top - modalRect.top,
+            bottom: triggerRect.bottom - modalRect.top
+        }
+        : triggerRect;
+    const menuWidth = Math.min(menuRect.width || 268, bounds.right - bounds.left);
+    const menuHeight = Math.min(menuRect.height || 238, bounds.bottom - bounds.top);
+
+    let left = localTrigger.right - menuWidth;
+    let top = localTrigger.bottom + gap;
+
+    if (top + menuHeight > bounds.bottom) {
+        top = localTrigger.top - menuHeight - gap;
+    }
+
+    if (left < bounds.left) {
+        left = localTrigger.left;
+    }
+
+    left = Math.max(bounds.left, Math.min(left, bounds.right - menuWidth));
+    top = Math.max(bounds.top, Math.min(top, bounds.bottom - menuHeight));
+
+    menu.style.left = `${Math.round(left)}px`;
+    menu.style.top = `${Math.round(top)}px`;
+    menu.style.right = 'auto';
+    menu.style.bottom = 'auto';
+    menu.style.maxWidth = `${Math.max(180, Math.round(bounds.right - bounds.left))}px`;
+}
+
+function closeEmojiPicker(trigger, menu) {
+    if (!menu) {
+        return;
+    }
+
+    menu.hidden = true;
+    menu.style.left = '';
+    menu.style.top = '';
+    menu.style.right = '';
+    menu.style.bottom = '';
+
+    if (trigger) {
+        trigger.setAttribute('aria-expanded', 'false');
+    }
+}
+
+function toggleEmojiPicker(trigger, menu) {
+    if (!trigger || !menu) {
+        return false;
+    }
+
+    const shouldOpen = menu.hidden;
+    closeEmojiPicker(trigger, menu);
+    menu.hidden = !shouldOpen;
+    trigger.setAttribute('aria-expanded', shouldOpen ? 'true' : 'false');
+
+    if (shouldOpen) {
+        positionEmojiMenu(trigger, menu);
+    }
+
+    return shouldOpen;
+}
+
+function repositionOpenEmojiMenus() {
+    document.querySelectorAll('.emoji-menu:not([hidden])').forEach(function(menu) {
+        const trigger = menu.parentElement?.querySelector('[aria-expanded="true"]')
+            || (menu.id ? document.querySelector(`[aria-controls="${menu.id}"]`) : null);
+        if (trigger) {
+            positionEmojiMenu(trigger, menu);
+        }
+    });
+}
+
+window.KODUSPositionEmojiMenu = positionEmojiMenu;
+window.KODUSEnhanceEmojiMenu = enhanceEmojiMenu;
+window.KODUSRepositionOpenEmojiMenus = repositionOpenEmojiMenus;
+window.KODUSEmojiPicker = {
+    close: closeEmojiPicker,
+    toggle: toggleEmojiPicker,
+    position: positionEmojiMenu,
+    enhance: enhanceEmojiMenu
+};
+
+function syncMessengerViewport() {
+    const wrapper = document.querySelector('.wrapper.mailbox-app');
+    const topbar = document.getElementById('mainTopbar') || document.querySelector('.main-header');
+    const footer = document.querySelector('.main-footer');
+
+    if (!wrapper) {
+        return;
+    }
+
+    const topOffset = Math.max(0, Math.round(topbar?.getBoundingClientRect().height || 0));
+    const footerOffset = Math.max(0, Math.round(footer?.getBoundingClientRect().height || 0));
+    const availableHeight = Math.max(420, window.innerHeight - topOffset - footerOffset);
+
+    wrapper.style.setProperty('--messenger-top-offset', `${topOffset}px`);
+    wrapper.style.setProperty('--messenger-footer-offset', `${footerOffset}px`);
+    wrapper.style.setProperty('--messenger-shell-height', `${availableHeight}px`);
+
+    if (document.body) {
+        document.body.classList.add('messenger-page');
+        document.body.style.overflow = 'hidden';
+    }
+    if (document.documentElement) {
+        document.documentElement.classList.add('messenger-page-root');
+        document.documentElement.style.overflow = 'hidden';
+    }
+}
+
 function getFolderEmptyMessage() {
     if (currentMailboxFolder === 'trash') {
         return {
-            title: 'No message selected',
-            body: 'Your trash is currently empty.'
+            title: 'No chat selected',
+            body: 'Your archive is currently empty.'
         };
     }
 
     return {
-        title: 'No message selected',
-        body: 'Your inbox is currently empty.'
+        title: 'No chat selected',
+        body: 'Your chat list is currently empty.'
     };
 }
 
@@ -2265,8 +4061,8 @@ function isMobileMailboxView() {
 function updateDetailTitle() {
     const activeRow = lastOpenedId ? $(`#messageList .message-item[data-id="${lastOpenedId}"]`) : $();
     const title = activeRow.length
-        ? (activeRow.attr('data-subject') || activeRow.find('.mailbox-name').text().trim() || 'Conversation')
-        : 'Read Mail';
+        ? (activeRow.find('.mailbox-name').text().trim() || activeRow.attr('data-subject') || 'Chat')
+        : 'Chat';
 
     $('#mailboxDetailTitle').text(title);
 }
@@ -2294,14 +4090,20 @@ function getConversationMarkup() {
     return normalizeHtml($('#conversationWrapper').prop('outerHTML') || '');
 }
 
-function isConversationNearBottom() {
-    const conv = $('#conversationWrapper .conversation-scroll');
-    if (!conv.length) {
-        return true;
-    }
+function getComparableConversationMarkupFromHtml(html) {
+    const wrapper = document.createElement('div');
+    wrapper.innerHTML = String(html || '');
+    wrapper.querySelectorAll('.chat-reaction-picker').forEach(function(picker) {
+        picker.setAttribute('hidden', '');
+    });
+    wrapper.querySelectorAll('.chat-reaction-trigger').forEach(function(trigger) {
+        trigger.setAttribute('aria-expanded', 'false');
+    });
+    return normalizeHtml(wrapper.innerHTML);
+}
 
-    const el = conv[0];
-    return (el.scrollHeight - el.scrollTop - el.clientHeight) < 24;
+function isConversationNearBottom() {
+    return false;
 }
 
 function updateMailboxSummary() {
@@ -2331,22 +4133,23 @@ function renderEmptyDetail() {
     const emptyMessage = getFolderEmptyMessage();
     $('#messageDetail').html(`
       <div class="mailbox-empty-detail">
-        <i class="far fa-envelope-open fa-3x mb-3"></i>
+        <i class="far fa-comment-dots fa-3x mb-3"></i>
         <p class="mb-1"><strong>${emptyMessage.title}</strong></p>
         <p class="mb-0">${emptyMessage.body}</p>
       </div>
     `);
+    stopTypingHeartbeat();
     updateDetailTitle();
 }
 
 function updateRefreshLabel(hasChanges = false) {
     if (!hasChanges) {
-        $('#mailboxRefreshLabel').text('Waiting for new replies');
+        $('#mailboxRefreshLabel').text('Synced');
         return;
     }
 
     const now = new Date();
-    $('#mailboxRefreshLabel').text('Updated ' + now.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' }));
+    $('#mailboxRefreshLabel').text('Updated ' + now.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }));
 }
 
 function applyMessageFilters() {
@@ -2410,6 +4213,7 @@ function openMessage(id) {
         return;
     }
 
+    stopTypingHeartbeat();
     lastOpenedId = id;
     firstLoadDone = false;
 
@@ -2421,7 +4225,9 @@ function openMessage(id) {
         $('#messageDetail').html(html);
         updateDetailTitle();
         setMobileMailboxView('detail');
-        autoScrollConversation();
+        initializeThreadExperience();
+        scrollConversationToBottomOnOpen();
+        firstLoadDone = true;
     });
 
     $.post('mark_read.php', { id: id, csrf_token: window.KODUS_CSRF_TOKEN }, function() {
@@ -2472,7 +4278,7 @@ function applyUnreadCount(count) {
     const badge = $('#sidebarMailUnreadBadge');
     const sidebarBadge = $('#sidebarUnreadBadge');
     const topbarBadge = $('#topbarUnreadBadge');
-    const mailNavLabel = $('.nav-item a[href$="inbox/"] p');
+    const mailNavLabel = $('.nav-item a[href$="messenger/"] p');
 
     if (unreadCount > 0) {
         sidebarBadge.text(unreadCount).show();
@@ -2498,12 +4304,235 @@ function updateUnreadCount() {
     });
 }
 
-function autoScrollConversation() {
+function preserveConversationScrollPosition(previousScrollTop) {
+    const conv = $('#conversationWrapper .conversation-scroll');
+    if (!conv.length) {
+        return;
+    }
+    conv.scrollTop(Math.max(0, Number(previousScrollTop || 0)));
+}
+
+function scrollConversationToBottomOnOpen() {
     const conv = $('#conversationWrapper .conversation-scroll');
     if (!conv.length) {
         return;
     }
     conv.scrollTop(conv[0].scrollHeight);
+}
+
+function escapeRegExp(value) {
+    return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function stopTypingHeartbeat() {
+    if (typingHeartbeatTimer) {
+        clearInterval(typingHeartbeatTimer);
+        typingHeartbeatTimer = null;
+    }
+    if (typingStopTimer) {
+        clearTimeout(typingStopTimer);
+        typingStopTimer = null;
+    }
+
+    if (!lastTypingMessageId) {
+        return;
+    }
+
+    $.post('update_typing_status.php', {
+        message_id: lastTypingMessageId,
+        is_typing: 0,
+        csrf_token: window.KODUS_CSRF_TOKEN
+    });
+    lastTypingMessageId = null;
+}
+
+function sendTypingHeartbeat() {
+    if (!lastOpenedId || !canReplyInCurrentFolder) {
+        return;
+    }
+
+    lastTypingMessageId = Number(lastOpenedId);
+    $.post('update_typing_status.php', {
+        message_id: lastTypingMessageId,
+        is_typing: 1,
+        csrf_token: window.KODUS_CSRF_TOKEN
+    });
+}
+
+function scheduleTypingHeartbeat() {
+    if (!lastOpenedId || !canReplyInCurrentFolder) {
+        return;
+    }
+
+    sendTypingHeartbeat();
+
+    if (!typingHeartbeatTimer) {
+        typingHeartbeatTimer = setInterval(sendTypingHeartbeat, 5000);
+    }
+
+    if (typingStopTimer) {
+        clearTimeout(typingStopTimer);
+    }
+
+    typingStopTimer = setTimeout(function() {
+        stopTypingHeartbeat();
+    }, 6500);
+}
+
+function refreshTypingState() {
+    const shell = $('#messageDetail .chat-shell');
+    const indicator = $('#threadTypingIndicator');
+    if (!shell.length || !lastOpenedId) {
+        indicator.attr('hidden', true);
+        return;
+    }
+
+    $.getJSON('get_typing_state.php', { message_id: lastOpenedId }, function(payload) {
+        const typing = Array.isArray(payload?.typing) ? payload.typing : [];
+        if (!typing.length) {
+            indicator.attr('hidden', true);
+            return;
+        }
+
+        const names = typing.map(function(entry) {
+            return String(entry.username || 'Someone');
+        });
+        const copy = names.length === 1
+            ? `${names[0]} is typing...`
+            : `${names.slice(0, 2).join(', ')} are typing...`;
+        indicator.find('.chat-typing-copy').text(copy);
+        indicator.removeAttr('hidden');
+    });
+}
+
+function renderReactionSummary($container, summary) {
+    const summaryItems = Array.isArray(summary) ? summary : [];
+    const messageId = String($container.data('message-id') || '');
+    const replyId = $container.attr('data-reply-id');
+    const pickerEmojis = ['👍', '❤️', '😂', '🎉', '🔥', '👏', '🙏', '✅', '👀', '💡'];
+    const summaryHtml = summaryItems.map(function(item) {
+        const emoji = String(item.emoji || '');
+        const count = Number(item.count || 0);
+        const active = item.reacted ? ' is-active' : '';
+        return `<button type="button" class="chat-reaction-chip${active}" data-emoji="${emoji}"><span class="chat-reaction-emoji">${emoji}</span><span class="chat-reaction-count">${count}</span></button>`;
+    }).join('');
+    const pickerHtml = pickerEmojis.map(function(emoji) {
+        return `<button type="button" class="chat-reaction-add" data-emoji="${emoji}">${emoji}</button>`;
+    }).join('');
+
+    $container.attr('data-message-id', messageId);
+    if (replyId) {
+        $container.attr('data-reply-id', replyId);
+    }
+    $container.html(`
+      <div class="chat-reaction-summary">
+        ${summaryHtml}
+        <div class="chat-reaction-picker-wrap">
+          <button type="button" class="chat-reaction-trigger" aria-label="Add reaction" aria-expanded="false">
+            <i class="far fa-smile"></i>
+          </button>
+          <div class="chat-reaction-picker" hidden>${pickerHtml}</div>
+        </div>
+      </div>
+    `);
+}
+
+function closeReactionPickers(exceptTrigger = null) {
+    $('.chat-reaction-picker').attr('hidden', true);
+    $('.chat-reaction-trigger').each(function() {
+        if (!exceptTrigger || this !== exceptTrigger) {
+            $(this).attr('aria-expanded', 'false');
+        }
+    });
+}
+
+function getOpenReactionPickerState() {
+    const $picker = $('#conversationWrapper .chat-reaction-picker:not([hidden])').first();
+    if (!$picker.length) {
+        return null;
+    }
+
+    const $reactions = $picker.closest('.chat-reactions');
+    const messageId = String($reactions.attr('data-message-id') || '');
+    const replyId = String($reactions.attr('data-reply-id') || '');
+    if (!messageId) {
+        return null;
+    }
+
+    return {
+        messageId,
+        replyId
+    };
+}
+
+function restoreReactionPickerState(state) {
+    if (!state || !state.messageId) {
+        return;
+    }
+
+    const selector = state.replyId
+        ? `.chat-reactions[data-message-id="${state.messageId}"][data-reply-id="${state.replyId}"]`
+        : `.chat-reactions[data-message-id="${state.messageId}"]:not([data-reply-id])`;
+    const $reactions = $('#conversationWrapper').find(selector).first();
+    if (!$reactions.length) {
+        return;
+    }
+
+    const $trigger = $reactions.find('.chat-reaction-trigger').first();
+    const $picker = $reactions.find('.chat-reaction-picker').first();
+    if (!$trigger.length || !$picker.length) {
+        return;
+    }
+
+    closeReactionPickers($trigger[0]);
+    $picker.removeAttr('hidden');
+    $trigger.attr('aria-expanded', 'true');
+}
+
+function applyThreadSearch(query) {
+    const trimmed = String(query || '').trim();
+    const status = $('#threadSearchStatus');
+    const bodies = $('#messageDetail .chat-bubble-body');
+    let matches = 0;
+
+    bodies.each(function() {
+        const $body = $(this);
+        const plainText = $body.text();
+        const escapedText = $('<div>').text(plainText).html();
+
+        if (!trimmed) {
+            $body.html(escapedText.replace(/\n/g, '<br>'));
+            return;
+        }
+
+        const pattern = new RegExp(`(${escapeRegExp(trimmed)})`, 'ig');
+        const highlighted = escapedText.replace(pattern, '<mark class="chat-search-hit">$1</mark>');
+        const count = (plainText.match(new RegExp(escapeRegExp(trimmed), 'ig')) || []).length;
+        matches += count;
+        $body.html(highlighted.replace(/\n/g, '<br>'));
+    });
+
+    if (!trimmed) {
+        status.text('No search yet');
+    } else if (matches === 0) {
+        status.text('No matches found');
+    } else {
+        status.text(`${matches} match${matches === 1 ? '' : 'es'} found`);
+    }
+}
+
+function initializeThreadExperience() {
+    const searchValue = ($('#threadSearchInput').val() || '').trim();
+    if (searchValue) {
+        applyThreadSearch(searchValue);
+    } else {
+        const status = $('#threadSearchStatus');
+        if (status.length) {
+            status.text('Search by keyword or phrase');
+        }
+    }
+
+    refreshTypingState();
 }
 
 function escapeReplyHtml(value) {
@@ -2548,7 +4577,6 @@ function appendOptimisticReply(replyText) {
         });
     }, 2500);
 
-    autoScrollConversation();
 }
 
 function refreshCurrentThread(options = {}) {
@@ -2556,13 +4584,12 @@ function refreshCurrentThread(options = {}) {
         return $.Deferred().resolve().promise();
     }
 
-    const shouldScroll = Boolean(options.forceScroll);
+    const previousScrollTop = $('#conversationWrapper .conversation-scroll').scrollTop() || 0;
     return $.get('get_thread.php', { id: lastOpenedId, folder: currentMailboxFolder }, function(html) {
         $('#messageDetail').html(html);
         updateDetailTitle();
-        if (shouldScroll) {
-            autoScrollConversation();
-        }
+        initializeThreadExperience();
+        preserveConversationScrollPosition(previousScrollTop);
     });
 }
 
@@ -2575,15 +4602,15 @@ $(document).on('click', '.message-item', function(event) {
 
 function openReplyEditor(replyId, existingReply) {
     Swal.fire({
-        title: 'Edit Reply',
+        title: 'Edit message',
         input: 'textarea',
         inputValue: existingReply,
         inputAttributes: {
-            'aria-label': 'Edit reply'
+            'aria-label': 'Edit message'
         },
         inputValidator: (value) => {
             if (!String(value || '').trim()) {
-                return 'Reply text cannot be empty.';
+                return 'Message text cannot be empty.';
             }
             return undefined;
         },
@@ -2607,7 +4634,7 @@ function openReplyEditor(replyId, existingReply) {
             refreshCurrentThread();
             updateMessageList();
         }).fail(function(xhr) {
-            Swal.fire('Unable to edit reply', xhr.responseJSON?.error || 'Please try again.', 'error');
+            Swal.fire('Unable to edit message', xhr.responseJSON?.error || 'Please try again.', 'error');
         });
     });
 }
@@ -2615,10 +4642,10 @@ function openReplyEditor(replyId, existingReply) {
 function confirmReplyDelete(replyId) {
     Swal.fire({
         icon: 'warning',
-        title: 'Delete this reply?',
-        text: 'The reply content and attachments will be replaced with a deleted notice for all participants.',
+        title: 'Remove this message?',
+        text: 'The message text and attachments will be replaced with a removed notice for everyone in the chat.',
         showCancelButton: true,
-        confirmButtonText: 'Delete',
+        confirmButtonText: 'Remove',
         confirmButtonColor: '#dc3545'
     }).then(function(result) {
         if (!result.isConfirmed) {
@@ -2637,7 +4664,7 @@ function confirmReplyDelete(replyId) {
             refreshCurrentThread();
             updateMessageList();
         }).fail(function(xhr) {
-            Swal.fire('Unable to delete reply', xhr.responseJSON?.error || 'Please try again.', 'error');
+            Swal.fire('Unable to remove message', xhr.responseJSON?.error || 'Please try again.', 'error');
         });
     });
 }
@@ -2665,12 +4692,12 @@ function openReplyActions(replyId, existingReply, canEdit, canDelete) {
         actions.push('<button type="button" class="swal2-confirm swal2-styled" id="replyActionEditBtn" style="display:inline-block;">Edit</button>');
     }
     if (canDelete) {
-        actions.push('<button type="button" class="swal2-deny swal2-styled" id="replyActionDeleteBtn" style="display:inline-block;background:#dc3545;">Delete</button>');
+        actions.push('<button type="button" class="swal2-deny swal2-styled" id="replyActionDeleteBtn" style="display:inline-block;background:#dc3545;">Remove</button>');
     }
     actions.push('<button type="button" class="swal2-cancel swal2-styled" id="replyActionCancelBtn" style="display:inline-block;">Cancel</button>');
 
     Swal.fire({
-        title: 'Reply Actions',
+        title: 'Message actions',
         html: `<div class="d-flex flex-wrap justify-content-center" style="gap:0.5rem;">${actions.join('')}</div>`,
         showConfirmButton: false,
         showCancelButton: false,
@@ -2755,6 +4782,7 @@ $(document).on('contextmenu', '.reply[data-can-edit="1"], .reply[data-can-delete
 
 $(document).on('click', function() {
     closeReplyMenus();
+    closeReactionPickers();
 });
 
 $(document).on('click', '.reply-menu-dropdown', function(e) {
@@ -2784,19 +4812,76 @@ $(document).on('click', '.reply-delete-trigger', function() {
     confirmReplyDelete(replyId);
 });
 
+$(document).on('input', '#replyText', function() {
+    scheduleTypingHeartbeat();
+});
+
+$(document).on('input', '#threadSearchInput', function() {
+    applyThreadSearch($(this).val());
+});
+
+$(document).on('click', '.chat-reaction-trigger', function(event) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const trigger = this;
+    const $trigger = $(trigger);
+    const $picker = $trigger.siblings('.chat-reaction-picker');
+    const willOpen = $picker.is('[hidden]');
+
+    closeReactionPickers(trigger);
+
+    if (willOpen) {
+        $picker.removeAttr('hidden');
+        $trigger.attr('aria-expanded', 'true');
+    }
+});
+
+$(document).on('click', '.chat-reaction-picker', function(event) {
+    event.stopPropagation();
+});
+
+$(document).on('click', '.chat-reaction-chip, .chat-reaction-add', function(event) {
+    event.preventDefault();
+    const $button = $(this);
+    const $reactions = $button.closest('.chat-reactions');
+    const emoji = String($button.data('emoji') || '');
+    const messageId = Number($reactions.data('message-id') || 0);
+    const replyIdRaw = $reactions.attr('data-reply-id');
+    const replyId = replyIdRaw ? Number(replyIdRaw) : null;
+
+    if (!emoji || !messageId) {
+        return;
+    }
+
+    $button.prop('disabled', true);
+
+    $.ajax({
+        url: 'toggle_reaction.php',
+        type: 'POST',
+        dataType: 'json',
+        data: {
+            message_id: messageId,
+            reply_id: replyId,
+            emoji: emoji,
+            csrf_token: window.KODUS_CSRF_TOKEN
+        }
+    }).done(function(response) {
+        renderReactionSummary($reactions, response.summary || []);
+    }).fail(function(xhr) {
+        Swal.fire('Unable to react', xhr.responseJSON?.error || 'Please try again.', 'error');
+    }).always(function() {
+        $button.prop('disabled', false);
+    });
+});
+
 $(document).on('click', '#mobileBackToList', function() {
+    stopTypingHeartbeat();
     setMobileMailboxView('list');
 });
 
-$(document).on('scroll', '#conversationWrapper .conversation-scroll', function() {
-    userIsScrolling = true;
-    if (scrollTimeout) {
-        clearTimeout(scrollTimeout);
-    }
-    scrollTimeout = setTimeout(() => {
-        userIsScrolling = false;
-    }, 3 * 60 * 1000);
-});
+window.addEventListener('resize', syncMessengerViewport, { passive: true });
+window.addEventListener('orientationchange', syncMessengerViewport, { passive: true });
 
 $(document).on('submit', '#replyForm', function(e) {
     e.preventDefault();
@@ -2822,6 +4907,7 @@ $(document).on('submit', '#replyForm', function(e) {
         success: function(resp) {
             Swal.close();
             if (resp.status === 'success') {
+                stopTypingHeartbeat();
                 form.reset();
                 $('#replyFilePreview').empty();
                 appendOptimisticReply(replyText);
@@ -2839,15 +4925,16 @@ $(document).on('submit', '#replyForm', function(e) {
                     });
                 }
 
-                forceScrollNext = true;
                 updateMessageList();
 
                 if (lastOpenedId) {
+                    const previousScrollTop = $('#conversationWrapper .conversation-scroll').scrollTop() || 0;
                     $.get('get_thread.php', { id: lastOpenedId, folder: currentMailboxFolder }, function(html) {
                         $('#messageDetail').html(html);
                         $(`#messageList .message-item[data-id="${lastOpenedId}"]`).addClass('active').removeClass('unread');
                         $(`#messageList .message-item[data-id="${lastOpenedId}"]`).attr('data-unread', '0');
-                        autoScrollConversation();
+                        initializeThreadExperience();
+                        preserveConversationScrollPosition(previousScrollTop);
                     });
                 }
             } else {
@@ -2879,16 +4966,18 @@ function refreshConversationIfChanged() {
     }
 
     const draft = $('#replyText').val() || '';
-    const previousMarkup = getConversationMarkup();
+    const previousMarkup = getComparableConversationMarkupFromHtml($('#conversationWrapper').prop('outerHTML') || '');
+    const openReactionPicker = getOpenReactionPickerState();
     const conv = $('#conversationWrapper .conversation-scroll');
     const previousScrollTop = conv.length ? conv.scrollTop() : 0;
-    const shouldStickToBottom = forceScrollNext || (!userIsScrolling && isConversationNearBottom());
 
     $.get('get_thread.php', { id: lastOpenedId, only_conversation: 1, folder: currentMailboxFolder }, function(html) {
-        if (normalizeHtml(html) === previousMarkup) {
+        if (getComparableConversationMarkupFromHtml(html) === previousMarkup) {
             if ($('#replyText').length) {
                 $('#replyText').val(draft);
             }
+            restoreReactionPickerState(openReactionPicker);
+            refreshTypingState();
             return;
         }
 
@@ -2902,20 +4991,15 @@ function refreshConversationIfChanged() {
             $('#replyText').val(draft);
         }
 
-        if (!firstLoadDone) {
-            autoScrollConversation();
-            firstLoadDone = true;
-        } else if (forceScrollNext) {
-            autoScrollConversation();
-            forceScrollNext = false;
-        } else if (shouldStickToBottom) {
-            autoScrollConversation();
-        } else {
-            const nextConv = $('#conversationWrapper .conversation-scroll');
-            if (nextConv.length) {
-                nextConv.scrollTop(previousScrollTop);
-            }
+        const threadSearchValue = ($('#threadSearchInput').val() || '').trim();
+        if (threadSearchValue) {
+            applyThreadSearch(threadSearchValue);
         }
+        refreshTypingState();
+        preserveConversationScrollPosition(previousScrollTop);
+        restoreReactionPickerState(openReactionPicker);
+        repositionOpenEmojiMenus();
+        firstLoadDone = true;
     });
 }
 
@@ -2938,11 +5022,13 @@ function pollMailboxState() {
         if (mailboxStateToken === null) {
             mailboxStateToken = nextToken;
             updateRefreshLabel(false);
+            refreshTypingState();
             return;
         }
 
         if (nextToken === mailboxStateToken) {
             updateRefreshLabel(false);
+            refreshTypingState();
             return;
         }
 
@@ -2994,9 +5080,9 @@ $(document).on('click', '.mailbox-filter', function() {
 });
 
 function buildFolderEmptyHtml() {
-    const title = currentMailboxFolder === 'trash' ? 'Trash is empty' : 'No messages yet';
+    const title = currentMailboxFolder === 'trash' ? 'Archive is empty' : 'No chats yet';
     const body = currentMailboxFolder === 'trash'
-        ? 'Messages you delete for yourself will show up here.'
+        ? 'Chats you remove from your main list will stay here.'
         : 'New conversations will show up here.';
 
     return `
@@ -3086,30 +5172,30 @@ function handleBulkAction() {
     }
 
     if (messageIds.length === 0) {
-        Swal.fire('No conversations selected', 'Select one or more conversations first.', 'warning');
+        Swal.fire('No chats selected', 'Select one or more chats first.', 'warning');
         return;
     }
 
     let actionLabel = 'update';
     let successLabel = 'updated';
     if (action === 'delete') {
-        actionLabel = 'delete';
-        successLabel = 'moved to Trash';
+        actionLabel = 'archive';
+        successLabel = 'archived';
     } else if (action === 'delete_permanent') {
-        actionLabel = 'permanently delete';
-        successLabel = 'deleted permanently';
+        actionLabel = 'delete forever';
+        successLabel = 'deleted forever';
     } else if (action === 'restore') {
         actionLabel = 'restore';
         successLabel = 'restored';
     } else if (action === 'mark_read') {
-        actionLabel = 'mark as read';
-        successLabel = 'marked as read';
+        actionLabel = 'mark as seen';
+        successLabel = 'marked as seen';
     }
 
     Swal.fire({
         icon: 'question',
-        title: 'Apply bulk action?',
-        text: `This will ${actionLabel} ${messageIds.length} selected conversation${messageIds.length === 1 ? '' : 's'}.`,
+        title: 'Apply chat action?',
+        text: `This will ${actionLabel} ${messageIds.length} selected chat${messageIds.length === 1 ? '' : 's'}.`,
         showCancelButton: true,
         confirmButtonText: 'Apply'
     }).then(function(result) {
@@ -3118,15 +5204,15 @@ function handleBulkAction() {
         }
 
         const messageCount = messageIds.length;
-        let loaderTitle = 'Processing messages...';
+        let loaderTitle = 'Updating chats...';
         if (action === 'delete') {
-            loaderTitle = `Deleting ${messageCount} message${messageCount === 1 ? '' : 's'}...`;
+            loaderTitle = `Archiving ${messageCount} chat${messageCount === 1 ? '' : 's'}...`;
         } else if (action === 'delete_permanent') {
-            loaderTitle = `Deleting ${messageCount} message${messageCount === 1 ? '' : 's'}...`;
+            loaderTitle = `Deleting ${messageCount} chat${messageCount === 1 ? '' : 's'} forever...`;
         } else if (action === 'restore') {
-            loaderTitle = `Restoring ${messageCount} message${messageCount === 1 ? '' : 's'}...`;
+            loaderTitle = `Restoring ${messageCount} chat${messageCount === 1 ? '' : 's'}...`;
         } else if (action === 'mark_read') {
-            loaderTitle = `Marking ${messageCount} message${messageCount === 1 ? '' : 's'} as read...`;
+            loaderTitle = `Marking ${messageCount} chat${messageCount === 1 ? '' : 's'} as seen...`;
         }
 
         mailboxBulkActionInFlight = true;
@@ -3138,7 +5224,7 @@ function handleBulkAction() {
         Swal.fire({
             title: loaderTitle,
             html: `
-                <div class="text-center text-muted small mb-2">Please wait while KODUS updates the selected conversations.</div>
+                <div class="text-center text-muted small mb-2">Please wait while KODUS updates the selected chats.</div>
                 <div class="progress" style="height: 0.75rem;">
                     <div class="progress-bar progress-bar-striped progress-bar-animated bg-primary" role="progressbar" style="width: 100%"></div>
                 </div>
@@ -3194,15 +5280,15 @@ function handleBulkAction() {
 
             Swal.fire({
                 icon: response.success ? 'success' : 'warning',
-                title: 'Bulk action complete',
-                text: response.message || (`Selected conversations were ${successLabel}.`)
+                title: 'Chat action complete',
+                text: response.message || (`Selected chats were ${successLabel}.`)
             });
         }).fail(function(xhr) {
             mailboxBulkActionInFlight = false;
             $('#mailboxBulkAction').prop('disabled', false);
             $('#mailboxSelectAll').prop('disabled', false);
             $('#messageList .mailbox-message-select').prop('disabled', false);
-            Swal.fire('Unable to apply bulk action', xhr.responseJSON?.error || 'Please try again.', 'error');
+            Swal.fire('Unable to apply chat action', xhr.responseJSON?.error || 'Please try again.', 'error');
             syncBulkSelectionUi();
         });
     });
@@ -3219,7 +5305,7 @@ $(document).on('click', '.mailbox-delete-trigger', function() {
     const isTrashView = currentMailboxFolder === 'trash';
     const buttons = isTrashView
         ? []
-        : ['<button type="button" class="swal2-confirm swal2-styled" id="mailDeleteSelfBtn" style="display:inline-block;background:#6c757d;">Delete for me</button>'];
+        : ['<button type="button" class="swal2-confirm swal2-styled" id="mailDeleteSelfBtn" style="display:inline-block;background:#6c757d;">Archive chat</button>'];
 
     if (canDeleteEveryone) {
         buttons.push('<button type="button" class="swal2-deny swal2-styled" id="mailDeleteEveryoneBtn" style="display:inline-block;background:#dc3545;">Delete for everyone</button>');
@@ -3229,11 +5315,11 @@ $(document).on('click', '.mailbox-delete-trigger', function() {
 
     Swal.fire({
         icon: 'warning',
-        title: 'Delete conversation',
+        title: isTrashView ? 'Delete this chat forever?' : 'Manage this chat',
         html: `
           <div class="text-left">
-            <p class="mb-2">${isTrashView ? 'This conversation is already in Trash.' : 'Choose how you want to delete this conversation.'}</p>
-            <p class="small text-muted mb-0">${isTrashView ? 'Deleting for everyone permanently removes it and its attachments for all participants.' : 'Delete for me moves it to Trash. Delete for everyone permanently removes it for all participants.'}</p>
+            <p class="mb-2">${isTrashView ? 'This chat is already in your archive.' : 'Choose how you want to handle this chat.'}</p>
+            <p class="small text-muted mb-0">${isTrashView ? 'Deleting for everyone permanently removes the chat and its attachments for all participants.' : 'Archive chat removes it from your main list. Delete for everyone permanently removes it for all participants.'}</p>
           </div>
           <div class="mt-3 d-flex flex-wrap justify-content-center" style="gap:0.5rem;">
             ${buttons.join('')}
@@ -3249,7 +5335,7 @@ $(document).on('click', '.mailbox-delete-trigger', function() {
                 moveConversation(messageId, 'self').done(function() {
                     removeMessageFromCurrentView(messageId, 'self');
                 }).fail(function(xhr) {
-                    Swal.fire('Unable to move message', xhr.responseJSON?.error || 'Please try again.', 'error');
+                    Swal.fire('Unable to archive chat', xhr.responseJSON?.error || 'Please try again.', 'error');
                 });
             });
 
@@ -3257,9 +5343,9 @@ $(document).on('click', '.mailbox-delete-trigger', function() {
                 Swal.fire({
                     icon: 'warning',
                     title: 'Delete for everyone?',
-                    text: 'This permanently removes the conversation and its attachments for all participants.',
+                    text: 'This permanently removes the chat and its attachments for all participants.',
                     showCancelButton: true,
-                    confirmButtonText: 'Delete permanently',
+                    confirmButtonText: 'Delete forever',
                     confirmButtonColor: '#dc3545'
                 }).then(function(result) {
                     if (!result.isConfirmed) {
@@ -3269,7 +5355,7 @@ $(document).on('click', '.mailbox-delete-trigger', function() {
                     moveConversation(messageId, 'everyone').done(function() {
                         removeMessageFromCurrentView(messageId, 'everyone');
                     }).fail(function(xhr) {
-                        Swal.fire('Unable to delete message', xhr.responseJSON?.error || 'Please try again.', 'error');
+                        Swal.fire('Unable to delete chat', xhr.responseJSON?.error || 'Please try again.', 'error');
                     });
                 });
             });
@@ -3290,7 +5376,7 @@ $(document).on('click', '.mailbox-restore-trigger', function() {
     moveConversation(messageId, 'restore').done(function() {
         removeMessageFromCurrentView(messageId, 'restore');
     }).fail(function(xhr) {
-        Swal.fire('Unable to restore message', xhr.responseJSON?.error || 'Please try again.', 'error');
+        Swal.fire('Unable to restore chat', xhr.responseJSON?.error || 'Please try again.', 'error');
     });
 });
 
@@ -3311,7 +5397,7 @@ $(document).on('click', '.mailbox-restore-trigger', function() {
         }
 
         let idx = Math.max(0, Math.min(startIndex || 0, attachments.length - 1));
-        const basePath = '<?php echo app_url('inbox/uploads/'); ?>';
+        const basePath = '<?php echo app_url('messenger/uploads/'); ?>';
         const folder = type === 'reply' ? 'reply_attachments/' : 'contact_attachments/';
         const attachmentsBase = basePath + folder;
 
@@ -3400,11 +5486,13 @@ $(document).on('click', '.mailbox-restore-trigger', function() {
 })();
 
 $(function() {
+    syncMessengerViewport();
     updateMailboxSummary();
     updateRefreshLabel();
     updateDetailTitle();
     updateUnreadCount();
     pollMailboxState();
+    applyMessageFilters();
 
     const params = new URLSearchParams(window.location.search);
     const requestedId = params.get('msg') || params.get('id');
@@ -3416,9 +5504,14 @@ $(function() {
         setMobileMailboxView('list');
     }
 
-    $(window).on('resize', function() {
-        setMobileMailboxView(lastOpenedId ? 'detail' : 'list');
-    });
+$(window).on('resize', function() {
+    syncMessengerViewport();
+    setMobileMailboxView(lastOpenedId ? 'detail' : 'list');
+});
+
+$(window).on('beforeunload pagehide', function() {
+    stopTypingHeartbeat();
+});
 
     const composeModal = $('#composeModal');
     const composeForm = document.getElementById('composeForm');
@@ -3427,6 +5520,7 @@ $(function() {
     const composeSubject = document.getElementById('composeSubject');
     const composeMessage = document.getElementById('composeMessage');
     const composeAttachments = document.getElementById('composeAttachments');
+    const composeAttachTrigger = document.getElementById('composeAttachTrigger');
     const composeFilePreview = document.getElementById('composeFilePreview');
     const composeFileSummary = document.getElementById('composeFileSummary');
     const composeRecipientSummary = document.getElementById('composeRecipientSummary');
@@ -3450,11 +5544,19 @@ $(function() {
     }
 
     function closeComposeEmojiMenu() {
-        if (composeEmojiMenu) {
-            composeEmojiMenu.hidden = true;
+        window.KODUSEmojiPicker?.close(composeEmojiTrigger, composeEmojiMenu);
+    }
+
+    function positionComposeEmojiMenu() {
+        window.KODUSEmojiPicker?.position(composeEmojiTrigger, composeEmojiMenu);
+    }
+
+    function handleComposeEmojiDocumentClick(event) {
+        if (!composeEmojiMenu || !composeEmojiTrigger) {
+            return;
         }
-        if (composeEmojiTrigger) {
-            composeEmojiTrigger.setAttribute('aria-expanded', 'false');
+        if (!composeEmojiMenu.contains(event.target) && event.target !== composeEmojiTrigger && !composeEmojiTrigger.contains(event.target)) {
+            closeComposeEmojiMenu();
         }
     }
 
@@ -3487,6 +5589,7 @@ $(function() {
             });
             composeEmojiMenu.appendChild(button);
         });
+        window.KODUSEmojiPicker?.enhance(composeEmojiMenu);
     }
 
     function clearComposeFiles() {
@@ -3549,7 +5652,7 @@ $(function() {
         const data = option.element ? option.element.dataset : {};
         const avatar = data.avatar || '<?php echo app_url('dist/img/default.webp'); ?>';
         const name = data.name || option.text;
-        const meta = data.kind === 'user' ? (`&lt;${data.email || ''}&gt;`) : 'Group';
+        const meta = data.kind === 'user' ? 'KODUS user' : 'Group';
         return $(`
             <span class="compose-recipient-option">
               <img src="${avatar}" alt="" class="compose-recipient-avatar" width="18" height="18">
@@ -3584,22 +5687,44 @@ $(function() {
 
         const selectedOptions = Array.prototype.slice.call(composeRecipient.selectedOptions || []);
         if (!selectedOptions.length) {
-            composeRecipientSummary.textContent = 'Choose one or more recipients';
+            composeRecipientSummary.textContent = 'Choose one or more people';
             return;
         }
 
         const labels = selectedOptions.map(option => option.text);
         composeRecipientSummary.textContent = labels.length === 1
             ? labels[0]
-            : `${labels.length} recipients selected`;
+            : `${labels.length} people selected`;
+    }
+
+    function buildComposeSubject() {
+        const selectedOptions = Array.prototype.slice.call(composeRecipient?.selectedOptions || []);
+        const labels = selectedOptions.map(option => option.text).filter(Boolean);
+        const messageText = String(composeMessage?.value || '').trim().replace(/\s+/g, ' ');
+
+        if (messageText) {
+            return messageText.length > 80 ? (messageText.slice(0, 77) + '...') : messageText;
+        }
+
+        if (labels.length === 1) {
+            return `Chat with ${labels[0]}`;
+        }
+
+        if (labels.length > 1) {
+            return `Group chat with ${labels.length} people`;
+        }
+
+        return 'New chat';
     }
 
     function updateComposePreview() {
-        if (!composeSubject || !composeMessage) {
+        if (!composeMessage) {
             return;
         }
 
-        composeSubjectCount.textContent = String((composeSubject.value || '').length);
+        if (composeSubject) {
+            composeSubject.value = buildComposeSubject();
+        }
         composeMessageCount.textContent = String((composeMessage.value || '').length);
     }
 
@@ -3617,6 +5742,38 @@ $(function() {
         closeComposeEmojiMenu();
     }
 
+    function appendOptimisticComposeThread(labels, messageText) {
+        const list = document.querySelector('#messageList tbody');
+        if (!list) {
+            return null;
+        }
+
+        const tempId = `compose-${Date.now()}`;
+        const displayName = labels.length ? labels.join(', ') : 'New chat';
+        const preview = messageText ? `You: ${messageText}` : 'You sent an attachment';
+        const row = document.createElement('tr');
+        row.className = 'message-item active optimistic-compose-thread';
+        row.dataset.id = tempId;
+        row.dataset.unread = '0';
+        row.dataset.hasAttachment = '0';
+        row.innerHTML = `
+          <td class="mailbox-avatar-cell text-center">
+            <span class="mailbox-avatar-wrap">
+              <img src="<?php echo app_url('dist/img/default.webp'); ?>" alt="" class="mailbox-avatar">
+              <span class="mailbox-presence-dot mailbox-presence-offline" aria-hidden="true"></span>
+            </span>
+          </td>
+          <td class="mailbox-name">${escapeReplyHtml(displayName)}</td>
+          <td class="mailbox-subject"><span class="mailbox-snippet">${escapeReplyHtml(preview)}</span> <span class="text-info">Sending...</span></td>
+          <td class="mailbox-date">Now</td>
+        `;
+
+        document.querySelectorAll('#messageList .message-item').forEach(item => item.classList.remove('active'));
+        list.prepend(row);
+        updateMailboxSummary();
+        return row;
+    }
+
     function setComposeSubmitting(isSubmitting) {
         if (!composeSubmitBtn) {
             return;
@@ -3625,7 +5782,7 @@ $(function() {
         composeSubmitBtn.disabled = !!isSubmitting;
         composeSubmitBtn.innerHTML = isSubmitting
             ? '<i class="fas fa-spinner fa-spin mr-1"></i> Sending...'
-            : '<i class="fas fa-paper-plane mr-1"></i> Send';
+            : '<i class="fas fa-paper-plane mr-1"></i> Start chat';
     }
 
     $(document).on('click', '.mailbox-compose-trigger', function(e) {
@@ -3633,24 +5790,39 @@ $(function() {
         openComposeModal();
     });
 
-    composeRecipient?.addEventListener('change', updateComposeRecipientMeta);
-    composeSubject?.addEventListener('input', updateComposePreview);
+    composeRecipient?.addEventListener('change', function() {
+        updateComposeRecipientMeta();
+        updateComposePreview();
+    });
     composeMessage?.addEventListener('input', updateComposePreview);
     composeAttachments?.addEventListener('change', updateComposeAttachments);
+    composeAttachTrigger?.addEventListener('click', function(e) {
+        e.preventDefault();
+        composeAttachments?.click();
+    });
     composeResetBtn?.addEventListener('click', resetComposeForm);
     composeEmojiTrigger?.addEventListener('click', function(e) {
         e.preventDefault();
         e.stopPropagation();
         buildComposeEmojiMenu();
-        const shouldOpen = composeEmojiMenu.hidden;
-        closeComposeEmojiMenu();
-        composeEmojiMenu.hidden = !shouldOpen;
-        composeEmojiTrigger.setAttribute('aria-expanded', shouldOpen ? 'true' : 'false');
+        window.KODUSEmojiPicker?.toggle(composeEmojiTrigger, composeEmojiMenu);
+    });
+    composeEmojiTrigger?.addEventListener('mousedown', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
     });
     composeEmojiMenu?.addEventListener('click', function(e) {
         e.stopPropagation();
     });
-    document.addEventListener('click', closeComposeEmojiMenu);
+    composeEmojiMenu?.addEventListener('mousedown', function(e) {
+        e.stopPropagation();
+    });
+    composeMessage?.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            closeComposeEmojiMenu();
+        }
+    });
+    document.addEventListener('click', handleComposeEmojiDocumentClick);
     composeModalClose?.addEventListener('click', function(e) {
         e.preventDefault();
         closeComposeEmojiMenu();
@@ -3663,21 +5835,18 @@ $(function() {
             return;
         }
 
+        const selectedLabels = Array.prototype.slice.call(composeRecipient?.selectedOptions || []).map(option => option.text).filter(Boolean);
+        const outgoingMessage = String(composeMessage?.value || '').trim().replace(/\s+/g, ' ');
+        const optimisticRow = appendOptimisticComposeThread(selectedLabels, outgoingMessage);
+
         setComposeSubmitting(true);
         closeComposeEmojiMenu();
-
-        Swal.fire({
-            title: 'Sending message...',
-            text: 'Please wait while your message is being delivered.',
-            allowOutsideClick: false,
-            allowEscapeKey: false,
-            showConfirmButton: false,
-            didOpen: function() {
-                Swal.showLoading();
-            }
-        });
-
+        if (composeSubject) {
+            composeSubject.value = buildComposeSubject();
+        }
         const formData = new FormData(composeForm);
+        composeModal.modal('hide');
+        resetComposeForm();
 
         fetch(composeForm.action, {
             method: 'POST',
@@ -3705,29 +5874,20 @@ $(function() {
             return payload;
         })
         .then(function(payload) {
-            Swal.close();
-            composeModal.modal('hide');
-            resetComposeForm();
             updateMessageList();
             updateUnreadCount();
             updateMailboxSummary();
 
-            Swal.fire({
-                icon: payload.icon || 'success',
-                title: payload.title || 'Message Sent!',
-                text: payload.message || 'Your message has been delivered.',
-                confirmButtonText: 'OK'
-            }).then(function() {
-                if (payload.message_id) {
-                    openMessage(payload.message_id);
-                }
-            });
+            if (payload.message_id) {
+                openMessage(payload.message_id);
+            }
         })
         .catch(function(error) {
-            Swal.close();
+            optimisticRow?.remove();
+            updateMailboxSummary();
             Swal.fire({
                 icon: 'error',
-                title: 'Message Failed',
+                title: 'Chat failed',
                 text: error.message || 'Unable to send your message right now.'
             });
         })
@@ -3740,12 +5900,18 @@ $(function() {
         setComposeSubmitting(false);
     });
 
+    window.addEventListener('resize', function() {
+        if (composeEmojiMenu && !composeEmojiMenu.hidden) {
+            positionComposeEmojiMenu();
+        }
+    }, { passive: true });
+
     if (window.jQuery && $.fn.select2 && composeRecipient) {
         $('#composeRecipient').select2({
             theme: 'bootstrap4',
             width: '100%',
             dropdownParent: composeModal,
-            placeholder: 'Choose recipients',
+            placeholder: 'Choose people',
             templateResult: renderComposeRecipientOption,
             templateSelection: renderComposeRecipientSelection,
             escapeMarkup: function(markup) { return markup; }

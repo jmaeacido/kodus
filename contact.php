@@ -5,7 +5,7 @@ require_once __DIR__ . '/security.php';
 security_bootstrap_session();
 
 if (isset($_SESSION['user_id'])) {
-    header('Location: ' . $app_root . 'inbox/?compose=1');
+    header('Location: ' . $app_root . 'messenger/?compose=1');
     exit;
 }
 

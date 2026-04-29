@@ -213,7 +213,6 @@ foreach ($feedRows as $row) {
     $items[] = [
         'id' => $messageId,
         'sender' => $senderName !== '' ? $senderName : 'Unknown',
-        'subject' => (string) ($row['subject'] ?? '(No Subject)'),
         'snippet' => mailboxFormatThreadPreview($latestPreview, 50),
         'sent_label' => notification_time_label($row['latest_activity_at'] ?? null),
         'activity_key' => $messageId . ':' . (string) ($latestPreview['sent_at'] ?? $row['latest_activity_at'] ?? ''),

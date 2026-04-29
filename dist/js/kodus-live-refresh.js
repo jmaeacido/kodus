@@ -46,6 +46,14 @@
     };
   }
 
+  function debugSocket() {
+    try {
+      if (window.localStorage && window.localStorage.getItem('KODUS_SOCKET_DEBUG') === '1') {
+        console.debug.apply(console, arguments);
+      }
+    } catch (error) {}
+  }
+
   var socketBridge = (function() {
     var config = window.KODUS_SOCKET_CONFIG || {};
     var enabled = !!config.enabled;
@@ -230,12 +238,12 @@
             }
 
             loggedConnectionError = true;
-            console.warn('KODUS socket connection failed.', error && error.message ? error.message : error);
+            debugSocket('KODUS socket connection failed.', error && error.message ? error.message : error);
           });
 
           socket.on('disconnect', function(reason) {
             if (reason && reason !== 'io client disconnect') {
-              console.warn('KODUS socket disconnected.', reason);
+              debugSocket('KODUS socket disconnected.', reason);
             }
           });
 
@@ -247,7 +255,7 @@
           return socket;
         })
         .catch(function(error) {
-          console.warn('KODUS socket bridge unavailable.', error);
+          debugSocket('KODUS socket bridge unavailable.', error);
           initPromise = null;
           return null;
         });
@@ -302,102 +310,10 @@
     };
   }());
 
-  function watch(options) {
-    var endpoint = String((options && options.endpoint) || window.KODUS_LIVE_REFRESH_URL || '').trim();
-    var channels = normalizeChannels(options && options.channels);
-    var timeoutSeconds = Math.max(5, Math.min(25, Math.floor(Number((options && options.timeoutMs) || 25000) / 1000) || 20));
-    var retryDelayMs = Math.max(1000, Number((options && options.retryDelayMs) || 3000));
-    var allowPollingFallback = !!(options && options.allowPollingFallback);
-    var token = '';
-    var stopped = false;
-    var activeController = null;
-
-    if (!allowPollingFallback || !endpoint || channels.length === 0) {
-      return {
-        stop: function() {},
-        isActive: function() { return false; }
-      };
-    }
-
-    async function loop(delayMs) {
-      if (stopped) {
-        return;
-      }
-
-      if (delayMs > 0) {
-        await new Promise(function(resolve) {
-          window.setTimeout(resolve, delayMs);
-        });
-      }
-
-      if (stopped) {
-        return;
-      }
-
-      activeController = window.AbortController ? new AbortController() : null;
-
-      var params = new URLSearchParams();
-      params.set('channels', channels.join(','));
-      params.set('timeout', String(timeoutSeconds));
-      if (token) {
-        params.set('token', token);
-      }
-
-      try {
-        var response = await window.fetch(endpoint + '?' + params.toString(), {
-          method: 'GET',
-          credentials: 'same-origin',
-          cache: 'no-store',
-          headers: { 'Accept': 'application/json' },
-          signal: activeController ? activeController.signal : undefined
-        });
-
-        if (!response.ok) {
-          throw new Error('Live refresh request failed with status ' + response.status);
-        }
-
-        var payload = await response.json();
-        if (stopped) {
-          return;
-        }
-
-        var hadToken = token !== '';
-        if (typeof payload.token === 'string' && payload.token) {
-          token = payload.token;
-        }
-
-        if (hadToken && payload.changed && typeof options.onChange === 'function') {
-          options.onChange(payload);
-        } else if (!hadToken && typeof options.onReady === 'function') {
-          options.onReady(payload);
-        }
-
-        loop(0);
-      } catch (error) {
-        if (stopped || (error && error.name === 'AbortError')) {
-          return;
-        }
-
-        if (typeof options.onError === 'function') {
-          options.onError(error);
-        }
-
-        loop(retryDelayMs);
-      }
-    }
-
-    loop(0);
-
+  function watch() {
     return {
-      stop: function() {
-        stopped = true;
-        if (activeController) {
-          activeController.abort();
-        }
-      },
-      isActive: function() {
-        return !stopped;
-      }
+      stop: function() {},
+      isActive: function() { return false; }
     };
   }
 
@@ -421,11 +337,6 @@
       }
     }, 300);
 
-    var pollWatcher = {
-      stop: function() {},
-      isActive: function() { return false; }
-    };
-
     var socketWatcher = null;
     if (options.socket && options.socket.channel) {
       socketWatcher = watchSocket({
@@ -434,28 +345,16 @@
         events: options.socket.events,
         onMessage: throttledReload
       });
-    } else if (options.allowPollingFallback) {
-      pollWatcher = watch({
-        endpoint: options.endpoint,
-        channels: options.channels,
-        timeoutMs: options.timeoutMs,
-        retryDelayMs: options.retryDelayMs,
-        allowPollingFallback: true,
-        onChange: throttledReload,
-        onReady: options.onReady,
-        onError: options.onError
-      });
     }
 
     return {
       stop: function() {
-        pollWatcher.stop();
         if (socketWatcher) {
           socketWatcher.stop();
         }
       },
       isActive: function() {
-        return pollWatcher.isActive();
+        return !!socketWatcher;
       }
     };
   }

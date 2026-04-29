@@ -35,9 +35,8 @@ if ($userType === 'admin') {
                COALESCE(reply_summary.latest_reply_at, cm.sent_at) AS latest_activity_at,
                COALESCE(mr.is_read, 0) AS user_read,
                sender_user.picture AS sender_picture,
+               sender_user.id AS sender_user_id,
                sender_user.sso_avatar_url AS sender_sso_avatar_url,
-               sender_user.last_activity AS sender_last_activity,
-               sender_user.is_online AS sender_is_online,
                current_member.muted_at AS current_member_muted_at,
                current_member.left_at AS current_member_left_at,
                (
@@ -46,6 +45,14 @@ if ($userType === 'admin') {
                    INNER JOIN users u ON u.id = cmr.user_id
                    WHERE cmr.message_id = cm.id
                ) AS recipient_names,
+               (
+                   SELECT u.id
+                   FROM contact_message_recipients cmr
+                   INNER JOIN users u ON u.id = cmr.user_id
+                   WHERE cmr.message_id = cm.id
+                   ORDER BY u.username
+                   LIMIT 1
+               ) AS recipient_user_id,
                (
                    SELECT u.picture
                    FROM contact_message_recipients cmr
@@ -61,23 +68,7 @@ if ($userType === 'admin') {
                    WHERE cmr.message_id = cm.id
                    ORDER BY u.username
                    LIMIT 1
-               ) AS recipient_sso_avatar_url,
-               (
-                   SELECT u.last_activity
-                   FROM contact_message_recipients cmr
-                   INNER JOIN users u ON u.id = cmr.user_id
-                   WHERE cmr.message_id = cm.id
-                   ORDER BY u.username
-                   LIMIT 1
-               ) AS recipient_last_activity,
-               (
-                   SELECT u.is_online
-                   FROM contact_message_recipients cmr
-                   INNER JOIN users u ON u.id = cmr.user_id
-                   WHERE cmr.message_id = cm.id
-                   ORDER BY u.username
-                   LIMIT 1
-               ) AS recipient_is_online
+               ) AS recipient_sso_avatar_url
         FROM contact_messages cm
         LEFT JOIN (
             SELECT message_id, MAX(sent_at) AS latest_reply_at
@@ -113,9 +104,8 @@ if ($userType === 'admin') {
                COALESCE(reply_summary.latest_reply_at, cm.sent_at) AS latest_activity_at,
                COALESCE(mr.is_read, 0) AS user_read,
                sender_user.picture AS sender_picture,
+               sender_user.id AS sender_user_id,
                sender_user.sso_avatar_url AS sender_sso_avatar_url,
-               sender_user.last_activity AS sender_last_activity,
-               sender_user.is_online AS sender_is_online,
                current_member.muted_at AS current_member_muted_at,
                current_member.left_at AS current_member_left_at,
                (
@@ -124,6 +114,14 @@ if ($userType === 'admin') {
                    INNER JOIN users u ON u.id = cmr.user_id
                    WHERE cmr.message_id = cm.id
                ) AS recipient_names,
+               (
+                   SELECT u.id
+                   FROM contact_message_recipients cmr
+                   INNER JOIN users u ON u.id = cmr.user_id
+                   WHERE cmr.message_id = cm.id
+                   ORDER BY u.username
+                   LIMIT 1
+               ) AS recipient_user_id,
                (
                    SELECT u.picture
                    FROM contact_message_recipients cmr
@@ -139,23 +137,7 @@ if ($userType === 'admin') {
                    WHERE cmr.message_id = cm.id
                    ORDER BY u.username
                    LIMIT 1
-               ) AS recipient_sso_avatar_url,
-               (
-                   SELECT u.last_activity
-                   FROM contact_message_recipients cmr
-                   INNER JOIN users u ON u.id = cmr.user_id
-                   WHERE cmr.message_id = cm.id
-                   ORDER BY u.username
-                   LIMIT 1
-               ) AS recipient_last_activity,
-               (
-                   SELECT u.is_online
-                   FROM contact_message_recipients cmr
-                   INNER JOIN users u ON u.id = cmr.user_id
-                   WHERE cmr.message_id = cm.id
-                   ORDER BY u.username
-                   LIMIT 1
-               ) AS recipient_is_online
+               ) AS recipient_sso_avatar_url
         FROM contact_messages cm
         LEFT JOIN (
             SELECT message_id, MAX(sent_at) AS latest_reply_at
@@ -296,6 +278,19 @@ $composeCsrfToken = security_get_csrf_token();
       --messenger-bubble-mine: linear-gradient(135deg, #2563eb, #7c3aed);
       --messenger-success: #31a24c;
       --messenger-shadow: 0 20px 48px rgba(15, 23, 42, 0.12);
+    }
+
+    body.kodus-chat-bubble-mode .main-sidebar,
+    body.kodus-chat-bubble-mode .main-header,
+    body.kodus-chat-bubble-mode .main-footer,
+    body.kodus-chat-bubble-mode footer {
+      display: none !important;
+    }
+
+    body.kodus-chat-bubble-mode .content-wrapper {
+      margin-left: 0 !important;
+      padding-top: 0 !important;
+      min-height: 100vh !important;
     }
 
     body.dark-mode .mailbox-app,
@@ -1411,7 +1406,10 @@ $composeCsrfToken = security_get_csrf_token();
       position: absolute;
       left: 0;
       right: 0;
-      top: calc(100% + 0.45rem);
+      bottom: calc(100% + 0.35rem);
+      top: auto;
+      max-height: min(14rem, 38vh);
+      overflow-y: auto;
       border: 1px solid var(--mailbox-border);
       border-radius: 0.85rem;
       background: var(--mailbox-surface-elevated);
@@ -1419,7 +1417,7 @@ $composeCsrfToken = security_get_csrf_token();
       padding: 0.35rem;
       display: grid;
       gap: 0.25rem;
-      z-index: 35;
+      z-index: 1095;
     }
 
     .mailbox-app .chat-mention-menu[hidden] {
@@ -1438,7 +1436,8 @@ $composeCsrfToken = security_get_csrf_token();
     }
 
     .mailbox-app .chat-mention-item:hover,
-    .mailbox-app .chat-mention-item:focus {
+    .mailbox-app .chat-mention-item:focus,
+    .mailbox-app .chat-mention-item.is-active {
       background: color-mix(in srgb, var(--mailbox-accent-soft) 84%, transparent);
       outline: none;
     }
@@ -1541,10 +1540,11 @@ $composeCsrfToken = security_get_csrf_token();
       cursor: pointer;
     }
 
-    .mailbox-app .chat-reaction-picker {
-      position: absolute;
+    .chat-reaction-picker {
+      position: fixed;
       left: 0;
-      top: calc(100% + 0.45rem);
+      top: 0;
+      right: auto;
       width: 214px;
       padding: 0.6rem;
       border-radius: 0.85rem;
@@ -1554,12 +1554,47 @@ $composeCsrfToken = security_get_csrf_token();
       display: grid;
       grid-template-columns: repeat(5, minmax(0, 1fr));
       gap: 0.35rem;
-      z-index: 25;
+      z-index: 1100;
       color: var(--mailbox-text);
+      pointer-events: auto;
     }
 
-    .mailbox-app .chat-reaction-picker[hidden] {
+    .chat-reaction-picker[hidden] {
       display: none;
+    }
+
+    .chat-reaction-picker .chat-reaction-add {
+      border: 1px solid var(--mailbox-border, #d9e2ec);
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--mailbox-surface, #ffffff) 94%, transparent);
+      color: var(--mailbox-text, #1f2937);
+      min-height: 30px;
+      padding: 0.2rem 0.45rem;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.95rem;
+      font-weight: 700;
+      line-height: 1;
+    }
+
+    .chat-reaction-picker .chat-reaction-add:hover,
+    .chat-reaction-picker .chat-reaction-add:focus {
+      background: color-mix(in srgb, var(--mailbox-accent-soft, rgba(13, 110, 253, 0.1)) 78%, var(--mailbox-surface, #ffffff));
+      border-color: color-mix(in srgb, var(--mailbox-accent-strong, #2563eb) 42%, var(--mailbox-border, #d9e2ec));
+      color: var(--mailbox-text, #1f2937);
+      outline: none;
+    }
+
+    body.dark-mode .chat-reaction-picker,
+    body[data-theme="dark"] .chat-reaction-picker {
+      --mailbox-surface: #1f2a37;
+      --mailbox-surface-elevated: #223041;
+      --mailbox-border: rgba(255, 255, 255, 0.09);
+      --mailbox-text: #f3f4f6;
+      --mailbox-accent-soft: rgba(96, 165, 250, 0.18);
+      --mailbox-accent-strong: #93c5fd;
+      --messenger-text: #f5f7fb;
     }
 
     .group-members-list {
@@ -1577,12 +1612,34 @@ $composeCsrfToken = security_get_csrf_token();
       box-shadow: var(--mailbox-shadow);
       color: var(--mailbox-text);
       overflow: hidden;
+      max-height: 80vh;
+    }
+
+    #groupComposeModal .modal-content {
+      max-height: 80vh;
+      overflow: hidden;
+    }
+
+    #groupComposeModal .modal-header,
+    #groupComposeModal .modal-footer {
+      flex: 0 0 auto;
+    }
+
+    #groupComposeModal .modal-body {
+      overflow-y: auto;
+      min-height: 0;
     }
 
     #groupMembersModal .modal-header,
     #groupMembersModal .modal-footer {
       background: color-mix(in srgb, var(--mailbox-surface) 92%, transparent);
       border-color: var(--mailbox-border);
+      flex: 0 0 auto;
+    }
+
+    #groupMembersModal .modal-body {
+      overflow-y: auto;
+      min-height: 0;
     }
 
     #groupMembersModal .modal-title {
@@ -3727,6 +3784,98 @@ $composeCsrfToken = security_get_csrf_token();
       margin-bottom: 0;
     }
 
+    body.kodus-chat-bubble-mode .mailbox-app #messageDetail > .chat-shell {
+      gap: 0.45rem;
+      padding: 0.55rem 0.75rem 0.75rem;
+    }
+
+    body.kodus-chat-bubble-mode .mailbox-app .chat-thread-header {
+      line-height: 1.2;
+    }
+
+    body.kodus-chat-bubble-mode .mailbox-app .messenger-thread-card {
+      position: relative;
+    }
+
+    body.kodus-chat-bubble-mode .mailbox-app .messenger-thread-card .mailbox-detail-header {
+      position: absolute;
+      left: 0.65rem;
+      top: 0.48rem;
+      z-index: 40;
+      display: flex;
+      align-items: center;
+      padding: 0;
+      min-height: 0;
+      border: 0;
+      background: transparent;
+    }
+
+    body.kodus-chat-bubble-mode .mailbox-app #mobileBackToList {
+      display: inline-flex !important;
+      align-items: center;
+      flex: 0 0 auto;
+      padding: 0.22rem 0.45rem;
+      font-size: 0.78rem;
+      line-height: 1.15;
+    }
+
+    body.kodus-chat-bubble-mode .mailbox-app .chat-thread-hero {
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0 0 0 3.45rem;
+      flex-wrap: nowrap;
+      flex-direction: row;
+    }
+
+    body.kodus-chat-bubble-mode .mailbox-app .chat-thread-primary {
+      gap: 0.55rem;
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+
+    body.kodus-chat-bubble-mode .mailbox-app .chat-thread-primary > div:last-child {
+      min-width: 0;
+    }
+
+    body.kodus-chat-bubble-mode .mailbox-app .chat-thread-avatar {
+      width: 34px;
+      height: 34px;
+    }
+
+    body.kodus-chat-bubble-mode .mailbox-app .chat-thread-status-dot {
+      width: 0.65rem;
+      height: 0.65rem;
+      border-width: 1px;
+    }
+
+    body.kodus-chat-bubble-mode .mailbox-app .mailbox-read-subject {
+      margin: 0;
+      font-size: 0.98rem;
+      line-height: 1.15;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    body.kodus-chat-bubble-mode .mailbox-app .chat-thread-presence {
+      margin-top: 0;
+      font-size: 0.75rem;
+      line-height: 1.15;
+    }
+
+    body.kodus-chat-bubble-mode .mailbox-app .chat-thread-meta-line {
+      display: none;
+    }
+
+    body.kodus-chat-bubble-mode .mailbox-app .chat-thread-options {
+      flex: 0 0 auto;
+    }
+
+    body.kodus-chat-bubble-mode .mailbox-app .chat-thread-options-btn {
+      width: 30px;
+      height: 30px;
+    }
+
     .mailbox-app .chat-thread-hero {
       align-items: flex-start;
       gap: 1rem;
@@ -3755,6 +3904,10 @@ $composeCsrfToken = security_get_csrf_token();
       scrollbar-gutter: stable;
       padding: 0 3.5rem 0.85rem 3.5rem;
       scroll-behavior: auto;
+    }
+
+    body.kodus-chat-bubble-mode .mailbox-app .conversation-scroll {
+      padding: 0 0.55rem 0.35rem;
     }
 
     .mailbox-app .reply {
@@ -3817,16 +3970,6 @@ $composeCsrfToken = security_get_csrf_token();
       justify-content: flex-end;
     }
 
-    .mailbox-app .reply.theirs .chat-reaction-picker {
-      left: 0;
-      right: auto;
-    }
-
-    .mailbox-app .reply.mine .chat-reaction-picker {
-      left: auto;
-      right: 0;
-    }
-
     .mailbox-app .chat-composer-shell {
       flex: 0 0 auto;
       margin: 0 !important;
@@ -3856,6 +3999,29 @@ $composeCsrfToken = security_get_csrf_token();
       display: inline-flex;
       flex-direction: column;
       gap: 0.35rem;
+    }
+
+    body.kodus-chat-bubble-mode .mailbox-app .chat-composer-shell {
+      padding: 0.45rem 0.55rem;
+      border-radius: 0.8rem;
+    }
+
+    body.kodus-chat-bubble-mode .mailbox-app .chat-reply-textarea {
+      min-height: 42px;
+      max-height: 92px;
+      padding: 0.62rem 5.1rem 0.62rem 0.75rem;
+    }
+
+    body.kodus-chat-bubble-mode .mailbox-app .chat-composer-tool-stack {
+      right: 0.65rem;
+      bottom: 0.72rem;
+      flex-direction: row;
+      gap: 0.15rem;
+    }
+
+    body.kodus-chat-bubble-mode .mailbox-app .chat-composer-tool-btn {
+      width: 1.75rem;
+      height: 1.75rem;
     }
 
     .mailbox-app .chat-composer-tool-btn {
@@ -4127,10 +4293,10 @@ $composeCsrfToken = security_get_csrf_token();
                               $avatarUrl = $isGroupThread && trim((string) ($row['group_photo'] ?? '')) !== ''
                                   ? $base_url . 'inbox/uploads/group_photos/' . rawurlencode((string) $row['group_photo'])
                                   : avatar_resolve_url($displayPicture, $displaySsoAvatar, $base_url, dirname(__DIR__));
-                              $presence = $isGroupThread ? ['detail' => 'Group chat', 'class' => 'online'] : mailboxClassifyPresence(
-                                  $isSenderView ? ($row['recipient_last_activity'] ?? null) : ($row['sender_last_activity'] ?? null),
-                                  (int) ($isSenderView ? ($row['recipient_is_online'] ?? 0) : ($row['sender_is_online'] ?? 0))
-                              );
+                              $presenceUserId = $isGroupThread ? 0 : (int) ($isSenderView ? ($row['recipient_user_id'] ?? 0) : ($row['sender_user_id'] ?? 0));
+                            $presence = $isGroupThread
+                                ? ['detail' => 'Group chat', 'class' => 'offline']
+                                : ['detail' => 'Active status unavailable', 'class' => 'offline'];
                               $subjectRaw = trim((string) ($row['subject'] ?? ''));
                               $subject = htmlspecialchars($subjectRaw !== '' ? $subjectRaw : 'Quick chat');
                               $latestPreview = $latestPreviews[$messageId] ?? [
@@ -4163,6 +4329,7 @@ $composeCsrfToken = security_get_csrf_token();
                                 data-message="<?= htmlspecialchars($row['message'] ?? '') ?>"
                                 data-sent="<?= $sentAt ?>"
                                 data-unread="<?= $rowClass ? '1' : '0' ?>"
+                                data-presence-user-id="<?= (int) $presenceUserId ?>"
                                 data-has-attachment="<?= $hasAttachment ? '1' : '0' ?>">
                               <?php if (in_array($currentFolder, ['inbox', 'trash'], true)): ?>
                               <td class="mailbox-select-cell">
@@ -4256,7 +4423,7 @@ $composeCsrfToken = security_get_csrf_token();
             <h5 class="modal-title" id="groupComposeModalLabel">Create group chat</h5>
             <p class="compose-meta">Name the group and choose at least 2 members.</p>
           </div>
-          <button type="button" class="close text-reset" data-dismiss="modal" aria-label="Close">
+          <button type="button" class="close text-reset" data-dismiss="modal" data-bs-dismiss="modal" aria-label="Close">
             <span aria-hidden="true">&times;</span>
           </button>
         </div>
@@ -4293,7 +4460,7 @@ $composeCsrfToken = security_get_csrf_token();
           <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($composeCsrfToken, ENT_QUOTES) ?>">
         </div>
         <div class="modal-footer">
-          <button type="button" class="btn btn-outline-secondary" data-dismiss="modal">Cancel</button>
+          <button type="button" class="btn btn-outline-secondary" data-dismiss="modal" data-bs-dismiss="modal">Cancel</button>
           <button type="submit" class="btn btn-primary"><i class="fas fa-users mr-1"></i> Create group</button>
         </div>
       </form>
@@ -4422,6 +4589,13 @@ $composeCsrfToken = security_get_csrf_token();
 <script src="<?php echo app_url('plugins/bootstrap/js/bootstrap.bundle.min.js'); ?>"></script>
 <script src="<?php echo app_url('plugins/select2/js/select2.full.min.js'); ?>"></script>
 <script src="../plugins/sweetalert2/sweetalert2.min.js"></script>
+<script>
+if (window.frameElement && !document.querySelector('[data-widget="iframe"]')) {
+    try {
+        localStorage.setItem('AdminLTE:IFrame:Options', JSON.stringify({ autoIframeMode: false }));
+    } catch (error) {}
+}
+</script>
 <script src="<?php echo app_url('dist/js/adminlte.min.js'); ?>"></script>
 
 <script>
@@ -4433,14 +4607,104 @@ let typingStopTimer = null;
 let lastTypingMessageId = null;
 let typingRefreshTimeout = null;
 let liveTypingUsers = {};
-let mailboxStateToken = null;
-let mailboxStatePollInFlight = false;
+let messengerPresenceOnlineUsers = {};
 const currentMessengerUserId = <?= json_encode(is_numeric($userId) ? (int) $userId : 0) ?>;
+const messengerBaseUrl = <?= json_encode(app_url('messenger/index.php'), JSON_UNESCAPED_SLASHES) ?>;
 window.currentUserId = String(currentMessengerUserId || '');
 window.activeThreadId = '';
 const currentMailboxFolder = <?= json_encode($currentFolder, JSON_UNESCAPED_SLASHES) ?>;
 const canReplyInCurrentFolder = currentMailboxFolder !== 'trash';
 const shouldOpenCompose = <?= $composeOpen ? 'true' : 'false' ?>;
+const isKodusChatBubbleMode = new URLSearchParams(window.location.search).get('bubble') === '1';
+
+if (isKodusChatBubbleMode) {
+    document.body.classList.add('kodus-chat-bubble-mode');
+}
+
+function formatMessengerPresenceText(isOnline, lastActiveAt) {
+    if (isOnline) {
+        return 'Active now';
+    }
+
+    const lastActiveTime = Date.parse(String(lastActiveAt || ''));
+    if (!Number.isFinite(lastActiveTime)) {
+        return 'Active status unavailable';
+    }
+
+    const seconds = Math.max(0, Math.floor((Date.now() - lastActiveTime) / 1000));
+    if (seconds < 60) {
+        return 'Active now';
+    }
+
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) {
+        return `Active ${minutes} minute${minutes === 1 ? '' : 's'} ago`;
+    }
+
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) {
+        return `Active ${hours} hour${hours === 1 ? '' : 's'} ago`;
+    }
+
+    const days = Math.floor(hours / 24);
+    return `Active ${days} day${days === 1 ? '' : 's'} ago`;
+}
+
+function applyMessengerPresence(userId, isOnline, lastActiveAt) {
+    const normalizedUserId = String(Number(userId || 0));
+    if (normalizedUserId === '0') {
+        return;
+    }
+
+    messengerPresenceOnlineUsers[normalizedUserId] = {
+        online: !!isOnline,
+        lastActiveAt: lastActiveAt || new Date().toISOString()
+    };
+    const className = isOnline ? 'online' : 'offline';
+    const detail = formatMessengerPresenceText(!!isOnline, lastActiveAt);
+
+    document.querySelectorAll(`[data-presence-user-id="${normalizedUserId}"]`).forEach(function(node) {
+        const dot = node.querySelector('.mailbox-presence-dot, .chat-thread-status-dot');
+        if (dot) {
+            dot.classList.remove('mailbox-presence-online', 'mailbox-presence-idle', 'mailbox-presence-offline', 'is-online', 'is-idle', 'is-offline');
+            if (dot.classList.contains('chat-thread-status-dot')) {
+                dot.classList.add('is-' + className);
+            } else {
+                dot.classList.add('mailbox-presence-' + className);
+            }
+            dot.setAttribute('aria-label', detail);
+        }
+
+        const wrap = node.querySelector('.mailbox-avatar-wrap');
+        if (wrap) {
+            wrap.setAttribute('title', detail);
+        }
+
+        const copy = node.querySelector('.chat-thread-presence');
+        if (copy) {
+            copy.textContent = detail;
+        }
+    });
+}
+
+function syncVisibleMessengerPresence() {
+    Object.keys(messengerPresenceOnlineUsers).forEach(function(userId) {
+        const presence = messengerPresenceOnlineUsers[userId] || {};
+        applyMessengerPresence(userId, presence.online, presence.lastActiveAt);
+    });
+}
+
+function normalizeBubbleThreadMenu() {
+    if (!isKodusChatBubbleMode && !window.frameElement) {
+        return;
+    }
+
+    document.querySelectorAll('.conversation-open-bubble-trigger').forEach(function(button) {
+        button.classList.remove('conversation-open-bubble-trigger');
+        button.classList.add('conversation-open-messenger-trigger');
+        button.innerHTML = '<i class="fas fa-external-link-alt mr-2"></i>Open in Messenger';
+    });
+}
 
 function enhanceEmojiMenu(menu) {
     if (!menu || menu.dataset.enhanced === '1') {
@@ -4680,7 +4944,7 @@ function getComparableConversationMarkupFromHtml(html) {
     const wrapper = document.createElement('div');
     wrapper.innerHTML = String(html || '');
     wrapper.querySelectorAll('.chat-reaction-picker').forEach(function(picker) {
-        picker.setAttribute('hidden', '');
+        picker.remove();
     });
     wrapper.querySelectorAll('.chat-reaction-trigger').forEach(function(trigger) {
         trigger.setAttribute('aria-expanded', 'false');
@@ -4716,6 +4980,7 @@ function updateMailboxSummary() {
 }
 
 function renderEmptyDetail() {
+    closeReactionPickers();
     const emptyMessage = getFolderEmptyMessage();
     $('#messageDetail').html(`
       <div class="mailbox-empty-detail">
@@ -4813,11 +5078,14 @@ function openMessage(id) {
     $(`#messageList .message-item[data-id="${id}"]`).addClass('active').removeClass('unread');
     updateMailboxSummary();
 
-    $.get('get_thread.php', { id: id, folder: currentMailboxFolder }, function(html) {
+    $.get('get_thread.php', { id: id, folder: currentMailboxFolder, bubble: isKodusChatBubbleMode ? 1 : 0 }, function(html) {
+        closeReactionPickers();
         $('#messageDetail').html(html);
         updateDetailTitle();
         setMobileMailboxView('detail');
         initializeThreadExperience();
+        normalizeBubbleThreadMenu();
+        syncVisibleMessengerPresence();
         scrollConversationToBottomOnOpen();
         firstLoadDone = true;
     });
@@ -4862,6 +5130,7 @@ function updateMessageList() {
         updateMailboxSummary();
         updateRefreshLabel(true);
         applyMessageFilters();
+        syncVisibleMessengerPresence();
     });
 }
 
@@ -4938,9 +5207,19 @@ function escapeHtml(value) {
     });
 }
 
+function logKodusRealtimeDebug() {
+    try {
+        if (window.localStorage && window.localStorage.getItem('KODUS_SOCKET_DEBUG') === '1') {
+            console.debug.apply(console, arguments);
+        }
+    } catch (error) {
+        // Ignore storage access errors in restricted browser modes.
+    }
+}
+
 function stopTypingHeartbeat() {
     if (typingHeartbeatTimer) {
-        clearInterval(typingHeartbeatTimer);
+        clearTimeout(typingHeartbeatTimer);
         typingHeartbeatTimer = null;
     }
     if (typingStopTimer) {
@@ -4979,23 +5258,12 @@ function clearTypingIndicator() {
     if (el) {
         el.hidden = true;
         el.style.display = 'none';
-        console.log('KODUS typing indicator hidden', {
-            exists: true,
-            parent: el.parentElement ? el.parentElement.className : null
-        });
-    } else {
-        console.log('KODUS typing indicator hidden', { exists: false, parent: null });
     }
 }
 
 function ensureTypingIndicatorPlacement() {
     const conversation = document.querySelector('#conversationWrapper .conversation-scroll');
     let el = document.getElementById('threadTypingIndicator');
-
-    console.log('KODUS typing indicator check', {
-        exists: !!el,
-        parent: el && el.parentElement ? el.parentElement.className : null
-    });
 
     if (!conversation) {
         return null;
@@ -5044,8 +5312,7 @@ function renderLiveTypingIndicator() {
     }
     el.hidden = false;
     el.style.display = 'flex';
-    console.log('KODUS typing indicator shown', {
-        exists: true,
+    logKodusRealtimeDebug('KODUS typing indicator shown', {
         parent: el.parentElement ? el.parentElement.className : null
     });
 
@@ -5075,10 +5342,6 @@ function showLiveTypingUser(userId, name) {
         if (el) {
             el.style.display = 'none';
             el.hidden = true;
-            console.log('KODUS typing indicator hidden', {
-                exists: true,
-                parent: el.parentElement ? el.parentElement.className : null
-            });
         }
         liveTypingUsers = {};
     }, 3000);
@@ -5117,8 +5380,19 @@ function scheduleTypingHeartbeat() {
 
     sendTypingHeartbeat();
 
+    const queueTypingHeartbeat = function() {
+        typingHeartbeatTimer = setTimeout(function() {
+            typingHeartbeatTimer = null;
+            if (!lastTypingMessageId || !canReplyInCurrentFolder) {
+                return;
+            }
+            sendTypingHeartbeat();
+            queueTypingHeartbeat();
+        }, 5000);
+    };
+
     if (!typingHeartbeatTimer) {
-        typingHeartbeatTimer = setInterval(sendTypingHeartbeat, 5000);
+        queueTypingHeartbeat();
     }
 
     if (typingStopTimer) {
@@ -5132,7 +5406,6 @@ function scheduleTypingHeartbeat() {
 
 function refreshTypingState() {
     const shell = $('#messageDetail .chat-shell');
-    const indicator = $('#threadTypingIndicator');
     if (!shell.length || !lastOpenedId) {
         clearTypingIndicator();
         return;
@@ -5157,8 +5430,17 @@ function refreshTypingState() {
         const copy = names.length === 1
             ? `${names[0]} is typing...`
             : `${names.slice(0, 2).join(', ')} are typing...`;
-        indicator.find('.chat-typing-copy').text(copy);
-        indicator.removeAttr('hidden');
+        const indicator = ensureTypingIndicatorPlacement();
+        if (!indicator) {
+            return;
+        }
+        indicator.innerHTML = '<span class="chat-typing-dots"><span></span><span></span><span></span></span><span class="chat-typing-copy"></span>';
+        const copyEl = indicator.querySelector('.chat-typing-copy');
+        if (copyEl) {
+            copyEl.textContent = copy;
+        }
+        indicator.hidden = false;
+        indicator.style.display = 'flex';
         if (typingRefreshTimeout) {
             clearTimeout(typingRefreshTimeout);
         }
@@ -5198,10 +5480,31 @@ function renderReactionSummary($container, summary) {
           <div class="chat-reaction-picker" hidden>${pickerHtml}</div>
         </div>
       </div>
-    `);
+	    `);
+}
+
+let activeReactionPicker = null;
+
+function logReactionPickerDebug() {
+    try {
+        if (localStorage.getItem('KODUS_SOCKET_DEBUG') === '1') {
+            console.debug.apply(console, ['KODUS reaction picker'].concat(Array.from(arguments)));
+        }
+    } catch (error) {}
 }
 
 function closeReactionPickers(exceptTrigger = null) {
+    if (activeReactionPicker && activeReactionPicker.picker) {
+        const picker = activeReactionPicker.picker;
+        picker.hidden = true;
+        picker.style.left = '';
+        picker.style.top = '';
+        picker.style.width = '';
+        if (activeReactionPicker.wrap && activeReactionPicker.wrap.isConnected && picker.parentElement !== activeReactionPicker.wrap) {
+            activeReactionPicker.wrap.appendChild(picker);
+        }
+    }
+    activeReactionPicker = null;
     $('.chat-reaction-picker').attr('hidden', true);
     $('.chat-reaction-trigger').each(function() {
         if (!exceptTrigger || this !== exceptTrigger) {
@@ -5210,22 +5513,72 @@ function closeReactionPickers(exceptTrigger = null) {
     });
 }
 
-function getOpenReactionPickerState() {
-    const $picker = $('#conversationWrapper .chat-reaction-picker:not([hidden])').first();
-    if (!$picker.length) {
+function findReactionTarget(state) {
+    if (!state || !state.messageId) {
         return null;
     }
 
-    const $reactions = $picker.closest('.chat-reactions');
-    const messageId = String($reactions.attr('data-message-id') || '');
-    const replyId = String($reactions.attr('data-reply-id') || '');
-    if (!messageId) {
+    const selector = state.replyId
+        ? `.chat-reactions[data-message-id="${state.messageId}"][data-reply-id="${state.replyId}"]`
+        : `.chat-reactions[data-message-id="${state.messageId}"]:not([data-reply-id])`;
+    return document.querySelector(selector);
+}
+
+function positionReactionPicker(state) {
+    if (!state || !state.picker) {
+        return;
+    }
+
+    const target = state.reactions && state.reactions.isConnected ? state.reactions : findReactionTarget(state);
+    if (!target) {
+        logReactionPickerDebug('close: target missing', state);
+        closeReactionPickers();
+        return;
+    }
+
+    state.reactions = target;
+    state.trigger = target.querySelector('.chat-reaction-trigger');
+    state.wrap = target.querySelector('.chat-reaction-picker-wrap');
+
+    const messageBubble = target.closest('.reply') || target;
+    const picker = state.picker;
+    const anchorRect = messageBubble.getBoundingClientRect();
+    const pickerWidth = Math.min(214, Math.max(180, window.innerWidth - 16));
+    const pickerHeight = picker.offsetHeight || 170;
+    const gap = 8;
+    const minLeft = gap;
+    const maxLeft = Math.max(minLeft, window.innerWidth - pickerWidth - gap);
+    const minTop = gap;
+    const maxTop = Math.max(minTop, window.innerHeight - pickerHeight - gap);
+    const isBubbleMode = document.body.classList.contains('kodus-chat-bubble-mode');
+    const openLeft = messageBubble.classList.contains('mine');
+    let left = openLeft ? anchorRect.left - pickerWidth - gap : anchorRect.right + gap;
+    let top = anchorRect.top + Math.max(0, (anchorRect.height - pickerHeight) / 2);
+
+    if (isBubbleMode || left < minLeft || left > maxLeft) {
+        left = Math.min(Math.max(anchorRect.left, minLeft), maxLeft);
+        top = anchorRect.top - pickerHeight - gap;
+    }
+
+    if (top < minTop) {
+        top = Math.min(Math.max(anchorRect.top + gap, minTop), maxTop);
+    }
+    top = Math.min(Math.max(top, minTop), maxTop);
+
+    picker.style.left = `${left}px`;
+    picker.style.top = `${top}px`;
+    picker.style.width = `${pickerWidth}px`;
+    logReactionPickerDebug('position', { messageId: state.messageId, replyId: state.replyId, left, top, anchorRect });
+}
+
+function getOpenReactionPickerState() {
+    if (!activeReactionPicker || !activeReactionPicker.messageId) {
         return null;
     }
 
     return {
-        messageId,
-        replyId
+        messageId: activeReactionPicker.messageId,
+        replyId: activeReactionPicker.replyId
     };
 }
 
@@ -5242,15 +5595,33 @@ function restoreReactionPickerState(state) {
         return;
     }
 
-    const $trigger = $reactions.find('.chat-reaction-trigger').first();
-    const $picker = $reactions.find('.chat-reaction-picker').first();
-    if (!$trigger.length || !$picker.length) {
+    openReactionPicker($reactions.find('.chat-reaction-trigger').first()[0]);
+}
+
+function openReactionPicker(trigger) {
+    if (!trigger) {
         return;
     }
 
-    closeReactionPickers($trigger[0]);
-    $picker.removeAttr('hidden');
-    $trigger.attr('aria-expanded', 'true');
+    const reactions = trigger.closest('.chat-reactions');
+    const wrap = trigger.closest('.chat-reaction-picker-wrap');
+    const picker = wrap ? wrap.querySelector('.chat-reaction-picker') : null;
+    if (!reactions || !wrap || !picker) {
+        return;
+    }
+
+    const messageId = String(reactions.getAttribute('data-message-id') || '');
+    if (!messageId) {
+        return;
+    }
+
+    const replyId = String(reactions.getAttribute('data-reply-id') || '');
+    closeReactionPickers(trigger);
+    document.body.appendChild(picker);
+    picker.hidden = false;
+    trigger.setAttribute('aria-expanded', 'true');
+    activeReactionPicker = { picker, trigger, wrap, reactions, messageId, replyId };
+    positionReactionPicker(activeReactionPicker);
 }
 
 function applyThreadSearch(query) {
@@ -5347,10 +5718,13 @@ function refreshCurrentThread(options = {}) {
     }
 
     const previousScrollTop = $('#conversationWrapper .conversation-scroll').scrollTop() || 0;
-    return $.get('get_thread.php', { id: lastOpenedId, folder: currentMailboxFolder }, function(html) {
+    return $.get('get_thread.php', { id: lastOpenedId, folder: currentMailboxFolder, bubble: isKodusChatBubbleMode ? 1 : 0 }, function(html) {
+        closeReactionPickers();
         $('#messageDetail').html(html);
         updateDetailTitle();
         initializeThreadExperience();
+        normalizeBubbleThreadMenu();
+        syncVisibleMessengerPresence();
         preserveConversationScrollPosition(previousScrollTop);
     });
 }
@@ -5796,6 +6170,20 @@ $(document).on('click', '#groupMembersModal [data-dismiss="modal"], #groupMember
     }
 });
 
+$(document).on('click', '#groupComposeModal [data-dismiss="modal"], #groupComposeModal [data-bs-dismiss="modal"]', function(e) {
+    e.preventDefault();
+    if (window.jQuery && typeof $('#groupComposeModal').modal === 'function') {
+        $('#groupComposeModal').modal('hide');
+        return;
+    }
+
+    const modalElement = document.getElementById('groupComposeModal');
+    if (modalElement && window.bootstrap && window.bootstrap.Modal) {
+        const modalInstance = window.bootstrap.Modal.getInstance(modalElement) || new window.bootstrap.Modal(modalElement);
+        modalInstance.hide();
+    }
+});
+
 $(document).on('click', '.group-member-remove', function(e) {
     e.preventDefault();
     const memberId = Number($(this).data('user-id') || 0);
@@ -6056,21 +6444,28 @@ $(document).on('click', '.chat-reaction-trigger', function(event) {
     event.stopPropagation();
 
     const trigger = this;
-    const $trigger = $(trigger);
-    const $picker = $trigger.siblings('.chat-reaction-picker');
-    const willOpen = $picker.is('[hidden]');
+    const isOpen = activeReactionPicker && activeReactionPicker.trigger === trigger && !activeReactionPicker.picker.hidden;
 
     closeReactionPickers(trigger);
 
-    if (willOpen) {
-        $picker.removeAttr('hidden');
-        $trigger.attr('aria-expanded', 'true');
+    if (!isOpen) {
+        openReactionPicker(trigger);
     }
 });
 
 $(document).on('click', '.chat-reaction-picker', function(event) {
     event.stopPropagation();
 });
+
+function repositionOpenReactionPicker() {
+    if (!activeReactionPicker || !activeReactionPicker.picker || activeReactionPicker.picker.hidden) {
+        return;
+    }
+    positionReactionPicker(activeReactionPicker);
+}
+
+$(window).on('resize scroll', repositionOpenReactionPicker);
+$(document).on('scroll', '.conversation-scroll', repositionOpenReactionPicker);
 
 $(document).on('click', '.chat-reaction-count', function(event) {
     event.preventDefault();
@@ -6088,8 +6483,13 @@ $(document).on('click', '.chat-reaction-count', function(event) {
 
 $(document).on('click', '.chat-reaction-chip, .chat-reaction-add', function(event) {
     event.preventDefault();
+    event.stopPropagation();
     const $button = $(this);
-    const $reactions = $button.closest('.chat-reactions');
+    const isPickerChoice = $button.hasClass('chat-reaction-add');
+    const reactionsNode = isPickerChoice && activeReactionPicker
+        ? activeReactionPicker.reactions
+        : $button.closest('.chat-reactions')[0];
+    const $reactions = $(reactionsNode);
     const emoji = String($button.data('emoji') || '');
     const messageId = Number($reactions.data('message-id') || 0);
     const replyIdRaw = $reactions.attr('data-reply-id');
@@ -6097,6 +6497,10 @@ $(document).on('click', '.chat-reaction-chip, .chat-reaction-add', function(even
 
     if (!emoji || !messageId) {
         return;
+    }
+
+    if (isPickerChoice) {
+        closeReactionPickers();
     }
 
     $button.prop('disabled', true);
@@ -6157,7 +6561,9 @@ $(document).on('submit', '#replyForm', function(e) {
             if (resp.status === 'success') {
                 stopTypingHeartbeat();
                 form.reset();
+                form.dataset.mentionedUserIds = '';
                 $('#replyFilePreview').empty();
+                $('#mentionedUserIds').val('');
                 appendOptimisticReply(replyText);
 
                 if (resp.reply_id) {
@@ -6169,7 +6575,7 @@ $(document).on('submit', '#replyForm', function(e) {
                             csrf_token: replyMailCsrfToken
                         }
                     }).fail(function(xhr) {
-                        console.warn('Reply mail background send failed.', xhr.responseText || xhr.statusText);
+                        logKodusRealtimeDebug('Reply mail background send failed.', xhr.responseText || xhr.statusText);
                     });
                 }
 
@@ -6177,11 +6583,13 @@ $(document).on('submit', '#replyForm', function(e) {
 
                 if (lastOpenedId) {
                     const previousScrollTop = $('#conversationWrapper .conversation-scroll').scrollTop() || 0;
-                    $.get('get_thread.php', { id: lastOpenedId, folder: currentMailboxFolder }, function(html) {
+                    $.get('get_thread.php', { id: lastOpenedId, folder: currentMailboxFolder, bubble: isKodusChatBubbleMode ? 1 : 0 }, function(html) {
+                        closeReactionPickers();
                         $('#messageDetail').html(html);
                         $(`#messageList .message-item[data-id="${lastOpenedId}"]`).addClass('active').removeClass('unread');
                         $(`#messageList .message-item[data-id="${lastOpenedId}"]`).attr('data-unread', '0');
                         initializeThreadExperience();
+                        normalizeBubbleThreadMenu();
                         scrollConversationToBottomOnOpen();
                     });
                 }
@@ -6230,10 +6638,16 @@ function refreshConversationIfChanged(options = {}) {
         }
 
         if ($('#conversationWrapper').length) {
+            closeReactionPickers();
             $('#conversationWrapper').replaceWith(html);
         } else {
+            closeReactionPickers();
             $('#messageDetail').append(html);
         }
+        if (Object.keys(liveTypingUsers).length > 0) {
+            renderLiveTypingIndicator();
+        }
+        syncVisibleMessengerPresence();
 
         if ($('#replyText').length) {
             $('#replyText').val(draft);
@@ -6254,44 +6668,34 @@ function refreshConversationIfChanged(options = {}) {
     });
 }
 
-function pollMailboxState() {
-    if (mailboxStatePollInFlight) {
-        return;
+if (window.KODUSLiveRefresh && typeof window.KODUSLiveRefresh.watchSocket === 'function') {
+    window.KODUSLiveRefresh.watchSocket({
+        key: 'inbox-presence',
+        channel: 'kodus.presence',
+        events: ['presence.changed'],
+        onMessage: function(payload) {
+            const data = payload && payload.data ? payload.data : {};
+            applyMessengerPresence(data.user_id, data.online || data.status === 'online', data.last_active_at || data.last_active || data.at);
+        }
+    });
+
+    if (typeof window.KODUSLiveRefresh.connectSocket === 'function' && currentMessengerUserId) {
+        window.KODUSLiveRefresh.connectSocket().then(function(socket) {
+            if (!socket || socket.__kodusMessengerPresenceBound) {
+                return;
+            }
+
+            socket.__kodusMessengerPresenceBound = true;
+            const announcePresence = function() {
+                socket.emit('presence.join', { user_id: currentMessengerUserId });
+            };
+            socket.on('connect', announcePresence);
+            if (socket.connected) {
+                announcePresence();
+            }
+        });
     }
 
-    mailboxStatePollInFlight = true;
-
-    $.getJSON('get_mailbox_state.php', { folder: currentMailboxFolder }, function(data) {
-        const nextToken = String(data.state_token || '');
-        applyUnreadCount(data.unread_count || 0);
-
-        if (!nextToken) {
-            updateRefreshLabel(false);
-            return;
-        }
-
-        if (mailboxStateToken === null) {
-            mailboxStateToken = nextToken;
-            updateRefreshLabel(false);
-            return;
-        }
-
-        if (nextToken === mailboxStateToken) {
-            updateRefreshLabel(false);
-            return;
-        }
-
-        mailboxStateToken = nextToken;
-        updateMessageList();
-        refreshConversationIfChanged();
-    }).always(function() {
-        mailboxStatePollInFlight = false;
-    });
-}
-
-pollMailboxState();
-
-if (window.KODUSLiveRefresh && typeof window.KODUSLiveRefresh.watchSocket === 'function') {
     window.KODUSLiveRefresh.watchSocket({
         key: 'inbox-mailbox',
         channel: 'kodus.mailbox',
@@ -6303,7 +6707,6 @@ if (window.KODUSLiveRefresh && typeof window.KODUSLiveRefresh.watchSocket === 'f
             const actorId = Number(data.actor_id || data.user_id || 0);
 
             if (payload && payload.event === 'mail.typing') {
-                console.log('KODUS mail.typing received', data);
                 const threadId = String(data.thread_id || data.conversation_id || messageId || '');
                 const senderId = String(data.sender_id || data.actor_id || data.user_id || '');
                 const receiverIds = Array.isArray(data.receiver_ids)
@@ -6314,7 +6717,11 @@ if (window.KODUSLiveRefresh && typeof window.KODUSLiveRefresh.watchSocket === 'f
                 const isReceiver = receiverIds.includes(currentUserId);
                 const isSameThread = threadId === activeThreadId;
 
-                console.log('KODUS mail.typing match', { thread_id: threadId, active_thread_id: activeThreadId, is_receiver: isReceiver });
+                logKodusRealtimeDebug('KODUS mail.typing match', {
+                    thread_id: threadId,
+                    active_thread_id: activeThreadId,
+                    is_receiver: isReceiver
+                });
 
                 if (!threadId || !isSameThread || !isReceiver || senderId === currentUserId) {
                     return;
@@ -6332,7 +6739,7 @@ if (window.KODUSLiveRefresh && typeof window.KODUSLiveRefresh.watchSocket === 'f
                 clearTypingIndicator();
             }
 
-            pollMailboxState();
+            updateMessageList();
             const groupMembershipActions = ['group_member_added', 'group_member_removed', 'group_left', 'group_muted', 'group_unmuted', 'group_updated'];
             if (groupMembershipActions.includes(action) && messageId && messageId === Number(activeGroupMembersMessageId || 0) && $('#groupMembersModal').hasClass('show')) {
                 refreshGroupMembersModal(messageId);
@@ -6668,6 +7075,34 @@ $(document).on('click', '.mailbox-delete-trigger', function() {
     });
 });
 
+$(document).on('click', '.conversation-open-bubble-trigger', function() {
+    const messageId = Number($(this).closest('.chat-shell').data('message-id') || lastOpenedId || 0);
+    if (!messageId || typeof window.openKodusChatBubbleFromUrl !== 'function') {
+        return;
+    }
+
+    const title = $('#mailboxDetailTitle').text().trim() || $('.chat-thread-header .mailbox-read-subject').text().trim() || 'Messenger';
+    window.openKodusChatBubbleFromUrl(`${messengerBaseUrl}?msg=${encodeURIComponent(messageId)}`, title);
+});
+
+$(document).on('click', '.conversation-open-messenger-trigger', function() {
+    const messageId = Number($(this).closest('.chat-shell').data('message-id') || lastOpenedId || 0);
+    if (!messageId) {
+        return;
+    }
+
+    try {
+        localStorage.removeItem('kodus.chatBubble.state');
+    } catch (error) {}
+
+    const targetUrl = `${messengerBaseUrl}?msg=${encodeURIComponent(messageId)}`;
+    if (window.top && window.top !== window) {
+        window.top.location.href = targetUrl;
+    } else {
+        window.location.href = targetUrl;
+    }
+});
+
 $(document).on('click', '.mailbox-restore-trigger', function() {
     const messageId = Number($(this).data('id') || 0);
     if (!messageId) {
@@ -6791,8 +7226,6 @@ $(function() {
     updateMailboxSummary();
     updateRefreshLabel();
     updateDetailTitle();
-    updateUnreadCount();
-    pollMailboxState();
     applyMessageFilters();
 
     const params = new URLSearchParams(window.location.search);

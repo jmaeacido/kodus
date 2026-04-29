@@ -7,6 +7,7 @@ require_once __DIR__ . '/../notification_helpers.php';
 require_once __DIR__ . '/../security.php';
 require_once __DIR__ . '/mailbox_helpers.php';
 require_once __DIR__ . '/../socket_helpers.php';
+require_once __DIR__ . '/../app_notification_helpers.php';
 security_bootstrap_session();
 include('../config.php');
 mailboxEnsureSchema($conn);
@@ -28,6 +29,7 @@ $email = trim($_POST['email'] ?? '');
 $reply = trim($_POST['reply'] ?? '');
 $subject = $_POST['subject'] ?? '(No Subject)';
 $originalMessage = $_POST['message'] ?? '(No Message)';
+$postedMentionIds = array_values(array_unique(array_filter(array_map('intval', preg_split('/[,\s]+/', (string) ($_POST['mentioned_user_ids'] ?? ''), -1, PREG_SPLIT_NO_EMPTY)))));
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     echo json_encode([
@@ -332,6 +334,41 @@ $recipientIds = array_values(array_unique(array_filter($recipientIds, static fun
     return is_int($value) && $value > 0 && $value !== $senderId;
 })));
 
+$mentionedUserIds = [];
+if ($isGroupThread && $reply !== '') {
+    $mentionLookupStmt = $conn->prepare("
+        SELECT cmr.user_id,
+               COALESCE(NULLIF(u.username, ''), COALESCE(NULLIF(cmr.recipient_name, ''), cmr.recipient_email)) AS display_name
+        FROM contact_message_recipients cmr
+        LEFT JOIN users u ON u.id = cmr.user_id
+        WHERE cmr.message_id = ?
+          AND cmr.user_id IS NOT NULL
+          AND cmr.user_id <> ?
+          AND cmr.left_at IS NULL
+          AND cmr.hidden_at IS NULL
+    ");
+    if ($mentionLookupStmt) {
+        $mentionLookupStmt->bind_param('ii', $id, $senderId);
+        $mentionLookupStmt->execute();
+        foreach (db_stmt_fetch_all_assoc($mentionLookupStmt) as $mentionRow) {
+            $mentionUserId = (int) ($mentionRow['user_id'] ?? 0);
+            if (!empty($postedMentionIds) && !in_array($mentionUserId, $postedMentionIds, true)) {
+                continue;
+            }
+
+            $displayName = trim((string) ($mentionRow['display_name'] ?? ''));
+            $mentionToken = preg_replace('/\s+/', '', $displayName);
+            if ($mentionToken !== '' && preg_match('/@' . preg_quote($mentionToken, '/') . '\b/i', $reply)) {
+                $mentionedUserIds[] = $mentionUserId;
+            }
+        }
+        $mentionLookupStmt->close();
+    }
+}
+$mentionedUserIds = array_values(array_unique(array_filter($mentionedUserIds, static function ($value) use ($senderId) {
+    return is_int($value) && $value > 0 && $value !== $senderId;
+})));
+
 if (!empty($recipientIds)) {
     $recipientStateStmt = $conn->prepare("
         INSERT INTO message_reads (message_id, user_id, is_read, is_trashed, read_at, trashed_at)
@@ -348,6 +385,63 @@ if (!empty($recipientIds)) {
     }
 }
 
+$mentionNotificationId = 0;
+if (!empty($mentionedUserIds)) {
+    app_notification_ensure_schema($conn);
+    $actorName = trim((string) ($_SESSION['first_name'] ?? '') . ' ' . (string) ($_SESSION['last_name'] ?? ''));
+    $actorName = $actorName !== '' ? $actorName : ($senderUsername ?: 'Someone');
+    $mentionCategory = 'mail_mention';
+    $mentionTitle = 'You were mentioned';
+    $mentionMessage = $actorName . ' mentioned you in ' . trim((string) ($thread['subject'] ?? 'a group chat')) . '.';
+    $mentionUrl = app_notification_build_url('messenger/index.php?msg=' . (int) $id);
+    $mentionIcon = 'fas fa-at';
+    $mentionColor = 'text-info';
+    $mentionStmt = $conn->prepare(
+        'INSERT INTO app_notifications
+            (category, title, message, url, icon_class, color_class, actor_user_id, actor_name, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())'
+    );
+    if ($mentionStmt) {
+        $mentionStmt->bind_param(
+            'ssssssis',
+            $mentionCategory,
+            $mentionTitle,
+            $mentionMessage,
+            $mentionUrl,
+            $mentionIcon,
+            $mentionColor,
+            $senderId,
+            $actorName
+        );
+        if ($mentionStmt->execute()) {
+            $mentionNotificationId = (int) $mentionStmt->insert_id;
+        }
+        $mentionStmt->close();
+    }
+
+    if ($mentionNotificationId > 0) {
+        $mentionedIdList = implode(',', array_map('intval', $mentionedUserIds));
+        $readSql = "
+            INSERT IGNORE INTO app_notification_reads (notification_id, user_id, read_at)
+            SELECT ?, id, NOW()
+            FROM users
+            WHERE id NOT IN ($mentionedIdList)
+        ";
+        $readStmt = $conn->prepare($readSql);
+        if ($readStmt) {
+            $readStmt->bind_param('i', $mentionNotificationId);
+            $readStmt->execute();
+            $readStmt->close();
+        }
+        kodus_socket_broadcast('kodus.notifications', 'notifications.changed', [
+            'notification_id' => $mentionNotificationId,
+            'category' => $mentionCategory,
+            'actor_id' => (int) $senderId,
+            'mentioned_user_ids' => $mentionedUserIds,
+        ]);
+    }
+}
+
 $typingStmt = $conn->prepare('DELETE FROM mailbox_typing_status WHERE message_id = ? AND user_id = ?');
 if ($typingStmt) {
     $typingStmt->bind_param('ii', $id, $senderId);
@@ -361,6 +455,8 @@ kodus_socket_broadcast('kodus.mailbox', 'mail.changed', [
     'reply_id' => $replyId,
     'actor_id' => $senderId,
     'receiver_ids' => $recipientIds,
+    'mentioned_user_ids' => $mentionedUserIds,
+    'mention_notification_id' => $mentionNotificationId,
 ]);
 
 echo json_encode([

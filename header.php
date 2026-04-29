@@ -70,7 +70,6 @@ if (
     <link rel="stylesheet" href="<?php echo $app_root; ?>plugins/datatables-buttons/css/buttons.bootstrap4.min.css">
     <?php include __DIR__ . '/page_loader.php'; ?>
     <script>
-      window.KODUS_LIVE_REFRESH_URL = <?php echo json_encode($app_root . 'live_refresh.php'); ?>;
       window.KODUS_SOCKET_CONFIG = <?php echo json_encode(kodus_socket_frontend_config(), JSON_UNESCAPED_SLASHES); ?>;
       window.KODUS_LOCATION_CONTEXT = <?php echo json_encode([
           'endpoint' => $app_root . 'save_location_context.php',
@@ -954,12 +953,13 @@ unset($_SESSION['kodus_popup']);
 
   if (!openPopup()) {
     let attempts = 0;
-    const retryTimer = window.setInterval(function () {
+    const retryPopup = function () {
       attempts += 1;
-      if (openPopup() || attempts >= 20) {
-        window.clearInterval(retryTimer);
+      if (!openPopup() && attempts < 20) {
+        window.setTimeout(retryPopup, 250);
       }
-    }, 250);
+    };
+    window.setTimeout(retryPopup, 250);
   }
 })();
 </script>
@@ -1563,19 +1563,14 @@ body[data-theme="dark"] .kodus-maintenance-banner.is-critical #kodus-maintenance
 }
 </style>
 <script>
-let unreadInterval;
-let pollingTimer;  // handles unread polling pause
 let logoutTimer;   // handles auto-logout
-let roleChangePollInterval;
 let roleChangeCountdownInterval;
-let maintenancePollInterval;
 let maintenanceCountdownInterval;
 let roleChangeModalOpen = false;
 let currentRoleChangeState = <?php echo json_encode($roleChangeState, JSON_UNESCAPED_SLASHES); ?>;
 let currentMaintenanceState = <?php echo json_encode($maintenanceClientState, JSON_UNESCAPED_SLASHES); ?>;
 let maintenanceToastShown = false;
 
-const POLLING_INACTIVITY_LIMIT = 3 * 60 * 1000; // 3 minutes
 const LOGOUT_INACTIVITY_LIMIT  = 60 * 60 * 1000; // 1 hour
 const CURRENT_SESSION_USER_ID = <?php echo json_encode(isset($_SESSION['user_id']) && is_numeric($_SESSION['user_id']) ? (int) $_SESSION['user_id'] : null); ?>;
 
@@ -1701,20 +1696,20 @@ function renderMaintenanceBanner(state) {
 }
 
 function clearMaintenanceTimers() {
-  clearInterval(maintenanceCountdownInterval);
+  clearTimeout(maintenanceCountdownInterval);
   maintenanceCountdownInterval = null;
 }
 
 function forceMaintenanceLogout() {
   clearMaintenanceTimers();
   hideMaintenanceBanner();
-  window.location.reload();
+  submitLogout('maintenance');
 }
 
 function startMaintenanceCountdown() {
   clearMaintenanceTimers();
 
-  maintenanceCountdownInterval = setInterval(() => {
+  const tickMaintenanceCountdown = () => {
     if (!currentMaintenanceState) {
       clearMaintenanceTimers();
       return;
@@ -1725,8 +1720,13 @@ function startMaintenanceCountdown() {
 
     if (currentMaintenanceState.seconds_remaining <= 0) {
       forceMaintenanceLogout();
+      return;
     }
-  }, 1000);
+
+    maintenanceCountdownInterval = setTimeout(tickMaintenanceCountdown, 1000);
+  };
+
+  maintenanceCountdownInterval = setTimeout(tickMaintenanceCountdown, 1000);
 }
 
 function announceMaintenanceCountdown(state) {
@@ -1758,17 +1758,6 @@ function handleMaintenanceState(state) {
   startMaintenanceCountdown();
 }
 
-function pollMaintenanceState() {
-  $.getJSON(MAINTENANCE_STATUS_URL, function(data) {
-    if (data && data.active) {
-      handleMaintenanceState(data);
-      return;
-    }
-
-    handleMaintenanceState(null);
-  });
-}
-
 function renderRoleChangeHtml(state) {
   const seconds = Math.max(0, Number(state?.seconds_remaining || 0));
   if ((state?.reason || 'role_change') === 'deactivated') {
@@ -1796,7 +1785,7 @@ function renderRoleChangeHtml(state) {
 }
 
 function clearRoleChangeTimers() {
-  clearInterval(roleChangeCountdownInterval);
+  clearTimeout(roleChangeCountdownInterval);
   roleChangeCountdownInterval = null;
 }
 
@@ -1840,7 +1829,7 @@ function openRoleChangeModal(state) {
 function startRoleChangeCountdown() {
   clearRoleChangeTimers();
 
-  roleChangeCountdownInterval = setInterval(() => {
+  const tickRoleChangeCountdown = () => {
     if (!currentRoleChangeState) {
       clearRoleChangeTimers();
       return;
@@ -1854,8 +1843,13 @@ function startRoleChangeCountdown() {
 
     if (currentRoleChangeState.seconds_remaining <= 0) {
       forceRoleChangeLogout();
+      return;
     }
-  }, 1000);
+
+    roleChangeCountdownInterval = setTimeout(tickRoleChangeCountdown, 1000);
+  };
+
+  roleChangeCountdownInterval = setTimeout(tickRoleChangeCountdown, 1000);
 }
 
 function handleRoleChangeState(state) {
@@ -1871,26 +1865,8 @@ function handleRoleChangeState(state) {
   openRoleChangeModal(state);
 }
 
-function pollRoleChangeState() {
-  $.getJSON(ROLE_CHANGE_STATUS_URL, function(data) {
-    if (data && data.active) {
-      handleRoleChangeState(data);
-    }
-  });
-}
-
-function startSessionSafetyPolling() {
-  if (!roleChangePollInterval) {
-    roleChangePollInterval = setInterval(pollRoleChangeState, 5000);
-  }
-  if (!maintenancePollInterval) {
-    maintenancePollInterval = setInterval(pollMaintenanceState, 5000);
-  }
-}
-
 function bindSessionSafetySocket() {
   if (!window.KODUSLiveRefresh || typeof window.KODUSLiveRefresh.watchSocket !== 'function' || !window.KODUSLiveRefresh.isSocketEnabled()) {
-    startSessionSafetyPolling();
     return;
   }
 
@@ -1913,7 +1889,6 @@ function bindSessionSafetySocket() {
           return;
         }
 
-        pollRoleChangeState();
         return;
       }
 
@@ -1927,15 +1902,12 @@ function bindSessionSafetySocket() {
           return;
         }
 
-        pollMaintenanceState();
       }
     }
   });
 
   window.KODUSLiveRefresh.connectSocket().then(function(socket) {
-    if (!socket) {
-      startSessionSafetyPolling();
-    }
+    return socket;
   });
 }
 

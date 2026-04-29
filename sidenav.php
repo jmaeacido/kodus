@@ -223,6 +223,77 @@ if (isset($_SESSION['user_id']) && is_numeric($_SESSION['user_id'])) {
       flex: 1 1 auto;
     }
 
+    .kodus-chat-bubble {
+      position: fixed;
+      right: 0.75rem;
+      bottom: calc(0.75rem + env(safe-area-inset-bottom));
+      width: min(420px, calc(100vw - 0.9rem));
+      height: min(680px, calc(100vh - 4.5rem));
+      z-index: 1085;
+      background: #fff;
+      border: 1px solid rgba(15, 23, 42, 0.14);
+      border-radius: 14px;
+      box-shadow: 0 24px 70px rgba(15, 23, 42, 0.28);
+      overflow: hidden;
+      display: none;
+    }
+
+    .kodus-chat-bubble.is-visible {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .kodus-chat-bubble.is-minimized {
+      height: 2.55rem;
+    }
+
+    .kodus-chat-bubble__bar {
+      position: absolute;
+      top: 0.45rem;
+      right: 0.55rem;
+      z-index: 2;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      padding: 0;
+      background: transparent;
+      color: #fff;
+    }
+
+    .kodus-chat-bubble__title {
+      display: none;
+    }
+
+    .kodus-chat-bubble__actions {
+      display: inline-flex;
+      gap: 0.35rem;
+      flex: 0 0 auto;
+    }
+
+    .kodus-chat-bubble__actions button {
+      width: 1.75rem;
+      height: 1.75rem;
+      border: 0;
+      border-radius: 999px;
+      color: #fff;
+      background: rgba(15, 23, 42, 0.72);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .kodus-chat-bubble iframe {
+      flex: 1 1 auto;
+      width: 100%;
+      height: 100%;
+      border: 0;
+      background: #fff;
+    }
+
+    .kodus-chat-bubble.is-minimized iframe {
+      display: none;
+    }
+
     .mail-alert-toast-title {
       font-size: 0.95rem;
       font-weight: 700;
@@ -230,7 +301,6 @@ if (isset($_SESSION['user_id']) && is_numeric($_SESSION['user_id'])) {
       margin-bottom: 0.2rem;
     }
 
-    .mail-alert-toast-subject,
     .mail-alert-toast-snippet {
       margin: 0;
       white-space: nowrap;
@@ -239,18 +309,8 @@ if (isset($_SESSION['user_id']) && is_numeric($_SESSION['user_id'])) {
       font-size: 0.83rem;
     }
 
-    .mail-alert-toast-subject {
-      color: rgba(255, 255, 255, 0.94);
-    }
-
-    .mail-alert-toast-snippet,
-    .mail-alert-toast-time {
+    .mail-alert-toast-snippet {
       color: rgba(255, 255, 255, 0.72);
-    }
-
-    .mail-alert-toast-time {
-      font-size: 0.76rem;
-      margin-top: 0.3rem;
     }
 
     body[data-theme="light"] .mail-alert-toast {
@@ -269,12 +329,7 @@ if (isset($_SESSION['user_id']) && is_numeric($_SESSION['user_id'])) {
       border-color: rgba(15, 23, 42, 0.1);
     }
 
-    body[data-theme="light"] .mail-alert-toast-subject {
-      color: #1f2937;
-    }
-
-    body[data-theme="light"] .mail-alert-toast-snippet,
-    body[data-theme="light"] .mail-alert-toast-time {
+    body[data-theme="light"] .mail-alert-toast-snippet {
       color: #64748b;
     }
 
@@ -478,7 +533,11 @@ if (isset($_SESSION['user_id']) && is_numeric($_SESSION['user_id'])) {
         document.body.classList.add('sidebar-collapse');
       }
     } catch (error) {
-      console.warn('Sidebar state restore failed.', error);
+      try {
+        if (window.localStorage && window.localStorage.getItem('KODUS_SOCKET_DEBUG') === '1') {
+          console.debug('Sidebar state restore failed.', error);
+        }
+      } catch (debugError) {}
     }
   })();
   </script>
@@ -528,7 +587,7 @@ if (isset($_SESSION['user_id']) && is_numeric($_SESSION['user_id'])) {
             <span class="dropdown-item text-center text-muted">No new notifications</span>
           <?php else: ?>
             <?php foreach (($topbarAppNotificationFeed['items'] ?? []) as $notificationItem): ?>
-              <a href="<?= htmlspecialchars((string) (($notificationItem['url'] ?? '') !== '' ? $notificationItem['url'] : ($app_root . 'home')), ENT_QUOTES, 'UTF-8') ?>" class="dropdown-item app-notification-item<?= !empty($notificationItem['is_unread']) ? ' is-unread' : '' ?>" data-notification-id="<?= (int) ($notificationItem['id'] ?? 0) ?>">
+              <a href="<?= htmlspecialchars((string) (($notificationItem['url'] ?? '') !== '' ? $notificationItem['url'] : ($app_root . 'home')), ENT_QUOTES, 'UTF-8') ?>" class="dropdown-item app-notification-item<?= !empty($notificationItem['is_unread']) ? ' is-unread' : '' ?>" data-notification-id="<?= (int) ($notificationItem['id'] ?? 0) ?>" data-no-loader="true">
                 <div class="media">
                   <span class="app-notification-icon mr-3">
                     <i class="<?= htmlspecialchars((string) ($notificationItem['icon_class'] ?? 'fas fa-bell'), ENT_QUOTES, 'UTF-8') ?> <?= htmlspecialchars((string) ($notificationItem['color_class'] ?? 'text-warning'), ENT_QUOTES, 'UTF-8') ?>"></i>
@@ -667,26 +726,21 @@ if (isset($_SESSION['user_id']) && is_numeric($_SESSION['user_id'])) {
                       if ($senderName === '') {
                           $senderName = htmlspecialchars($row['user_name'] ?? 'Unknown');
                       }
-                      $subject = htmlspecialchars($row['subject'] ?? '(No Subject)');
                       $latestPreview = $latestPreviews[(int) $row['id']] ?? [
                           'text' => mailboxPreviewText($row['message'] ?? '', $row['attachment'] ?? ''),
                           'is_mine' => mailboxOwnerMatchesCurrentUser((string) ($row['user_email'] ?? ''), (string) ($row['user_name'] ?? ''), (string) $userEmail, (string) ($_SESSION['username'] ?? '')),
                       ];
                       $snippet = htmlspecialchars(mailboxFormatThreadPreview($latestPreview, 40));
-                      $sentAt  = topbar_notification_time_label($row['latest_activity_at'] ?? null);
                       $avatar = topbar_notification_avatar($row, $base_url);
                   ?>
-                  <a href="<?php echo $app_root; ?>messenger/index.php?msg=<?= $row['id'] ?>" class="dropdown-item">
+                  <a href="<?php echo $app_root; ?>messenger/index.php?msg=<?= $row['id'] ?>" class="dropdown-item" data-no-loader="true">
                     <div class="media">
                       <img src="<?= $avatar ?>" alt="User Avatar" class="img-size-50 mr-3 img-circle">
                       <div class="media-body">
                         <h3 class="dropdown-item-title">
                           <?= $senderName ?>
                         </h3>
-                        <p class="text-sm"><?= $snippet !== '' ? $snippet : $subject ?></p>
-                        <p class="text-sm text-muted">
-                          <i class="far fa-clock mr-1"></i> <?= $sentAt ?>
-                        </p>
+                        <p class="text-sm"><?= $snippet !== '' ? $snippet : 'New message' ?></p>
                       </div>
                     </div>
                   </a>
@@ -719,6 +773,16 @@ if (isset($_SESSION['user_id']) && is_numeric($_SESSION['user_id'])) {
   <!-- /.navbar -->
   <div id="appAlertStack" class="app-alert-stack" aria-live="polite" aria-atomic="true"></div>
   <div id="mailAlertStack" class="mail-alert-stack" aria-live="polite" aria-atomic="true"></div>
+  <div id="kodusChatBubble" class="kodus-chat-bubble" data-message-id="">
+    <div class="kodus-chat-bubble__bar">
+      <div class="kodus-chat-bubble__title" id="kodusChatBubbleTitle">Messenger</div>
+      <div class="kodus-chat-bubble__actions">
+        <button type="button" id="kodusChatBubbleMinimize" aria-label="Minimize chat" title="Minimize"><i class="fas fa-minus"></i></button>
+        <button type="button" id="kodusChatBubbleClose" aria-label="Close chat" title="Close"><i class="fas fa-times"></i></button>
+      </div>
+    </div>
+    <iframe id="kodusChatBubbleFrame" title="Messenger conversation" loading="lazy"></iframe>
+  </div>
 
   <!-- Main Sidebar Container -->
   <aside id="mainSidebar" class="main-sidebar <?= htmlspecialchars($sidebarThemeClass, ENT_QUOTES, 'UTF-8') ?> elevation-4">
@@ -1136,6 +1200,14 @@ let topbarSeenAppNotificationIds = [];
 let mailBellAudioContext = null;
 let mailBellUnlocked = false;
 
+function kodusDebugLog() {
+  try {
+    if (window.localStorage && window.localStorage.getItem('KODUS_SOCKET_DEBUG') === '1') {
+      console.debug.apply(console, arguments);
+    }
+  } catch (error) {}
+}
+
 function unlockMailBell() {
   if (mailBellUnlocked) {
     return;
@@ -1153,7 +1225,7 @@ function unlockMailBell() {
     }
     mailBellUnlocked = true;
   } catch (error) {
-    console.warn('Mail bell audio unlock failed.', error);
+    kodusDebugLog('Mail bell audio unlock failed.', error);
   }
 }
 
@@ -1185,7 +1257,7 @@ function playMailBell() {
     oscillator.start(now);
     oscillator.stop(now + 0.52);
   } catch (error) {
-    console.warn('Mail bell playback failed.', error);
+    kodusDebugLog('Mail bell playback failed.', error);
   }
 }
 
@@ -1198,13 +1270,13 @@ function showMailAlert(item) {
   const toast = document.createElement('a');
   toast.className = 'mail-alert-toast';
   toast.href = item.url || '<?= $app_root; ?>messenger/';
+  toast.dataset.noLoader = 'true';
+  toast.dataset.messageId = String(Number(item.id || 0));
   toast.innerHTML = `
     <img src="${escapeHtml(item.avatar || '')}" alt="">
     <div class="mail-alert-toast-copy">
       <div class="mail-alert-toast-title">${escapeHtml(item.sender || 'New message')}</div>
-      <p class="mail-alert-toast-subject">${escapeHtml(item.subject || '(No Subject)')}</p>
       <p class="mail-alert-toast-snippet">${escapeHtml(item.snippet || 'You have a new unread message.')}</p>
-      <div class="mail-alert-toast-time">${escapeHtml(item.sent_label || 'Just now')}</div>
     </div>
   `;
 
@@ -1228,7 +1300,107 @@ let timer = window.setTimeout(dismissToast, 5000);
     window.clearTimeout(timer);
     timer = window.setTimeout(dismissToast, 1800);
   });
-  toast.addEventListener('click', dismissToast, { once: true });
+  toast.addEventListener('click', function(event) {
+    dismissToast();
+    openKodusChatBubbleFromUrl(toast.href, item.sender || 'Messenger', event);
+  }, { once: true });
+}
+
+function openKodusChatBubbleFromUrl(url, title, event) {
+  let parsedUrl = null;
+  try {
+    parsedUrl = new URL(url, window.location.origin);
+  } catch (error) {
+    return false;
+  }
+
+  const messageId = Number(parsedUrl.searchParams.get('msg') || parsedUrl.searchParams.get('id') || 0);
+  if (messageId <= 0 || !parsedUrl.pathname.includes('/messenger/')) {
+    return false;
+  }
+
+  if (event) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+
+  const bubble = document.getElementById('kodusChatBubble');
+  const frame = document.getElementById('kodusChatBubbleFrame');
+  const titleNode = document.getElementById('kodusChatBubbleTitle');
+  if (!bubble || !frame) {
+    window.location.href = parsedUrl.href;
+    return true;
+  }
+
+  parsedUrl.searchParams.set('msg', String(messageId));
+  parsedUrl.searchParams.set('bubble', '1');
+  if (bubble.getAttribute('data-message-id') !== String(messageId)) {
+    frame.src = parsedUrl.href;
+  }
+
+  bubble.setAttribute('data-message-id', String(messageId));
+  bubble.classList.add('is-visible');
+  bubble.classList.remove('is-minimized');
+  if (titleNode) {
+    titleNode.textContent = String(title || 'Messenger');
+  }
+  saveKodusChatBubbleState({
+    messageId: messageId,
+    minimized: false,
+    title: String(title || 'Messenger'),
+    url: parsedUrl.href
+  });
+
+  return true;
+}
+
+const KODUS_CHAT_BUBBLE_STATE_KEY = 'kodus.chatBubble.state';
+
+function saveKodusChatBubbleState(state) {
+  try {
+    if (state && Number(state.messageId || 0) > 0) {
+      localStorage.setItem(KODUS_CHAT_BUBBLE_STATE_KEY, JSON.stringify(state));
+    } else {
+      localStorage.removeItem(KODUS_CHAT_BUBBLE_STATE_KEY);
+    }
+  } catch (error) {
+    kodusDebugLog('Chat bubble state save failed.', error);
+  }
+}
+
+function getKodusChatBubbleState() {
+  try {
+    return JSON.parse(localStorage.getItem(KODUS_CHAT_BUBBLE_STATE_KEY) || 'null');
+  } catch (error) {
+    return null;
+  }
+}
+
+function restoreKodusChatBubbleState() {
+  if (new URLSearchParams(window.location.search).get('bubble') === '1') {
+    return;
+  }
+
+  const state = getKodusChatBubbleState();
+  if (!state || Number(state.messageId || 0) <= 0) {
+    return;
+  }
+
+  const bubble = document.getElementById('kodusChatBubble');
+  const frame = document.getElementById('kodusChatBubbleFrame');
+  const titleNode = document.getElementById('kodusChatBubbleTitle');
+  if (!bubble || !frame) {
+    return;
+  }
+
+  const url = state.url || '<?= $app_root; ?>messenger/index.php?msg=' + encodeURIComponent(state.messageId) + '&bubble=1';
+  bubble.setAttribute('data-message-id', String(state.messageId));
+  bubble.classList.add('is-visible');
+  bubble.classList.toggle('is-minimized', !!state.minimized);
+  frame.src = url;
+  if (titleNode) {
+    titleNode.textContent = String(state.title || 'Messenger');
+  }
 }
 
 function getMailActivityKey(item) {
@@ -1358,7 +1530,6 @@ function refreshUnreadCount() {
       const sidebarLabel = document.querySelector('a[href$="messenger/"] p');
       const toggle = document.getElementById("topbarChatToggle");
       const list = document.getElementById("topbarChatList");
-      const label = document.getElementById("topbarChatRefreshLabel");
       const count = Number(data.count || 0);
       const items = Array.isArray(data.items) ? data.items : [];
       const itemIds = items.map(item => Number(item.id || 0)).filter(id => id > 0);
@@ -1417,26 +1588,18 @@ function refreshUnreadCount() {
           list.innerHTML = '<span class="dropdown-item text-center text-muted">No unread messages</span>';
         } else {
           list.innerHTML = items.map(item => `
-            <a href="${item.url}" class="dropdown-item">
+            <a href="${item.url}" class="dropdown-item" data-no-loader="true">
               <div class="media">
                 <img src="${item.avatar}" alt="User Avatar" class="img-size-50 mr-3 img-circle">
                 <div class="media-body">
                   <h3 class="dropdown-item-title">${escapeHtml(item.sender)}</h3>
-                  <p class="text-sm mb-1">${escapeHtml(item.subject)}</p>
-                  <p class="text-sm text-muted mb-1">${escapeHtml(item.snippet)}</p>
-                  <p class="text-sm text-muted">
-                    <i class="far fa-clock mr-1"></i> ${escapeHtml(item.sent_label)}
-                  </p>
+                  <p class="text-sm mb-1">${escapeHtml(item.snippet || 'New message')}</p>
                 </div>
               </div>
             </a>
             <div class="dropdown-divider"></div>
           `).join("");
         }
-      }
-
-      if (label) {
-        label.textContent = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' });
       }
 
       if (unseenItems.length > 0) {
@@ -1450,7 +1613,7 @@ function refreshUnreadCount() {
       topbarNotificationInitialized = true;
       syncKodusDocumentTitle();
     })
-    .catch(err => console.error("Unread count fetch failed:", err));
+    .catch(err => kodusDebugLog("Unread count fetch failed:", err));
 }
 
 function showAppAlert(item) {
@@ -1462,6 +1625,7 @@ function showAppAlert(item) {
   const toast = document.createElement('a');
   toast.className = 'app-alert-toast';
   toast.href = item.url || '<?= $app_root; ?>home';
+  toast.dataset.noLoader = 'true';
   toast.innerHTML = `
     <span class="app-alert-toast-icon">
       <i class="${escapeHtml(item.icon_class || 'fas fa-bell')} ${escapeHtml(item.color_class || 'text-warning')}"></i>
@@ -1493,7 +1657,10 @@ function showAppAlert(item) {
     window.clearTimeout(timer);
     timer = window.setTimeout(dismissToast, 1800);
   });
-  toast.addEventListener('click', dismissToast, { once: true });
+  toast.addEventListener('click', function(event) {
+    dismissToast();
+    openKodusChatBubbleFromUrl(toast.href, item.title || 'Messenger', event);
+  }, { once: true });
 }
 
 function renderAppNotificationList(items) {
@@ -1502,7 +1669,7 @@ function renderAppNotificationList(items) {
   }
 
   return items.map(item => `
-    <a href="${escapeHtml(item.url || '<?= $app_root; ?>home')}" class="dropdown-item app-notification-item${item.is_unread ? ' is-unread' : ''}" data-notification-id="${Number(item.id || 0)}">
+    <a href="${escapeHtml(item.url || '<?= $app_root; ?>home')}" class="dropdown-item app-notification-item${item.is_unread ? ' is-unread' : ''}" data-notification-id="${Number(item.id || 0)}" data-no-loader="true">
       <div class="media">
         <span class="app-notification-icon mr-3">
           <i class="${escapeHtml(item.icon_class || 'fas fa-bell')} ${escapeHtml(item.color_class || 'text-warning')}"></i>
@@ -1542,7 +1709,7 @@ function markAppNotificationsRead(ids) {
     },
     body: body.toString()
   }).catch(function(error) {
-    console.warn('Notification read sync failed.', error);
+    kodusDebugLog('Notification read sync failed.', error);
   });
 }
 
@@ -1578,7 +1745,7 @@ function markAllAppNotificationsRead() {
       if (button) {
         button.disabled = false;
       }
-      console.warn('Notification mark-all failed.', error);
+      kodusDebugLog('Notification mark-all failed.', error);
     });
 }
 
@@ -1589,7 +1756,6 @@ function refreshAppNotifications() {
       const toggle = document.getElementById('topbarNotificationToggle');
       const menu = document.getElementById('topbarNotificationMenu');
       const list = document.getElementById('topbarNotificationList');
-      const label = document.getElementById('topbarNotificationRefreshLabel');
       const markAllButton = document.getElementById('topbarNotificationMarkAllButton');
       const count = Number(data.count || 0);
       const items = Array.isArray(data.items) ? data.items : [];
@@ -1627,10 +1793,6 @@ function refreshAppNotifications() {
         list.innerHTML = renderAppNotificationList(items);
       }
 
-      if (label) {
-        label.textContent = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' });
-      }
-
       if (markAllButton) {
         markAllButton.disabled = count <= 0;
       }
@@ -1648,12 +1810,50 @@ function refreshAppNotifications() {
         markAppNotificationsRead(itemIds);
       }
     })
-    .catch(err => console.error('Notification feed fetch failed:', err));
+    .catch(err => kodusDebugLog('Notification feed fetch failed:', err));
 }
 
 window.refreshAppNotifications = refreshAppNotifications;
 
 document.addEventListener('click', function (event) {
+  const chatLink = event.target.closest('#topbarChatList a[href*="messenger/"], #topbarNotificationList a[href*="messenger/"], .mail-alert-toast[href*="messenger/"], .app-alert-toast[href*="messenger/"]');
+  if (chatLink && openKodusChatBubbleFromUrl(chatLink.href, chatLink.querySelector('.dropdown-item-title')?.textContent || 'Messenger', event)) {
+    return;
+  }
+
+  const bubbleMinimize = event.target.closest('#kodusChatBubbleMinimize');
+  if (bubbleMinimize) {
+    event.preventDefault();
+    const bubble = document.getElementById('kodusChatBubble');
+    bubble?.classList.toggle('is-minimized');
+    const messageId = Number(bubble?.getAttribute('data-message-id') || 0);
+    if (messageId > 0) {
+      const state = getKodusChatBubbleState() || {};
+      state.messageId = messageId;
+      state.minimized = !!bubble?.classList.contains('is-minimized');
+      state.title = document.getElementById('kodusChatBubbleTitle')?.textContent || state.title || 'Messenger';
+      state.url = document.getElementById('kodusChatBubbleFrame')?.src || state.url || '';
+      saveKodusChatBubbleState(state);
+    }
+    return;
+  }
+
+  const bubbleClose = event.target.closest('#kodusChatBubbleClose');
+  if (bubbleClose) {
+    event.preventDefault();
+    const bubble = document.getElementById('kodusChatBubble');
+    const frame = document.getElementById('kodusChatBubbleFrame');
+    if (bubble) {
+      bubble.classList.remove('is-visible', 'is-minimized');
+      bubble.setAttribute('data-message-id', '');
+    }
+    if (frame) {
+      frame.removeAttribute('src');
+    }
+    saveKodusChatBubbleState(null);
+    return;
+  }
+
   const markAllButton = event.target.closest('#topbarNotificationMarkAllButton');
   if (!markAllButton) {
     return;
@@ -1731,9 +1931,12 @@ function applyAppTheme(theme) {
 const topbarNotificationToggle = document.getElementById('topbarNotificationToggle');
 if (topbarNotificationToggle) {
   topbarNotificationToggle.addEventListener('click', function() {
-    window.setTimeout(function() {
-      refreshAppNotifications();
-    }, 180);
+    const ids = Array.from(document.querySelectorAll('#topbarNotificationList [data-notification-id]'))
+      .map(function(node) { return Number(node.getAttribute('data-notification-id') || 0); })
+      .filter(function(id) { return id > 0; });
+    if (ids.length > 0) {
+      markAppNotificationsRead(ids);
+    }
   });
 }
 
@@ -1753,10 +1956,9 @@ document.addEventListener('click', function (event) {
 });
 
 syncKodusDocumentTitle();
+restoreKodusChatBubbleState();
 document.addEventListener('DOMContentLoaded', refreshKodusBaseDocumentTitle);
 window.addEventListener('load', refreshKodusBaseDocumentTitle);
-refreshAppNotifications();
-refreshUnreadCount();
 document.addEventListener('click', unlockMailBell, { passive: true });
 document.addEventListener('keydown', unlockMailBell, { passive: true });
 document.addEventListener('touchstart', unlockMailBell, { passive: true });
@@ -1772,11 +1974,15 @@ function saveSidebarState(state) {
   try {
     localStorage.setItem('kodus.sidebar.state', state);
   } catch (error) {
-    console.warn('Sidebar state save failed.', error);
+    kodusDebugLog('Sidebar state save failed.', error);
   }
 }
 
 function applySidebarState(state) {
+  setSidebarState(state, true);
+}
+
+function setSidebarState(state, shouldSave) {
   const body = document.body;
   const normalized = state === 'collapsed' ? 'collapsed' : 'expanded';
   const isOverlayViewport = window.innerWidth <= SIDEBAR_OVERLAY_BREAKPOINT;
@@ -1790,14 +1996,22 @@ function applySidebarState(state) {
     body.classList.toggle('sidebar-collapse', normalized === 'collapsed');
   }
 
-  saveSidebarState(normalized);
+  if (shouldSave) {
+    saveSidebarState(normalized);
+  }
 }
 
 function syncSidebarForViewport() {
   const isCompactViewport = window.innerWidth <= SIDEBAR_AUTO_COLLAPSE_BREAKPOINT;
 
   if (isCompactViewport && !wasCompactSidebarViewport) {
-    applySidebarState('collapsed');
+    setSidebarState('collapsed', false);
+  } else if (!isCompactViewport && wasCompactSidebarViewport) {
+    try {
+      setSidebarState(localStorage.getItem('kodus.sidebar.state') === 'collapsed' ? 'collapsed' : 'expanded', false);
+    } catch (error) {
+      setSidebarState('expanded', false);
+    }
   }
 
   wasCompactSidebarViewport = isCompactViewport;
@@ -1838,12 +2052,12 @@ if (pushMenuToggle) {
   window.addEventListener('load', function() {
     try {
       if (isCompactViewport()) {
-        applySidebarState('collapsed');
+        setSidebarState('collapsed', false);
       } else {
-        applySidebarState(localStorage.getItem('kodus.sidebar.state') === 'collapsed' ? 'collapsed' : 'expanded');
+        setSidebarState(localStorage.getItem('kodus.sidebar.state') === 'collapsed' ? 'collapsed' : 'expanded', false);
       }
     } catch (error) {
-      applySidebarState(isCompactViewport() ? 'collapsed' : 'expanded');
+      setSidebarState(isCompactViewport() ? 'collapsed' : 'expanded', false);
     }
 
     wasCompactSidebarViewport = isCompactViewport();
@@ -1853,7 +2067,7 @@ if (pushMenuToggle) {
 
   document.addEventListener('click', function(event) {
     if (shouldAutoCollapseSidebarFromClick(event.target)) {
-      applySidebarState('collapsed');
+      setSidebarState('collapsed', false);
     }
   });
 }

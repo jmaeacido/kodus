@@ -14,6 +14,7 @@ $userEmail = $_SESSION['email'] ?? null;
 $userName = trim((string) ($_SESSION['username'] ?? ''));
 $currentFolder = mailboxGetFolder($_GET['folder'] ?? 'inbox');
 $onlyConversation = isset($_GET['only_conversation']) && ($_GET['only_conversation'] == '1' || $_GET['only_conversation'] === 'true');
+$isBubbleMode = isset($_GET['bubble']) && (string) $_GET['bubble'] === '1';
 
 if (!$id || !$userId) {
     http_response_code(400);
@@ -24,9 +25,8 @@ if (!$id || !$userId) {
 $query = "
     SELECT cm.*,
            sender_user.picture AS sender_picture,
+           sender_user.id AS sender_user_id,
            sender_user.sso_avatar_url AS sender_sso_avatar_url,
-           sender_user.last_activity AS sender_last_activity,
-           sender_user.is_online AS sender_is_online,
            (
                SELECT COALESCE(NULLIF(u.username, ''), COALESCE(NULLIF(cmr.recipient_name, ''), cmr.recipient_email))
                FROM contact_message_recipients cmr
@@ -35,6 +35,14 @@ $query = "
                ORDER BY COALESCE(NULLIF(u.username, ''), COALESCE(NULLIF(cmr.recipient_name, ''), cmr.recipient_email))
                LIMIT 1
            ) AS primary_recipient_name,
+           (
+               SELECT u.id
+               FROM contact_message_recipients cmr
+               LEFT JOIN users u ON u.id = cmr.user_id
+               WHERE cmr.message_id = cm.id
+               ORDER BY COALESCE(NULLIF(u.username, ''), COALESCE(NULLIF(cmr.recipient_name, ''), cmr.recipient_email))
+               LIMIT 1
+           ) AS primary_recipient_user_id,
            (
                SELECT u.picture
                FROM contact_message_recipients cmr
@@ -51,22 +59,6 @@ $query = "
                ORDER BY COALESCE(NULLIF(u.username, ''), COALESCE(NULLIF(cmr.recipient_name, ''), cmr.recipient_email))
                LIMIT 1
            ) AS primary_recipient_sso_avatar_url,
-           (
-               SELECT u.last_activity
-               FROM contact_message_recipients cmr
-               LEFT JOIN users u ON u.id = cmr.user_id
-               WHERE cmr.message_id = cm.id
-               ORDER BY COALESCE(NULLIF(u.username, ''), COALESCE(NULLIF(cmr.recipient_name, ''), cmr.recipient_email))
-               LIMIT 1
-           ) AS primary_recipient_last_activity,
-           (
-               SELECT u.is_online
-               FROM contact_message_recipients cmr
-               LEFT JOIN users u ON u.id = cmr.user_id
-               WHERE cmr.message_id = cm.id
-               ORDER BY COALESCE(NULLIF(u.username, ''), COALESCE(NULLIF(cmr.recipient_name, ''), cmr.recipient_email))
-               LIMIT 1
-           ) AS primary_recipient_is_online,
            (
                SELECT GROUP_CONCAT(DISTINCT u.username ORDER BY u.username SEPARATOR ', ')
                FROM contact_message_recipients cmr
@@ -188,11 +180,19 @@ $replyCount = count($replies);
 
 $participantLabels = [];
 $participantMentions = [];
+$participantMentionItems = [];
 $senderParticipantLabel = trim((string) ($message['user_name'] ?? '')) !== ''
     ? (string) $message['user_name']
     : (string) ($message['user_email'] ?? 'Unknown');
 $participantLabels[] = $senderParticipantLabel;
 $participantMentions[] = $senderParticipantLabel;
+if ((int) ($message['sender_user_id'] ?? 0) > 0 && (int) ($message['sender_user_id'] ?? 0) !== (int) $userId) {
+    $participantMentionItems[] = [
+        'id' => (int) $message['sender_user_id'],
+        'name' => $senderParticipantLabel,
+        'mention' => preg_replace('/\s+/', '', $senderParticipantLabel),
+    ];
+}
 
 $recipientDirectory = array_filter(array_map('trim', explode('||', (string) ($message['recipient_directory'] ?? ''))));
 foreach ($recipientDirectory as $recipientEntry) {
@@ -207,8 +207,40 @@ foreach ($recipientDirectory as $recipientEntry) {
     }
 }
 
+if ($isGroupThread) {
+    $mentionStmt = $conn->prepare("
+        SELECT cmr.user_id,
+               COALESCE(NULLIF(u.username, ''), COALESCE(NULLIF(cmr.recipient_name, ''), cmr.recipient_email)) AS display_name
+        FROM contact_message_recipients cmr
+        LEFT JOIN users u ON u.id = cmr.user_id
+        WHERE cmr.message_id = ?
+          AND cmr.user_id IS NOT NULL
+          AND cmr.user_id <> ?
+          AND cmr.left_at IS NULL
+          AND cmr.hidden_at IS NULL
+        ORDER BY display_name
+    ");
+    if ($mentionStmt) {
+        $mentionStmt->bind_param('ii', $id, $userId);
+        $mentionStmt->execute();
+        foreach (db_stmt_fetch_all_assoc($mentionStmt) as $mentionRow) {
+            $mentionName = trim((string) ($mentionRow['display_name'] ?? ''));
+            $mentionUserId = (int) ($mentionRow['user_id'] ?? 0);
+            if ($mentionName !== '' && $mentionUserId > 0) {
+                $participantMentionItems[] = [
+                    'id' => $mentionUserId,
+                    'name' => $mentionName,
+                    'mention' => preg_replace('/\s+/', '', $mentionName),
+                ];
+            }
+        }
+        $mentionStmt->close();
+    }
+}
+
 $participantLabels = array_values(array_unique(array_filter($participantLabels)));
 $participantMentions = array_values(array_unique(array_filter($participantMentions)));
+$participantMentionItems = array_values(array_unique($participantMentionItems, SORT_REGULAR));
 $recipientDisplay = trim((string) ($message['recipient_names'] ?? ''));
 $primaryRecipientName = trim((string) ($message['primary_recipient_name'] ?? ''));
 $primaryRecipientAvatarUrl = avatar_resolve_url(
@@ -234,10 +266,10 @@ if (trim((string) $chatAvatarUrl) === '') {
     $chatAvatarUrl = $originalAvatarUrl;
 }
 
-$chatPresence = mailboxClassifyPresence(
-    $originalIsMine ? ($message['primary_recipient_last_activity'] ?? null) : ($message['sender_last_activity'] ?? null),
-    (int) ($originalIsMine ? ($message['primary_recipient_is_online'] ?? 0) : ($message['sender_is_online'] ?? 0))
-);
+$chatPresenceUserId = $isGroupThread ? 0 : (int) ($originalIsMine ? ($message['primary_recipient_user_id'] ?? 0) : ($message['sender_user_id'] ?? 0));
+$chatPresence = $isGroupThread
+    ? ['detail' => 'Group chat', 'class' => 'offline']
+    : ['detail' => 'Active status unavailable', 'class' => 'offline'];
 $chatStatusCopy = $currentFolder === 'trash'
     ? 'Archived chat'
     : ($isGroupThread
@@ -303,6 +335,16 @@ function renderAttachments($attachmentCsv, $basePath, $type = 'contact')
 
     $html .= '</div>';
     return $html;
+}
+
+function messengerFriendlyTime(?string $value): string
+{
+    $timestamp = strtotime((string) $value);
+    if (!$timestamp) {
+        return '';
+    }
+
+    return date('M j, g:i A', $timestamp);
 }
 
 function renderReactionBar(array $summary, int $messageId, ?int $replyId): string
@@ -371,7 +413,7 @@ function renderReply($row, $userId, $userType, array $reactionSummary, int $mess
         <div class="reply-meta">
           <strong><?= htmlspecialchars($row['username']) ?></strong>
           <span><?= htmlspecialchars($row['userType']) ?></span>
-          <span><?= htmlspecialchars($row['sent_at']) ?></span>
+          <span><?= htmlspecialchars(messengerFriendlyTime($row['sent_at'] ?? '')) ?></span>
           <?php if ($isDeleted): ?>
             <span class="badge badge-secondary">Removed</span>
           <?php endif; ?>
@@ -434,7 +476,7 @@ function renderOriginalMessageBubble($message, $originalReplyClass, $originalAva
         <div class="reply-meta">
           <strong><?= htmlspecialchars($originalDisplayName) ?></strong>
           <span>Started the conversation</span>
-          <span><?= htmlspecialchars($message['sent_at']) ?></span>
+          <span><?= htmlspecialchars(messengerFriendlyTime($message['sent_at'] ?? '')) ?></span>
         </div>
       </div>
       <div class="chat-bubble-body"><?= nl2br(htmlspecialchars($message['message'])) ?></div>
@@ -468,13 +510,17 @@ if ($onlyConversation) {
         <?php foreach ($replies as $reply): ?>
             <?= renderReply($reply, $userId, (string) $userType, $replyReactionSummary[(int) ($reply['id'] ?? 0)] ?? [], (int) $message['id']) ?>
         <?php endforeach; ?>
+        <div class="chat-typing-indicator reply theirs" id="threadTypingIndicator" hidden>
+          <span class="chat-typing-dots"><span></span><span></span><span></span></span>
+          <span class="chat-typing-copy">Someone is typing...</span>
+        </div>
       </div>
     </div>
     <?php
     exit;
 }
 ?>
-<div class="chat-shell" data-message-id="<?= (int) $id ?>" data-participants="<?= htmlspecialchars(json_encode($participantMentions), ENT_QUOTES, 'UTF-8') ?>">
+<div class="chat-shell" data-message-id="<?= (int) $id ?>" data-presence-user-id="<?= (int) $chatPresenceUserId ?>" data-participants="<?= htmlspecialchars(json_encode($participantMentionItems ?: $participantMentions), ENT_QUOTES, 'UTF-8') ?>">
   <div class="mailbox-read-info mailbox-read-info--compact chat-thread-header">
     <div class="chat-thread-hero">
       <div class="chat-thread-primary">
@@ -485,12 +531,11 @@ if ($onlyConversation) {
         <div>
           <h2 class="mailbox-read-subject"><?= htmlspecialchars($chatTitle) ?></h2>
           <div class="chat-thread-presence"><?= htmlspecialchars($chatStatusCopy) ?></div>
-          <div class="chat-thread-meta-line">
-            <span><?= htmlspecialchars((string) ($message['sent_at'] ?? '')) ?></span>
-            <?php if ($chatMetaCopy !== ''): ?>
+          <?php if ($chatMetaCopy !== ''): ?>
+            <div class="chat-thread-meta-line">
               <span><?= htmlspecialchars($chatMetaCopy) ?></span>
-            <?php endif; ?>
-          </div>
+            </div>
+          <?php endif; ?>
         </div>
       </div>
       <div class="chat-thread-options">
@@ -511,6 +556,12 @@ if ($onlyConversation) {
             <i class="fas fa-ellipsis-h"></i>
           </button>
           <div class="dropdown-menu dropdown-menu-right chat-thread-options-menu">
+            <?php if ($isBubbleMode): ?>
+              <button type="button" class="dropdown-item conversation-open-messenger-trigger"><i class="fas fa-external-link-alt mr-2"></i>Open in Messenger</button>
+            <?php else: ?>
+              <button type="button" class="dropdown-item conversation-open-bubble-trigger"><i class="far fa-comment-dots mr-2"></i>Open Bubble</button>
+            <?php endif; ?>
+            <div class="dropdown-divider"></div>
             <?php if ($isGroupThread && empty($groupMemberState['left_at'])): ?>
               <button type="button" class="dropdown-item conversation-see-members-trigger"><i class="fas fa-address-book mr-2"></i>See Members</button>
               <button type="button" class="dropdown-item conversation-add-member-trigger"><i class="fas fa-user-plus mr-2"></i>Add member</button>
@@ -606,6 +657,7 @@ if ($onlyConversation) {
         <input type="hidden" name="email" value="<?= htmlspecialchars($message['user_email'], ENT_QUOTES) ?>">
         <input type="hidden" name="subject" value="<?= htmlspecialchars($message['subject'], ENT_QUOTES) ?>">
         <input type="hidden" name="message" value="<?= htmlspecialchars($message['message'], ENT_QUOTES) ?>">
+        <input type="hidden" name="mentioned_user_ids" id="mentionedUserIds" value="">
         <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(security_get_csrf_token(), ENT_QUOTES) ?>">
       </form>
     </div>
@@ -636,8 +688,20 @@ if ($onlyConversation) {
         } catch (error) {
             return [];
         }
-    })();
+    })().map(function(item) {
+        if (typeof item === 'string') {
+            return { id: 0, name: item, mention: item.replace(/\s+/g, '') };
+        }
+        return {
+            id: Number(item.id || 0),
+            name: String(item.name || item.mention || '').trim(),
+            mention: String(item.mention || item.name || '').replace(/\s+/g, '')
+        };
+    }).filter(function(item) {
+        return item.name && item.mention;
+    });
     const composerEmojis = ['😀', '😂', '😊', '😍', '😉', '👍', '👏', '🙏', '🎉', '🔥', '❤️', '✨', '📎', '📩', '✅', '🤝', '🙌', '😎', '📌', '💡'];
+    let activeMentionIndex = 0;
 
     if (!replyForm || !attachBtn || !fileInput || !preview || !replyText || !emojiTrigger || !emojiMenu || !mentionMenu) {
         return;
@@ -664,9 +728,10 @@ if ($onlyConversation) {
     function closeMentionMenu() {
         mentionMenu.hidden = true;
         mentionMenu.innerHTML = '';
+        activeMentionIndex = 0;
     }
 
-    function replaceMentionToken(field, mentionValue) {
+    function replaceMentionToken(field, mentionValue, mentionUserId) {
         const caret = field.selectionStart ?? field.value.length;
         const before = field.value.slice(0, caret);
         const after = field.value.slice(caret);
@@ -680,12 +745,45 @@ if ($onlyConversation) {
         field.focus();
         field.setSelectionRange(nextCaret, nextCaret);
         field.dispatchEvent(new Event('input', { bubbles: true }));
+        if (mentionUserId) {
+            const mentioned = new Set((replyForm.dataset.mentionedUserIds || '').split(',').filter(Boolean));
+            mentioned.add(String(mentionUserId));
+            replyForm.dataset.mentionedUserIds = Array.from(mentioned).join(',');
+            const mentionedField = document.getElementById('mentionedUserIds');
+            if (mentionedField) {
+                mentionedField.value = replyForm.dataset.mentionedUserIds;
+            }
+        }
+    }
+
+    function setActiveMention(index) {
+        const items = Array.from(mentionMenu.querySelectorAll('.chat-mention-item'));
+        if (!items.length) {
+            activeMentionIndex = 0;
+            return;
+        }
+        activeMentionIndex = (index + items.length) % items.length;
+        items.forEach(function(item, itemIndex) {
+            item.classList.toggle('is-active', itemIndex === activeMentionIndex);
+            item.setAttribute('aria-selected', itemIndex === activeMentionIndex ? 'true' : 'false');
+        });
+        items[activeMentionIndex].scrollIntoView({ block: 'nearest' });
+    }
+
+    function chooseActiveMention() {
+        const items = Array.from(mentionMenu.querySelectorAll('.chat-mention-item'));
+        if (!items.length || mentionMenu.hidden) {
+            return false;
+        }
+        items[activeMentionIndex]?.click();
+        return true;
     }
 
     function renderMentionMenu(query) {
         const normalizedQuery = String(query || '').toLowerCase();
-        const matches = participantData.filter(function(name) {
-            return String(name || '').toLowerCase().includes(normalizedQuery);
+        const matches = participantData.filter(function(member) {
+            return member.name.toLowerCase().includes(normalizedQuery)
+                || member.mention.toLowerCase().includes(normalizedQuery);
         }).slice(0, 6);
 
         if (!matches.length) {
@@ -694,19 +792,29 @@ if ($onlyConversation) {
         }
 
         mentionMenu.innerHTML = '';
-        matches.forEach(function(name) {
+        matches.forEach(function(member, index) {
             const button = document.createElement('button');
             button.type = 'button';
             button.className = 'chat-mention-item';
-            button.textContent = '@' + name;
+            button.setAttribute('role', 'option');
+            button.dataset.userId = String(member.id || 0);
+            button.dataset.mention = member.mention;
+            button.textContent = '@' + member.mention;
+            if (member.name !== member.mention) {
+                button.title = member.name;
+            }
+            button.addEventListener('mouseenter', function() {
+                setActiveMention(index);
+            });
             button.addEventListener('click', function(event) {
                 event.preventDefault();
-                replaceMentionToken(replyText, name);
+                replaceMentionToken(replyText, member.mention, member.id);
                 closeMentionMenu();
             });
             mentionMenu.appendChild(button);
         });
         mentionMenu.hidden = false;
+        setActiveMention(0);
     }
 
     composerEmojis.forEach(function(emoji) {
@@ -742,6 +850,18 @@ if ($onlyConversation) {
         if (event.key === 'Escape') {
             closeEmojiMenu();
             closeMentionMenu();
+            return;
+        }
+
+        if (!mentionMenu.hidden && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) {
+            event.preventDefault();
+            setActiveMention(activeMentionIndex + (event.key === 'ArrowDown' ? 1 : -1));
+            return;
+        }
+
+        if (!mentionMenu.hidden && (event.key === 'Tab' || event.key === 'Enter')) {
+            event.preventDefault();
+            chooseActiveMention();
             return;
         }
 

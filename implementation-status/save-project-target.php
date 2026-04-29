@@ -4,6 +4,7 @@ security_bootstrap_session();
 require_once '../auth_helpers.php';
 include('../config.php');
 require_once '../project_targets_helpers.php';
+require_once '../socket_helpers.php';
 
 auth_handle_page_access($conn);
 auth_apply_security_headers();
@@ -322,6 +323,12 @@ if ($id > 0) {
     $stmt->close();
     projectTargetsReplaceEntries($conn, $id, $entryRows);
 
+    kodus_socket_broadcast('kodus.meb', 'meb.validation.changed', [
+        'action' => 'target_updated',
+        'target_id' => $id,
+        'fiscal_year' => $selectedYear,
+    ]);
+
     echo json_encode(['success' => $updated, 'message' => 'Baseline target updated successfully.']);
     exit;
 }
@@ -388,5 +395,11 @@ if ($targetId <= 0) {
 if ($targetId > 0) {
     projectTargetsReplaceEntries($conn, $targetId, $entryRows);
 }
+
+kodus_socket_broadcast('kodus.meb', 'meb.validation.changed', [
+    'action' => 'target_saved',
+    'target_id' => $targetId,
+    'fiscal_year' => $selectedYear,
+]);
 
 echo json_encode(['success' => true, 'message' => 'Baseline target saved successfully.']);

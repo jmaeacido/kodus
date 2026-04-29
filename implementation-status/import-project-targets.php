@@ -4,6 +4,7 @@ security_bootstrap_session();
 require_once '../auth_helpers.php';
 include('../config.php');
 require_once '../project_targets_helpers.php';
+require_once '../socket_helpers.php';
 require_once '../vendor/autoload.php';
 
 use PhpOffice\PhpSpreadsheet\IOFactory;
@@ -238,6 +239,12 @@ try {
     if ($importedRows === 0) {
         throw new RuntimeException('No target rows were imported.');
     }
+
+    kodus_socket_broadcast('kodus.meb', 'meb.validation.changed', [
+        'action' => 'targets_imported',
+        'row_count' => $importedRows,
+        'fiscal_year' => $selectedYear,
+    ]);
 
     $_SESSION['target_import_success'] = "Imported {$importedRows} baseline target row(s) for fiscal year {$selectedYear}.";
 } catch (Throwable $error) {

@@ -147,6 +147,7 @@ $(document).ready(function() {
                 channels: ['meb_validation_table'],
                 table: table,
                 socket: {
+                    key: 'data-tracking-meb-validation',
                     channel: 'kodus.meb',
                     events: ['meb.changed', 'meb.validation.changed']
                 }

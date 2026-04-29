@@ -23,6 +23,8 @@ if ($userType === 'admin') {
         LEFT JOIN message_reads mr
           ON cm.id = mr.message_id AND mr.user_id = ?
         WHERE (
+            COALESCE(cm.conversation_type, 'direct') = 'group'
+            OR
             cm.user_email = ?
             OR EXISTS (
                 SELECT 1
@@ -33,11 +35,17 @@ if ($userType === 'admin') {
             )
         )
           AND COALESCE(mr.is_trashed, 0) = 0
+          AND " . mailboxVisibilityPredicate((int) $userId, 'cm', 'mr') . "
+          AND NOT EXISTS (
+              SELECT 1 FROM contact_message_recipients muted
+              WHERE muted.message_id = cm.id AND muted.user_id = ?
+                AND (muted.muted_at IS NOT NULL OR muted.left_at IS NOT NULL)
+          )
           AND (mr.is_read IS NULL OR mr.is_read = 0)
     ";
     $stmt = $conn->prepare($sql);
     $userEmail = $_SESSION['email'] ?? '';
-    $stmt->bind_param("is", $userId, $userEmail);
+    $stmt->bind_param("isi", $userId, $userEmail, $userId);
     $stmt->execute();
     if ($row = db_stmt_fetch_one_assoc($stmt)) {
         $unreadCount = (int)$row['unread'];
@@ -57,13 +65,19 @@ if ($userType === 'admin') {
             FROM contact_message_recipients cmr
             WHERE cmr.message_id = cm.id
               AND LOWER(cmr.recipient_email) = LOWER(?)
-        ))
+        ) OR COALESCE(cm.conversation_type, 'direct') = 'group')
           AND COALESCE(mr.is_trashed, 0) = 0
+          AND " . mailboxVisibilityPredicate((int) $userId, 'cm', 'mr') . "
+          AND NOT EXISTS (
+              SELECT 1 FROM contact_message_recipients muted
+              WHERE muted.message_id = cm.id AND muted.user_id = ?
+                AND (muted.muted_at IS NOT NULL OR muted.left_at IS NOT NULL)
+          )
           AND (mr.is_read IS NULL OR mr.is_read = 0)
     ";
     $stmt = $conn->prepare($sql);
     if ($stmt) {
-        $stmt->bind_param("isss", $userId, $userEmail, $userName, $userEmail);
+        $stmt->bind_param("isssi", $userId, $userEmail, $userName, $userEmail, $userId);
         $stmt->execute();
         if ($row = db_stmt_fetch_one_assoc($stmt)) {
             $unreadCount = (int)$row['unread'];

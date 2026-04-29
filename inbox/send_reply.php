@@ -66,7 +66,7 @@ if ($senderId <= 0 || !$senderEmail) {
 }
 
 $messageAccessSql = "
-    SELECT id, user_email, subject, message
+    SELECT id, user_email, user_name, subject, message, conversation_type
     FROM contact_messages
     WHERE id = ?
 ";
@@ -74,6 +74,8 @@ $messageAccessSql = "
 if ($senderType === 'admin') {
     $messageAccessSql .= "
       AND (
+          COALESCE(conversation_type, 'direct') = 'group'
+          OR
           user_email = ?
           OR EXISTS (
               SELECT 1
@@ -81,21 +83,24 @@ if ($senderType === 'admin') {
               INNER JOIN users u ON u.id = cmr.user_id
               WHERE cmr.message_id = contact_messages.id
                 AND u.userType = 'admin'
-          )
+              )
       )
+      AND " . mailboxThreadAccessPredicate('contact_messages') . "
       LIMIT 1
     ";
     $accessStmt = $conn->prepare($messageAccessSql);
-    $accessStmt->bind_param("is", $id, $senderEmail);
+    $accessStmt->bind_param("isi", $id, $senderEmail, $senderId);
 } else {
     $messageAccessSql .= " AND (user_email = ? OR user_name = ? OR EXISTS (
         SELECT 1
         FROM contact_message_recipients cmr
         WHERE cmr.message_id = contact_messages.id
           AND LOWER(cmr.recipient_email) = LOWER(?)
-    )) LIMIT 1";
+    ) OR COALESCE(conversation_type, 'direct') = 'group')
+    AND " . mailboxThreadAccessPredicate('contact_messages') . "
+    LIMIT 1";
     $accessStmt = $conn->prepare($messageAccessSql);
-    $accessStmt->bind_param("isss", $id, $senderEmail, $senderUsername, $senderEmail);
+    $accessStmt->bind_param("isssi", $id, $senderEmail, $senderUsername, $senderEmail, $senderId);
 }
 
 $accessStmt->execute();
@@ -113,6 +118,16 @@ if (!$thread) {
 }
 
 $threadOwnerEmail = trim((string) ($thread['user_email'] ?? ''));
+$isGroupThread = strtolower((string) ($thread['conversation_type'] ?? 'direct')) === 'group';
+if ($isGroupThread && !mailboxCanParticipateInThread($conn, $id, (int) $senderId)) {
+    $buf = ob_get_clean();
+    echo json_encode([
+        'status' => 'error',
+        'message' => 'Only current group members can send messages.',
+        'debug' => $buf ?: null
+    ]);
+    exit;
+}
 $threadRecipients = [];
 $threadRecipientStmt = $conn->prepare("SELECT recipient_email FROM contact_message_recipients WHERE message_id = ?");
 if ($threadRecipientStmt) {
@@ -126,7 +141,7 @@ if ($threadRecipientStmt) {
     }
     $threadRecipientStmt->close();
 }
-if ($senderType === 'admin') {
+if (!$isGroupThread && $senderType === 'admin') {
     if ($threadOwnerEmail !== '' && strcasecmp($threadOwnerEmail, (string) $senderEmail) !== 0) {
         $email = $threadOwnerEmail;
     } else {
@@ -137,7 +152,7 @@ if ($senderType === 'admin') {
             }
         }
     }
-} else {
+} elseif (!$isGroupThread) {
     $email = $threadOwnerEmail !== '' ? $threadOwnerEmail : $email;
 }
 
@@ -261,7 +276,9 @@ $participantEmails = array_values(array_unique(array_filter($participantEmails, 
 
 $recipientIds = [];
 $matchedParticipantKeys = [];
-if (!empty($participantEmails)) {
+if ($isGroupThread) {
+    $recipientIds = mailboxCurrentParticipantIds($conn, $id, (int) $senderId, true);
+} elseif (!empty($participantEmails)) {
     $placeholders = implode(',', array_fill(0, count($participantEmails), '?'));
     $typeString = str_repeat('s', count($participantEmails));
     $recipientLookupSql = "SELECT id, email FROM users WHERE email IN ($placeholders)";
@@ -288,7 +305,7 @@ $needsOwnerFallbackLookup = $threadOwnerUsername !== ''
     && $threadOwnerEmail !== ''
     && !in_array(strtolower($threadOwnerEmail), $matchedParticipantKeys, true);
 
-if ($needsOwnerFallbackLookup) {
+if (!$isGroupThread && $needsOwnerFallbackLookup) {
     $ownerLookupStmt = $conn->prepare("
         SELECT id, email
         FROM users
@@ -331,11 +348,19 @@ if (!empty($recipientIds)) {
     }
 }
 
+$typingStmt = $conn->prepare('DELETE FROM mailbox_typing_status WHERE message_id = ? AND user_id = ?');
+if ($typingStmt) {
+    $typingStmt->bind_param('ii', $id, $senderId);
+    $typingStmt->execute();
+    $typingStmt->close();
+}
+
 kodus_socket_broadcast('kodus.mailbox', 'mail.changed', [
     'action' => 'reply_created',
     'message_id' => (int) $id,
     'reply_id' => $replyId,
     'actor_id' => $senderId,
+    'receiver_ids' => $recipientIds,
 ]);
 
 echo json_encode([

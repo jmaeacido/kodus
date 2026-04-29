@@ -189,7 +189,8 @@ unset($_SESSION['target_import_success'], $_SESSION['target_import_error']);
       width: 100%;
       white-space: nowrap;
     }
-    .target-fertilizer-followup {
+    .target-fertilizer-followup,
+    .aquatic-resource-followup {
       display: none;
       grid-column: span 2;
       border: 1px solid rgba(40, 167, 69, 0.22);
@@ -197,23 +198,31 @@ unset($_SESSION['target_import_success'], $_SESSION['target_import_error']);
       padding: .9rem 1rem;
       background: rgba(40, 167, 69, 0.08);
     }
-    .target-fertilizer-followup.is-visible {
+    .aquatic-resource-followup {
+      border-color: rgba(23, 162, 184, 0.24);
+      background: rgba(23, 162, 184, 0.08);
+    }
+    .target-fertilizer-followup.is-visible,
+    .aquatic-resource-followup.is-visible {
       display: block;
     }
-    .target-fertilizer-question {
+    .target-fertilizer-question,
+    .aquatic-resource-question {
       font-size: .82rem;
       font-weight: 700;
       margin-bottom: .55rem;
       text-transform: uppercase;
       letter-spacing: .03em;
     }
-    .target-fertilizer-options {
+    .target-fertilizer-options,
+    .aquatic-resource-options {
       display: flex;
       gap: 1rem;
       flex-wrap: wrap;
       margin-bottom: .85rem;
     }
-    .target-fertilizer-grid {
+    .target-fertilizer-grid,
+    .aquatic-resource-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
       gap: 12px;
@@ -593,29 +602,35 @@ $(function() {
         `;
     }
 
-    function renderAquaticResourceField(selectedResource, selectedQuantity, isVisible) {
+    function renderAquaticResourceField(classification, projectType, selectedResource, selectedQuantity, rowKey) {
         const normalizedSelectedResource = String(selectedResource || '').trim().toUpperCase();
         const customValue = normalizedSelectedResource !== '' && !AQUATIC_RESOURCE_TYPE_OPTIONS.includes(normalizedSelectedResource)
             ? selectedResource
             : '';
+        const hasExistingValues = normalizedSelectedResource !== '' || String(selectedQuantity || '').trim() !== '';
+        const isVisible = requiresAquaticResourcePrompt(classification, projectType) || hasExistingValues;
+        const isEnabled = hasExistingValues;
 
         return `
-            <input type="hidden" class="aquatic-resource-enabled-input" value="${isVisible ? '1' : '0'}">
-            <div class="aquatic-resource-field ${isVisible ? '' : 'd-none'}">
-                <div class="d-flex justify-content-between align-items-center mb-2">
-                    <label class="mb-0">Aquatic Resource Details</label>
-                    <button type="button" class="btn btn-outline-secondary btn-sm aquatic-resource-hide-btn">Hide</button>
+            <div class="aquatic-resource-followup ${isVisible ? 'is-visible' : ''}">
+                <input type="hidden" class="aquatic-resource-enabled-input" value="${isEnabled ? '1' : ''}">
+                <div class="aquatic-resource-question">Does this project include aquatic resources?</div>
+                <div class="aquatic-resource-options">
+                    <label><input type="radio" class="aquatic-resource-enabled-choice" name="aquatic-resource-${escapeHtml(rowKey)}" value="1" ${isEnabled ? 'checked' : ''}> Yes</label>
+                    <label><input type="radio" class="aquatic-resource-enabled-choice" name="aquatic-resource-${escapeHtml(rowKey)}" value="0"> No</label>
                 </div>
-                <div class="target-entry-field">
-                    <label>Aquatic Resources</label>
-                    <select class="custom-select aquatic-resource-input">
-                        ${renderAquaticResourceOptions(normalizedSelectedResource)}
-                    </select>
-                    <input type="text" class="form-control aquatic-resource-custom-input mt-1" value="${escapeHtml(customValue)}" placeholder="Custom aquatic resource (optional)">
-                </div>
-                <div class="target-entry-field">
-                    <label>Quantity</label>
-                    <input type="number" min="0" class="form-control aquatic-resource-quantity-input" value="${escapeHtml(selectedQuantity || '')}" placeholder="Enter quantity">
+                <div class="aquatic-resource-grid aquatic-resource-field ${isEnabled ? '' : 'd-none'}">
+                    <div class="target-entry-field">
+                        <label>Aquatic Resources</label>
+                        <select class="custom-select aquatic-resource-input">
+                            ${renderAquaticResourceOptions(normalizedSelectedResource)}
+                        </select>
+                        <input type="text" class="form-control aquatic-resource-custom-input mt-1" value="${escapeHtml(customValue)}" placeholder="Custom aquatic resource (optional)">
+                    </div>
+                    <div class="target-entry-field">
+                        <label>Quantity</label>
+                        <input type="number" min="0" class="form-control aquatic-resource-quantity-input" value="${escapeHtml(selectedQuantity || '')}" placeholder="Enter quantity">
+                    </div>
                 </div>
             </div>
         `;
@@ -650,20 +665,25 @@ $(function() {
         const classification = String($row.find('.project-classification-input').val() || '').trim().toUpperCase();
         const projectType = getProjectTypeValue($row);
         const shouldPrompt = requiresAquaticResourcePrompt(classification, projectType);
-        const shouldShow = shouldPrompt && shouldShowAquaticResourceFields($row);
+        const hasExistingValues = getAquaticResourceValue($row) !== '' || String($row.find('.aquatic-resource-quantity-input').val() || '').trim() !== '';
+        const shouldShowFollowup = shouldPrompt || hasExistingValues;
+        const shouldShowFields = shouldShowAquaticResourceFields($row);
+        const $followup = $row.find('.aquatic-resource-followup');
         const $field = $row.find('.aquatic-resource-field');
         const $customInput = $row.find('.aquatic-resource-custom-input');
 
-        $field.toggleClass('d-none', !shouldShow);
-        if (!shouldPrompt) {
-            $row.find('.aquatic-resource-enabled-input').val('0');
+        $followup.toggleClass('is-visible', shouldShowFollowup);
+        $field.toggleClass('d-none', !shouldShowFields);
+        if (!shouldShowFollowup) {
+            $row.find('.aquatic-resource-enabled-input').val('');
+            $row.find('.aquatic-resource-enabled-choice').prop('checked', false);
             $row.find('.aquatic-resource-input').val('');
             $customInput.val('');
             $row.find('.aquatic-resource-quantity-input').val('');
             return;
         }
 
-        if (!shouldShow) {
+        if (!shouldShowFields) {
             $row.find('.aquatic-resource-input').val('');
             $customInput.val('');
             $row.find('.aquatic-resource-quantity-input').val('');
@@ -838,9 +858,11 @@ $(function() {
                         </div>
                         <div class="target-entry-field target-entry-field--wide">
                             ${renderAquaticResourceField(
+                                projectClasses[i] || '',
+                                projectTypes[i] || '',
                                 targetAquaticResources[i] || '',
                                 targetAquaticResourceQuantities[i] || '',
-                                (String(targetAquaticResources[i] || '').trim() !== '' || String(targetAquaticResourceQuantities[i] || '').trim() !== '')
+                                rowKey
                             )}
                         </div>
                     </div>
@@ -995,26 +1017,24 @@ $(function() {
         const classification = String($row.find('.project-classification-input').val() || '').trim().toUpperCase();
         const projectType = getProjectTypeValue($row);
         if (!requiresAquaticResourcePrompt(classification, projectType)) {
-            $row.find('.aquatic-resource-enabled-input').val('0');
             syncAquaticResourceField($row);
             return;
         }
 
         const currentDecision = String($row.find('.aquatic-resource-enabled-input').val() || '').trim();
         const hasExistingValues = getAquaticResourceValue($row) !== '' || String($row.find('.aquatic-resource-quantity-input').val() || '').trim() !== '';
-        if (currentDecision !== '' && currentDecision !== '0') {
+        if (currentDecision !== '') {
             syncAquaticResourceField($row);
             return;
         }
 
         if (hasExistingValues) {
             $row.find('.aquatic-resource-enabled-input').val('1');
+            $row.find('.aquatic-resource-enabled-choice[value="1"]').prop('checked', true);
             syncAquaticResourceField($row);
             return;
         }
 
-        const includesAquaticResources = window.confirm('Does this project include aquatic resources?');
-        $row.find('.aquatic-resource-enabled-input').val(includesAquaticResources ? '1' : '0');
         syncAquaticResourceField($row);
     }
 
@@ -1208,6 +1228,9 @@ $(function() {
                         list.find('.aquatic-resource-custom-input').val('');
                         list.find('.aquatic-resource-quantity-input').val('');
                         list.find('.aquatic-resource-field').addClass('d-none');
+                        list.find('.aquatic-resource-enabled-input').val('');
+                        list.find('.aquatic-resource-enabled-choice').prop('checked', false);
+                        list.find('.aquatic-resource-followup').removeClass('is-visible');
                         syncClassificationTargets();
                         reindexTargetEntries();
                         return;
@@ -1236,6 +1259,11 @@ $(function() {
                 });
                 $(document).on('input.targetModal change.targetModal', '.binhi-target-quantity-input', function() {
                     syncBinhiTypeTargetTotals();
+                });
+                $(document).on('change.targetModal', '.aquatic-resource-enabled-choice', function() {
+                    const $row = $(this).closest('.target-entry-item');
+                    $row.find('.aquatic-resource-enabled-input').val($(this).val());
+                    syncAquaticResourceField($row);
                 });
                 $(document).on('change.targetModal', '.aquatic-resource-input', function() {
                     syncAquaticResourceField($(this).closest('.target-entry-item'));

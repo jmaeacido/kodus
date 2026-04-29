@@ -11,6 +11,7 @@ use PHPMailer\PHPMailer\Exception;
 require_once __DIR__ . '/../mail_config.php';
 require_once __DIR__ . '/../notification_helpers.php';
 require_once __DIR__ . '/../role_change_helpers.php';
+require_once __DIR__ . '/../socket_helpers.php';
 
 $adminId = $_SESSION['user_id'] ?? null;
 $userIdToDeactivate = isset($_POST['user_id']) ? (int) $_POST['user_id'] : 0;
@@ -80,6 +81,14 @@ role_change_schedule(
     'deactivated',
     'Your account has been deactivated by an administrator. You will be signed out so this change can take effect.'
 );
+
+$roleChangeState = role_change_get_state($conn, $userIdToDeactivate);
+if ($roleChangeState) {
+    kodus_socket_broadcast('kodus.session', 'role.changed', [
+        'user_id' => $userIdToDeactivate,
+        'state' => $roleChangeState,
+    ]);
+}
 
 $action = 'Admin Deactivated Account';
 $details = 'Updated user ID ' . $userIdToDeactivate . ' (' . $user['email'] . ') | Changes: ' . audit_format_field_changes(

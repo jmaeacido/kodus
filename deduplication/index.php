@@ -334,6 +334,7 @@ $dedupGeneratedFiles = dedup_template_list_outputs(
   if (window.KODUSLiveRefresh) {
       window.KODUSLiveRefresh.watch({
           channels: ['deduplication_recent_table'],
+          allowPollingFallback: true,
           onChange: loadRecentDeduplications
       });
   }

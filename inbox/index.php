@@ -38,6 +38,8 @@ if ($userType === 'admin') {
                sender_user.sso_avatar_url AS sender_sso_avatar_url,
                sender_user.last_activity AS sender_last_activity,
                sender_user.is_online AS sender_is_online,
+               current_member.muted_at AS current_member_muted_at,
+               current_member.left_at AS current_member_left_at,
                (
                    SELECT GROUP_CONCAT(DISTINCT u.username ORDER BY u.username SEPARATOR ', ')
                    FROM contact_message_recipients cmr
@@ -85,7 +87,11 @@ if ($userType === 'admin') {
         LEFT JOIN users sender_user ON sender_user.email = cm.user_email
         LEFT JOIN message_reads mr
             ON cm.id = mr.message_id AND mr.user_id = ?
+        LEFT JOIN contact_message_recipients current_member
+            ON current_member.message_id = cm.id AND current_member.user_id = ?
         WHERE (
+            COALESCE(cm.conversation_type, 'direct') = 'group'
+            OR
             cm.user_email IN (SELECT email FROM users WHERE id = ?)
             OR EXISTS (
                 SELECT 1
@@ -96,9 +102,10 @@ if ($userType === 'admin') {
             )
         )
           AND {$trashPredicate}
+          AND " . mailboxVisibilityPredicate((int) $userId, 'cm', 'mr') . "
         ORDER BY latest_activity_at DESC, cm.id DESC
     ");
-    $stmt->bind_param("ii", $userId, $userId);
+    $stmt->bind_param("iii", $userId, $userId, $userId);
 } else {
     $userEmail = $_SESSION['email'] ?? '';
     $stmt = $conn->prepare("
@@ -109,6 +116,8 @@ if ($userType === 'admin') {
                sender_user.sso_avatar_url AS sender_sso_avatar_url,
                sender_user.last_activity AS sender_last_activity,
                sender_user.is_online AS sender_is_online,
+               current_member.muted_at AS current_member_muted_at,
+               current_member.left_at AS current_member_left_at,
                (
                    SELECT GROUP_CONCAT(DISTINCT u.username ORDER BY u.username SEPARATOR ', ')
                    FROM contact_message_recipients cmr
@@ -156,6 +165,8 @@ if ($userType === 'admin') {
         LEFT JOIN users sender_user ON sender_user.email = cm.user_email
         LEFT JOIN message_reads mr
             ON cm.id = mr.message_id AND mr.user_id = ?
+        LEFT JOIN contact_message_recipients current_member
+            ON current_member.message_id = cm.id AND current_member.user_id = ?
         WHERE (cm.user_email = ?
            OR cm.user_name = ?
            OR EXISTS (
@@ -163,11 +174,13 @@ if ($userType === 'admin') {
                FROM contact_message_recipients cmr
                WHERE cmr.message_id = cm.id
                  AND LOWER(cmr.recipient_email) = LOWER(?)
-           ))
+           )
+           OR COALESCE(cm.conversation_type, 'direct') = 'group')
           AND {$trashPredicate}
+          AND " . mailboxVisibilityPredicate((int) $userId, 'cm', 'mr') . "
         ORDER BY latest_activity_at DESC, cm.id DESC
     ");
-    $stmt->bind_param("isss", $userId, $userEmail, $currentUsername, $userEmail);
+    $stmt->bind_param("iisss", $userId, $userId, $userEmail, $currentUsername, $userEmail);
 }
 
 $stmt->execute();
@@ -184,7 +197,9 @@ $latestPreviews = mailboxLatestThreadPreviews(
 $messageCount = count($messages);
 $unreadCount = 0;
 foreach ($messages as $message) {
-    if ((int) ($message['user_read'] ?? 0) === 0) {
+    $isMutedOrLeftGroup = mailboxIsGroupThread($message)
+        && (!empty($message['current_member_muted_at']) || !empty($message['current_member_left_at']));
+    if (!$isMutedOrLeftGroup && (int) ($message['user_read'] ?? 0) === 0) {
         $unreadCount++;
     }
 }
@@ -197,6 +212,8 @@ if ($userType === 'admin') {
         LEFT JOIN message_reads mr
             ON cm.id = mr.message_id AND mr.user_id = ?
         WHERE (
+            COALESCE(cm.conversation_type, 'direct') = 'group'
+            OR
             cm.user_email IN (SELECT email FROM users WHERE id = ?)
             OR EXISTS (
                 SELECT 1
@@ -207,6 +224,7 @@ if ($userType === 'admin') {
             )
         )
           AND COALESCE(mr.is_trashed, 0) = 1
+          AND " . mailboxVisibilityPredicate((int) $userId, 'cm', 'mr') . "
     ");
     $trashCountStmt->bind_param("ii", $userId, $userId);
 } else {
@@ -221,8 +239,9 @@ if ($userType === 'admin') {
             FROM contact_message_recipients cmr
             WHERE cmr.message_id = cm.id
               AND LOWER(cmr.recipient_email) = LOWER(?)
-        ))
+        ) OR COALESCE(cm.conversation_type, 'direct') = 'group')
           AND COALESCE(mr.is_trashed, 0) = 1
+          AND " . mailboxVisibilityPredicate((int) $userId, 'cm', 'mr') . "
     ");
     $trashCountStmt->bind_param("isss", $userId, $userEmail, $currentUsername, $userEmail);
 }
@@ -281,8 +300,12 @@ $composeCsrfToken = security_get_csrf_token();
 
     body.dark-mode .mailbox-app,
     body.dark-mode .compose-modal,
+    body.dark-mode #groupMembersModal,
+    body.dark-mode.messenger-page .swal2-popup,
     body[data-theme="dark"] .mailbox-app,
-    body[data-theme="dark"] .compose-modal {
+    body[data-theme="dark"] .compose-modal,
+    body[data-theme="dark"] #groupMembersModal,
+    body[data-theme="dark"].messenger-page .swal2-popup {
       --mailbox-surface: #1f2a37;
       --mailbox-surface-muted: #243140;
       --mailbox-surface-elevated: #223041;
@@ -307,6 +330,26 @@ $composeCsrfToken = security_get_csrf_token();
       --messenger-bubble-mine: linear-gradient(135deg, #2563eb, #7c3aed);
       --messenger-success: #31a24c;
       --messenger-shadow: 0 24px 56px rgba(0, 0, 0, 0.28);
+    }
+
+    body.messenger-page .swal2-popup {
+      --mailbox-surface: #ffffff;
+      --mailbox-surface-muted: #f8fafc;
+      --mailbox-surface-elevated: #ffffff;
+      --mailbox-border: #d9e2ec;
+      --mailbox-border-strong: #c7d2e0;
+      --mailbox-text: #1f2937;
+      --mailbox-text-muted: #64748b;
+      --mailbox-accent-soft: rgba(13, 110, 253, 0.1);
+      --mailbox-accent-strong: #2563eb;
+      --mailbox-shadow: 0 16px 36px rgba(15, 23, 42, 0.08);
+      --messenger-panel: #ffffff;
+      --messenger-panel-strong: #f8fafc;
+      --messenger-divider: rgba(15, 23, 42, 0.08);
+      --messenger-text: #18212f;
+      --messenger-muted: #667085;
+      --messenger-accent-soft: rgba(35, 116, 225, 0.14);
+      --messenger-chip: rgba(15, 23, 42, 0.06);
     }
 
     body.dark-mode .mailbox-app .mailbox-read-info,
@@ -431,6 +474,18 @@ $composeCsrfToken = security_get_csrf_token();
       font-weight: 800;
       letter-spacing: 0.02em;
       vertical-align: middle;
+    }
+
+    .mailbox-app .mailbox-chat-badge--muted {
+      background: color-mix(in srgb, #f59e0b 16%, var(--mailbox-surface));
+      border: 1px solid color-mix(in srgb, #f59e0b 28%, var(--mailbox-border));
+      color: color-mix(in srgb, #d97706 78%, var(--mailbox-text));
+    }
+
+    .mailbox-app .mailbox-chat-badge--left {
+      background: color-mix(in srgb, var(--mailbox-text-muted) 14%, var(--mailbox-surface));
+      border: 1px solid color-mix(in srgb, var(--mailbox-text-muted) 28%, var(--mailbox-border));
+      color: var(--mailbox-text-muted);
     }
 
     .mailbox-app .mailbox-name {
@@ -820,6 +875,75 @@ $composeCsrfToken = security_get_csrf_token();
       flex-wrap: wrap;
     }
 
+    .mailbox-app .chat-thread-options {
+      margin-left: auto;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      z-index: 35;
+    }
+
+    .mailbox-app .chat-thread-options-btn {
+      width: 38px;
+      height: 38px;
+      border-radius: 999px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+      border: 1px solid transparent;
+      color: var(--messenger-muted);
+      background: transparent;
+    }
+
+    .mailbox-app .chat-thread-options-btn:hover,
+    .mailbox-app .chat-thread-options-btn:focus {
+      color: var(--messenger-text);
+      background: var(--messenger-chip);
+      border-color: var(--messenger-divider);
+      box-shadow: none;
+    }
+
+    .mailbox-app .chat-thread-options-menu,
+    .mailbox-app .messenger-compose-menu {
+      background: var(--mailbox-surface-elevated);
+      border: 1px solid var(--messenger-divider, #dee2e6);
+      border-radius: 0.5rem;
+      box-shadow: 0 14px 34px color-mix(in srgb, var(--messenger-text) 16%, transparent);
+      color: var(--mailbox-text);
+      z-index: 1040;
+    }
+
+    .mailbox-app .chat-thread-options-menu .dropdown-item,
+    .mailbox-app .messenger-compose-menu .dropdown-item {
+      align-items: center;
+      background: transparent;
+      color: var(--mailbox-text);
+      display: flex;
+      font-weight: 600;
+      gap: 0.25rem;
+    }
+
+    .mailbox-app .chat-thread-options-menu .dropdown-item:hover,
+    .mailbox-app .chat-thread-options-menu .dropdown-item:focus,
+    .mailbox-app .messenger-compose-menu .dropdown-item:hover,
+    .mailbox-app .messenger-compose-menu .dropdown-item:focus {
+      background: color-mix(in srgb, var(--mailbox-accent-soft) 88%, var(--mailbox-surface-elevated));
+      color: var(--mailbox-text);
+      outline: none;
+    }
+
+    .mailbox-app .chat-thread-options-menu .dropdown-item.text-danger,
+    .mailbox-app .messenger-compose-menu .dropdown-item.text-danger {
+      color: color-mix(in srgb, #dc3545 78%, var(--mailbox-text)) !important;
+    }
+
+    .mailbox-app .chat-thread-options-menu .dropdown-divider,
+    .mailbox-app .messenger-compose-menu .dropdown-divider {
+      border-top-color: var(--mailbox-border);
+    }
+
     .mailbox-app .chat-thread-kicker {
       margin: 0 0 0.35rem;
       font-size: 0.74rem;
@@ -871,6 +995,28 @@ $composeCsrfToken = security_get_csrf_token();
       color: var(--mailbox-text-muted);
       font-size: 0.82rem;
       font-weight: 600;
+    }
+
+    .mailbox-app .conversation-scroll > .chat-typing-indicator.reply.theirs {
+      display: flex;
+      align-items: center;
+      gap: 0.55rem;
+      width: fit-content;
+      min-width: 0;
+      max-width: min(48%, 320px);
+      margin: 0 0 1rem 0;
+      padding: 0.65rem 0.85rem;
+      border-radius: 1.1rem;
+      border-bottom-left-radius: 0.35rem;
+      background: var(--messenger-bubble, color-mix(in srgb, var(--mailbox-surface) 92%, transparent));
+      border: 1px solid var(--messenger-divider, var(--mailbox-border));
+      color: var(--messenger-text, var(--mailbox-text));
+      box-shadow: 0 8px 22px color-mix(in srgb, var(--messenger-text, var(--mailbox-text)) 8%, transparent);
+      clear: both;
+    }
+
+    .mailbox-app .conversation-scroll > .chat-typing-indicator[hidden] {
+      display: none !important;
     }
 
     .mailbox-app .chat-typing-dots {
@@ -1120,7 +1266,7 @@ $composeCsrfToken = security_get_csrf_token();
       box-shadow: 0 18px 42px rgba(0, 0, 0, 0.28);
       display: block;
       z-index: 1075;
-      color: var(--messenger-text);
+      color: var(--messenger-text, #212529);
       backdrop-filter: blur(12px);
     }
 
@@ -1164,7 +1310,7 @@ $composeCsrfToken = security_get_csrf_token();
       justify-content: space-between;
       gap: 0.5rem;
       margin-bottom: 0.5rem;
-      color: var(--messenger-muted);
+      color: var(--messenger-muted, #6c757d);
       font-size: 0.74rem;
       font-weight: 800;
       letter-spacing: 0.02em;
@@ -1325,10 +1471,56 @@ $composeCsrfToken = security_get_csrf_token();
       line-height: 1;
     }
 
+    .mailbox-app .chat-reaction-chip,
+    .mailbox-app .chat-reaction-add,
+    .mailbox-app .chat-reaction-trigger,
+    .compose-modal .compose-tool-btn {
+      transition: background-color 0.16s ease, border-color 0.16s ease, color 0.16s ease, box-shadow 0.16s ease;
+    }
+
+    .mailbox-app .chat-reaction-chip:hover,
+    .mailbox-app .chat-reaction-chip:focus,
+    .mailbox-app .chat-reaction-add:hover,
+    .mailbox-app .chat-reaction-add:focus,
+    .mailbox-app .chat-reaction-trigger:hover,
+    .mailbox-app .chat-reaction-trigger:focus {
+      background: color-mix(in srgb, var(--mailbox-accent-soft) 78%, var(--mailbox-surface));
+      border-color: color-mix(in srgb, var(--mailbox-accent-strong) 42%, var(--mailbox-border));
+      color: var(--mailbox-text);
+      outline: none;
+    }
+
     .mailbox-app .chat-reaction-chip.is-active {
       border-color: rgba(37, 99, 235, 0.36);
       background: linear-gradient(135deg, rgba(37, 99, 235, 0.16), rgba(15, 118, 110, 0.14));
       color: color-mix(in srgb, var(--mailbox-text) 30%, #2563eb 70%);
+    }
+
+    .mailbox-app .chat-reaction-chip[data-reaction-details] {
+      position: relative;
+    }
+
+    .mailbox-app .chat-reaction-chip[data-reaction-details]:hover::after,
+    .mailbox-app .chat-reaction-chip[data-reaction-details]:focus::after {
+      content: attr(data-reaction-details);
+      position: absolute;
+      left: 50%;
+      bottom: calc(100% + 0.45rem);
+      transform: translateX(-50%);
+      max-width: min(260px, 80vw);
+      width: max-content;
+      padding: 0.4rem 0.55rem;
+      border-radius: 0.45rem;
+      border: 1px solid var(--mailbox-border);
+      background: var(--mailbox-surface-elevated);
+      color: var(--mailbox-text);
+      box-shadow: var(--mailbox-shadow);
+      font-size: 0.78rem;
+      font-weight: 600;
+      line-height: 1.25;
+      pointer-events: none;
+      white-space: normal;
+      z-index: 30;
     }
 
     .mailbox-app .chat-reaction-add,
@@ -1356,18 +1548,166 @@ $composeCsrfToken = security_get_csrf_token();
       width: 214px;
       padding: 0.6rem;
       border-radius: 0.85rem;
-      background: var(--messenger-panel-strong);
-      border: 1px solid var(--messenger-divider);
+      background: var(--mailbox-surface-elevated);
+      border: 1px solid var(--mailbox-border);
       box-shadow: 0 12px 28px color-mix(in srgb, var(--messenger-text) 14%, transparent);
       display: grid;
       grid-template-columns: repeat(5, minmax(0, 1fr));
       gap: 0.35rem;
-      z-index: 20;
-      color: var(--messenger-text);
+      z-index: 25;
+      color: var(--mailbox-text);
     }
 
     .mailbox-app .chat-reaction-picker[hidden] {
       display: none;
+    }
+
+    .group-members-list {
+      display: grid;
+      gap: 0.65rem;
+      max-height: min(62vh, 520px);
+      overflow-y: auto;
+      padding-right: 0.2rem;
+    }
+
+    #groupMembersModal .modal-content {
+      background: linear-gradient(180deg, var(--mailbox-surface) 0%, var(--mailbox-surface-muted) 100%);
+      border: 1px solid var(--mailbox-border);
+      border-radius: 1rem;
+      box-shadow: var(--mailbox-shadow);
+      color: var(--mailbox-text);
+      overflow: hidden;
+    }
+
+    #groupMembersModal .modal-header,
+    #groupMembersModal .modal-footer {
+      background: color-mix(in srgb, var(--mailbox-surface) 92%, transparent);
+      border-color: var(--mailbox-border);
+    }
+
+    #groupMembersModal .modal-title {
+      color: var(--mailbox-text);
+      font-weight: 800;
+    }
+
+    #groupMembersModal .text-muted {
+      color: var(--mailbox-text-muted) !important;
+    }
+
+    #groupMembersModal .close {
+      color: var(--mailbox-text);
+      opacity: 0.78;
+      text-shadow: none;
+    }
+
+    #groupMembersModal .close:hover,
+    #groupMembersModal .close:focus {
+      color: var(--mailbox-text);
+      opacity: 1;
+      outline: none;
+    }
+
+    .group-member-row {
+      align-items: center;
+      background: color-mix(in srgb, var(--mailbox-surface) 94%, transparent);
+      border: 1px solid var(--messenger-divider);
+      border-radius: 0.65rem;
+      display: flex;
+      gap: 0.75rem;
+      padding: 0.65rem 0.75rem;
+    }
+
+    .group-member-row:hover {
+      background: color-mix(in srgb, var(--mailbox-accent-soft) 42%, var(--mailbox-surface));
+      border-color: color-mix(in srgb, var(--mailbox-accent-strong) 24%, var(--mailbox-border));
+    }
+
+    .group-member-avatar {
+      border-radius: 50%;
+      flex: 0 0 42px;
+      height: 42px;
+      object-fit: cover;
+      width: 42px;
+    }
+
+    .group-member-main {
+      min-width: 0;
+      flex: 1 1 auto;
+    }
+
+    .group-member-name,
+    .group-member-email {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .group-member-name {
+      color: var(--messenger-text);
+      font-weight: 700;
+    }
+
+    .group-member-email {
+      color: var(--messenger-muted);
+      font-size: 0.82rem;
+    }
+
+    .group-member-badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.3rem;
+      margin-top: 0.35rem;
+    }
+
+    .group-member-badges .badge {
+      border: 1px solid transparent;
+      font-weight: 700;
+    }
+
+    .group-member-badges .badge-info {
+      background: color-mix(in srgb, var(--mailbox-accent-strong) 16%, var(--mailbox-surface));
+      border-color: color-mix(in srgb, var(--mailbox-accent-strong) 28%, var(--mailbox-border));
+      color: color-mix(in srgb, var(--mailbox-accent-strong) 82%, var(--mailbox-text));
+    }
+
+    .group-member-badges .badge-success {
+      background: color-mix(in srgb, var(--messenger-success) 16%, var(--mailbox-surface));
+      border-color: color-mix(in srgb, var(--messenger-success) 30%, var(--mailbox-border));
+      color: color-mix(in srgb, var(--messenger-success) 72%, var(--mailbox-text));
+    }
+
+    .group-member-badges .badge-warning {
+      background: color-mix(in srgb, #f59e0b 18%, var(--mailbox-surface));
+      border-color: color-mix(in srgb, #f59e0b 32%, var(--mailbox-border));
+      color: color-mix(in srgb, #d97706 78%, var(--mailbox-text));
+    }
+
+    .group-member-badges .badge-secondary {
+      background: color-mix(in srgb, var(--mailbox-text-muted) 14%, var(--mailbox-surface));
+      border-color: color-mix(in srgb, var(--mailbox-text-muted) 28%, var(--mailbox-border));
+      color: var(--mailbox-text-muted);
+    }
+
+    #groupMembersModal .btn-default,
+    #groupMembersModal .btn-outline-danger,
+    body.messenger-page .swal2-popup .btn-default {
+      background: color-mix(in srgb, var(--mailbox-surface) 94%, transparent);
+      border-color: var(--mailbox-border);
+      color: var(--mailbox-text);
+    }
+
+    #groupMembersModal .btn-default:hover,
+    #groupMembersModal .btn-default:focus,
+    #groupMembersModal .btn-outline-danger:hover,
+    #groupMembersModal .btn-outline-danger:focus {
+      background: color-mix(in srgb, var(--mailbox-accent-soft) 68%, var(--mailbox-surface));
+      border-color: color-mix(in srgb, var(--mailbox-accent-strong) 34%, var(--mailbox-border));
+      color: var(--mailbox-text);
+      box-shadow: none;
+    }
+
+    #groupMembersModal .btn-outline-danger {
+      color: color-mix(in srgb, #dc3545 78%, var(--mailbox-text));
     }
 
     .mailbox-app .chat-search-hit {
@@ -1398,6 +1738,16 @@ $composeCsrfToken = security_get_csrf_token();
       background: linear-gradient(180deg, var(--mailbox-surface) 0%, var(--mailbox-surface-muted) 100%);
       box-shadow: var(--mailbox-shadow);
       overflow: hidden;
+    }
+
+    .compose-modal .modal-content,
+    .compose-modal .modal-body,
+    .compose-modal .modal-footer {
+      color: var(--mailbox-text);
+    }
+
+    .compose-modal .text-muted {
+      color: var(--mailbox-text-muted) !important;
     }
 
     .compose-modal #composeForm {
@@ -1509,6 +1859,23 @@ $composeCsrfToken = security_get_csrf_token();
       box-shadow: none;
     }
 
+    .compose-modal .compose-field .form-control::placeholder,
+    .compose-modal .compose-body .form-control::placeholder,
+    .mailbox-app .chat-reply-textarea::placeholder {
+      color: color-mix(in srgb, var(--mailbox-text-muted) 76%, transparent);
+      opacity: 1;
+    }
+
+    .compose-modal .form-control:disabled,
+    .compose-modal .form-control[readonly],
+    #groupMembersModal .btn:disabled,
+    .mailbox-app .chat-reaction-chip:disabled,
+    .mailbox-app .chat-reaction-add:disabled,
+    .mailbox-app .chat-reaction-trigger:disabled {
+      cursor: not-allowed;
+      opacity: 0.62;
+    }
+
     .compose-modal .compose-field .form-control:focus,
     .compose-modal .compose-body .form-control:focus {
       border-color: color-mix(in srgb, var(--mailbox-accent-strong) 55%, var(--mailbox-border));
@@ -1618,7 +1985,8 @@ $composeCsrfToken = security_get_csrf_token();
     }
 
     .mailbox-app .select2-container--bootstrap4 .select2-selection,
-    .compose-modal .select2-container--bootstrap4 .select2-selection {
+    .compose-modal .select2-container--bootstrap4 .select2-selection,
+    body.messenger-page .swal2-popup .select2-container--bootstrap4 .select2-selection {
       min-height: 48px;
       border-radius: 0.95rem;
       border-color: var(--mailbox-border);
@@ -1628,7 +1996,8 @@ $composeCsrfToken = security_get_csrf_token();
     }
 
     .mailbox-app .select2-container--bootstrap4.select2-container--focus .select2-selection,
-    .compose-modal .select2-container--bootstrap4.select2-container--focus .select2-selection {
+    .compose-modal .select2-container--bootstrap4.select2-container--focus .select2-selection,
+    body.messenger-page .swal2-popup .select2-container--bootstrap4.select2-container--focus .select2-selection {
       border-color: color-mix(in srgb, var(--mailbox-accent-strong) 55%, var(--mailbox-border));
       box-shadow: 0 0 0 0.22rem color-mix(in srgb, var(--mailbox-accent-soft) 88%, transparent);
     }
@@ -1636,17 +2005,21 @@ $composeCsrfToken = security_get_csrf_token();
     .mailbox-app .select2-container--bootstrap4 .select2-selection__rendered,
     .mailbox-app .select2-container--bootstrap4 .select2-selection__placeholder,
     .compose-modal .select2-container--bootstrap4 .select2-selection__rendered,
-    .compose-modal .select2-container--bootstrap4 .select2-selection__placeholder {
+    .compose-modal .select2-container--bootstrap4 .select2-selection__placeholder,
+    body.messenger-page .swal2-popup .select2-container--bootstrap4 .select2-selection__rendered,
+    body.messenger-page .swal2-popup .select2-container--bootstrap4 .select2-selection__placeholder {
       color: var(--mailbox-text);
     }
 
     .mailbox-app .select2-container--bootstrap4 .select2-selection__placeholder,
-    .compose-modal .select2-container--bootstrap4 .select2-selection__placeholder {
+    .compose-modal .select2-container--bootstrap4 .select2-selection__placeholder,
+    body.messenger-page .swal2-popup .select2-container--bootstrap4 .select2-selection__placeholder {
       opacity: 0.78;
     }
 
     .mailbox-app .select2-container--bootstrap4 .select2-selection--multiple .select2-selection__rendered,
-    .compose-modal .select2-container--bootstrap4 .select2-selection--multiple .select2-selection__rendered {
+    .compose-modal .select2-container--bootstrap4 .select2-selection--multiple .select2-selection__rendered,
+    body.messenger-page .swal2-popup .select2-container--bootstrap4 .select2-selection--multiple .select2-selection__rendered {
       display: flex;
       flex-wrap: wrap;
       gap: 0.45rem;
@@ -1654,7 +2027,8 @@ $composeCsrfToken = security_get_csrf_token();
     }
 
     .mailbox-app .select2-container--bootstrap4 .select2-selection--multiple .select2-selection__choice,
-    .compose-modal .select2-container--bootstrap4 .select2-selection--multiple .select2-selection__choice {
+    .compose-modal .select2-container--bootstrap4 .select2-selection--multiple .select2-selection__choice,
+    body.messenger-page .swal2-popup .select2-container--bootstrap4 .select2-selection--multiple .select2-selection__choice {
       display: inline-flex;
       align-items: center;
       gap: 0.35rem;
@@ -1672,7 +2046,8 @@ $composeCsrfToken = security_get_csrf_token();
     }
 
     .mailbox-app .select2-container--bootstrap4 .select2-selection--multiple .select2-selection__choice__remove,
-    .compose-modal .select2-container--bootstrap4 .select2-selection--multiple .select2-selection__choice__remove {
+    .compose-modal .select2-container--bootstrap4 .select2-selection--multiple .select2-selection__choice__remove,
+    body.messenger-page .swal2-popup .select2-container--bootstrap4 .select2-selection--multiple .select2-selection__choice__remove {
       color: var(--mailbox-text-muted);
       margin: 0 0.15rem 0 0;
       font-size: 0.8rem;
@@ -1680,7 +2055,8 @@ $composeCsrfToken = security_get_csrf_token();
     }
 
     .mailbox-app .select2-container--bootstrap4 .select2-selection--multiple .select2-search__field,
-    .compose-modal .select2-container--bootstrap4 .select2-selection--multiple .select2-search__field {
+    .compose-modal .select2-container--bootstrap4 .select2-selection--multiple .select2-search__field,
+    body.messenger-page .swal2-popup .select2-container--bootstrap4 .select2-selection--multiple .select2-search__field {
       color: var(--mailbox-text);
       background: transparent;
       caret-color: var(--mailbox-accent-strong);
@@ -1688,7 +2064,8 @@ $composeCsrfToken = security_get_csrf_token();
     }
 
     .mailbox-app .select2-container--bootstrap4 .select2-dropdown,
-    .compose-modal .select2-container--bootstrap4 .select2-dropdown {
+    .compose-modal .select2-container--bootstrap4 .select2-dropdown,
+    body.messenger-page .swal2-popup .select2-container--bootstrap4 .select2-dropdown {
       background: var(--mailbox-surface-elevated);
       border-color: var(--mailbox-border);
       color: var(--mailbox-text);
@@ -1696,14 +2073,16 @@ $composeCsrfToken = security_get_csrf_token();
     }
 
     .mailbox-app .select2-container--bootstrap4 .select2-search--dropdown,
-    .compose-modal .select2-container--bootstrap4 .select2-search--dropdown {
+    .compose-modal .select2-container--bootstrap4 .select2-search--dropdown,
+    body.messenger-page .swal2-popup .select2-container--bootstrap4 .select2-search--dropdown {
       padding: 0.55rem;
       background: var(--mailbox-surface-elevated);
       border-bottom: 1px solid var(--mailbox-border);
     }
 
     .mailbox-app .select2-container--bootstrap4 .select2-search--dropdown .select2-search__field,
-    .compose-modal .select2-container--bootstrap4 .select2-search--dropdown .select2-search__field {
+    .compose-modal .select2-container--bootstrap4 .select2-search--dropdown .select2-search__field,
+    body.messenger-page .swal2-popup .select2-container--bootstrap4 .select2-search--dropdown .select2-search__field {
       border-radius: 0.8rem;
       border: 1px solid var(--mailbox-border);
       background: color-mix(in srgb, var(--mailbox-surface) 92%, transparent);
@@ -1713,32 +2092,37 @@ $composeCsrfToken = security_get_csrf_token();
     }
 
     .mailbox-app .select2-container--bootstrap4 .select2-search--dropdown .select2-search__field:focus,
-    .compose-modal .select2-container--bootstrap4 .select2-search--dropdown .select2-search__field:focus {
+    .compose-modal .select2-container--bootstrap4 .select2-search--dropdown .select2-search__field:focus,
+    body.messenger-page .swal2-popup .select2-container--bootstrap4 .select2-search--dropdown .select2-search__field:focus {
       border-color: color-mix(in srgb, var(--mailbox-accent-strong) 55%, var(--mailbox-border));
       box-shadow: 0 0 0 0.2rem color-mix(in srgb, var(--mailbox-accent-soft) 88%, transparent);
     }
 
     .mailbox-app .select2-container--bootstrap4 .select2-results__option,
-    .compose-modal .select2-container--bootstrap4 .select2-results__option {
+    .compose-modal .select2-container--bootstrap4 .select2-results__option,
+    body.messenger-page .swal2-popup .select2-container--bootstrap4 .select2-results__option {
       color: var(--mailbox-text);
       background: transparent;
       padding: 0.6rem 0.8rem;
     }
 
     .mailbox-app .select2-container--bootstrap4 .select2-results__option[aria-selected="true"],
-    .compose-modal .select2-container--bootstrap4 .select2-results__option[aria-selected="true"] {
+    .compose-modal .select2-container--bootstrap4 .select2-results__option[aria-selected="true"],
+    body.messenger-page .swal2-popup .select2-container--bootstrap4 .select2-results__option[aria-selected="true"] {
       background: color-mix(in srgb, var(--mailbox-accent-soft) 78%, var(--mailbox-surface-elevated));
       color: var(--mailbox-text);
     }
 
     .mailbox-app .select2-container--bootstrap4 .select2-results__option--highlighted[aria-selected],
-    .compose-modal .select2-container--bootstrap4 .select2-results__option--highlighted[aria-selected] {
+    .compose-modal .select2-container--bootstrap4 .select2-results__option--highlighted[aria-selected],
+    body.messenger-page .swal2-popup .select2-container--bootstrap4 .select2-results__option--highlighted[aria-selected] {
       background: color-mix(in srgb, var(--mailbox-accent-soft) 92%, var(--mailbox-surface-elevated));
       color: var(--mailbox-text);
     }
 
     .mailbox-app .select2-container--bootstrap4 .select2-results__option--disabled,
-    .compose-modal .select2-container--bootstrap4 .select2-results__option--disabled {
+    .compose-modal .select2-container--bootstrap4 .select2-results__option--disabled,
+    body.messenger-page .swal2-popup .select2-container--bootstrap4 .select2-results__option--disabled {
       color: var(--mailbox-text-muted);
     }
 
@@ -1853,6 +2237,73 @@ $composeCsrfToken = security_get_csrf_token();
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+    }
+
+    body.messenger-page .swal2-container {
+      z-index: 2000;
+    }
+
+    body.messenger-page .swal2-popup {
+      background: linear-gradient(180deg, var(--mailbox-surface) 0%, var(--mailbox-surface-muted) 100%);
+      border: 1px solid var(--mailbox-border);
+      border-radius: 1rem;
+      box-shadow: var(--mailbox-shadow);
+      color: var(--mailbox-text);
+    }
+
+    body.messenger-page .swal2-title,
+    body.messenger-page .swal2-html-container,
+    body.messenger-page .swal2-content {
+      color: var(--mailbox-text);
+    }
+
+    body.messenger-page .swal2-html-container {
+      color: var(--mailbox-text-muted);
+    }
+
+    body.messenger-page .swal2-input,
+    body.messenger-page .swal2-file,
+    body.messenger-page .swal2-select,
+    body.messenger-page .swal2-textarea {
+      background: color-mix(in srgb, var(--mailbox-surface) 94%, transparent);
+      border: 1px solid var(--mailbox-border);
+      border-radius: 0.8rem;
+      box-shadow: none;
+      color: var(--mailbox-text);
+    }
+
+    body.messenger-page .swal2-input:focus,
+    body.messenger-page .swal2-file:focus,
+    body.messenger-page .swal2-select:focus,
+    body.messenger-page .swal2-textarea:focus {
+      border-color: color-mix(in srgb, var(--mailbox-accent-strong) 55%, var(--mailbox-border));
+      box-shadow: 0 0 0 0.2rem color-mix(in srgb, var(--mailbox-accent-soft) 88%, transparent);
+    }
+
+    body.messenger-page .swal2-validation-message {
+      background: color-mix(in srgb, #dc3545 10%, var(--mailbox-surface));
+      color: color-mix(in srgb, #dc3545 78%, var(--mailbox-text));
+      border: 1px solid color-mix(in srgb, #dc3545 24%, var(--mailbox-border));
+    }
+
+    body.messenger-page .swal2-styled:focus {
+      box-shadow: 0 0 0 0.2rem color-mix(in srgb, var(--mailbox-accent-soft) 88%, transparent);
+    }
+
+    body.messenger-page .swal2-confirm.swal2-styled {
+      background: var(--mailbox-accent-strong);
+      color: #fff;
+    }
+
+    body.messenger-page .swal2-deny.swal2-styled {
+      background: #dc3545;
+      color: #fff;
+    }
+
+    body.messenger-page .swal2-cancel.swal2-styled {
+      background: color-mix(in srgb, var(--mailbox-surface) 92%, transparent);
+      border: 1px solid var(--mailbox-border);
+      color: var(--mailbox-text);
     }
 
     .mailbox-app {
@@ -3042,10 +3493,17 @@ $composeCsrfToken = security_get_csrf_token();
     .mailbox-app .messenger-folder-row {
       display: flex;
       align-items: center;
+      flex-wrap: wrap;
       gap: 0.55rem;
       margin-bottom: 0.9rem;
-      overflow-x: auto;
+      overflow: visible;
       padding-bottom: 0.15rem;
+    }
+
+    .mailbox-app .messenger-compose-dropdown {
+      margin-left: auto;
+      position: relative;
+      z-index: 1040;
     }
 
     .mailbox-app .messenger-folder-pill {
@@ -3081,7 +3539,6 @@ $composeCsrfToken = security_get_csrf_token();
       border: 0;
       background: linear-gradient(135deg, color-mix(in srgb, var(--messenger-accent) 86%, #0f766e 14%), color-mix(in srgb, var(--messenger-accent) 72%, #1d4ed8 28%));
       color: #fff;
-      margin-left: auto;
       box-shadow: 0 10px 24px color-mix(in srgb, var(--messenger-accent) 28%, transparent);
     }
 
@@ -3096,6 +3553,23 @@ $composeCsrfToken = security_get_csrf_token();
       min-width: 2.35rem;
       padding-inline: 0;
       justify-content: center;
+    }
+
+    .mailbox-app .messenger-compose-menu {
+      min-width: 12rem;
+      max-height: none;
+      overflow: visible;
+      padding: 0.35rem;
+      right: 0;
+      left: auto;
+      top: calc(100% + 0.4rem) !important;
+    }
+
+    .mailbox-app .messenger-compose-menu .dropdown-item {
+      border-radius: 0.42rem;
+      min-height: 2.15rem;
+      padding: 0.5rem 0.65rem;
+      white-space: nowrap;
     }
 
     .mailbox-app .messenger-sidebar-summary {
@@ -3562,10 +4036,16 @@ $composeCsrfToken = security_get_csrf_token();
                       <span>Archive</span>
                       <span class="badge bg-secondary" id="sidebarTrashBadge"><?= $trashCount ?></span>
                     </a>
-                    <button type="button" class="messenger-folder-pill messenger-folder-pill--action messenger-compose-icon mailbox-compose-trigger" aria-label="New chat" title="New chat">
-                      <i class="fas fa-edit" aria-hidden="true"></i>
-                      <span class="sr-only">New chat</span>
-                    </button>
+                    <div class="dropdown messenger-compose-dropdown">
+                      <button type="button" class="messenger-folder-pill messenger-folder-pill--action messenger-compose-icon" id="messengerComposeMenu" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false" aria-label="Compose" title="Compose">
+                        <i class="fas fa-edit" aria-hidden="true"></i>
+                        <span class="sr-only">Compose</span>
+                      </button>
+                      <div class="dropdown-menu dropdown-menu-right messenger-compose-menu" aria-labelledby="messengerComposeMenu">
+                        <button type="button" class="dropdown-item mailbox-compose-trigger"><i class="fas fa-comment mr-2"></i>New Chat</button>
+                        <button type="button" class="dropdown-item group-compose-trigger"><i class="fas fa-users mr-2"></i>New Group Chat</button>
+                      </div>
+                    </div>
                   </div>
 
                   <div class="messenger-chip-row" role="tablist" aria-label="Conversation filters">
@@ -3629,20 +4109,25 @@ $composeCsrfToken = security_get_csrf_token();
                           <?php foreach ($messages as $row): ?>
                             <?php
                               $messageId = (int) $row['id'];
+                              $isGroupThread = mailboxIsGroupThread($row);
                               $recipientLabel = trim((string) ($row['recipient_names'] ?? ''));
                               $senderLabel = trim((string) ($row['user_name'] ?? ''));
                               if ($senderLabel === '') {
                                   $senderLabel = trim((string) ($row['user_email'] ?? 'Unknown'));
                               }
                               $isSenderView = !empty($_SESSION['email']) && strcasecmp((string) ($row['user_email'] ?? ''), (string) $_SESSION['email']) === 0;
-                              $displayLabel = $isSenderView
+                              $displayLabel = $isGroupThread
+                                  ? (trim((string) ($row['group_name'] ?? '')) !== '' ? (string) $row['group_name'] : 'Group chat')
+                                  : ($isSenderView
                                   ? ($recipientLabel !== '' ? $recipientLabel : 'Admin')
-                                  : $senderLabel;
+                                  : $senderLabel);
                               $name = htmlspecialchars($displayLabel);
-                              $displayPicture = $isSenderView ? ($row['recipient_picture'] ?? '') : ($row['sender_picture'] ?? '');
+                              $displayPicture = $isGroupThread ? '' : ($isSenderView ? ($row['recipient_picture'] ?? '') : ($row['sender_picture'] ?? ''));
                               $displaySsoAvatar = $isSenderView ? ($row['recipient_sso_avatar_url'] ?? '') : ($row['sender_sso_avatar_url'] ?? '');
-                              $avatarUrl = avatar_resolve_url($displayPicture, $displaySsoAvatar, $base_url, dirname(__DIR__));
-                              $presence = mailboxClassifyPresence(
+                              $avatarUrl = $isGroupThread && trim((string) ($row['group_photo'] ?? '')) !== ''
+                                  ? $base_url . 'inbox/uploads/group_photos/' . rawurlencode((string) $row['group_photo'])
+                                  : avatar_resolve_url($displayPicture, $displaySsoAvatar, $base_url, dirname(__DIR__));
+                              $presence = $isGroupThread ? ['detail' => 'Group chat', 'class' => 'online'] : mailboxClassifyPresence(
                                   $isSenderView ? ($row['recipient_last_activity'] ?? null) : ($row['sender_last_activity'] ?? null),
                                   (int) ($isSenderView ? ($row['recipient_is_online'] ?? 0) : ($row['sender_is_online'] ?? 0))
                               );
@@ -3659,7 +4144,16 @@ $composeCsrfToken = security_get_csrf_token();
                               $timestamp = $activityAt !== '' ? strtotime($activityAt) : false;
                               $dateLabel = $timestamp ? date('g:i A', $timestamp) : '';
                               $hasAttachment = !empty($row['attachment']);
-                              $rowClass = ((int) ($row['user_read'] ?? 0) === 0) ? 'unread' : '';
+                              $groupMuted = $isGroupThread && !empty($row['current_member_muted_at']);
+                              $groupLeft = $isGroupThread && !empty($row['current_member_left_at']);
+                              $rowClass = (!$groupMuted && !$groupLeft && (int) ($row['user_read'] ?? 0) === 0) ? 'unread' : '';
+                              $groupStateBadges = [];
+                              if ($groupMuted) {
+                                  $groupStateBadges[] = ['label' => 'Muted', 'class' => 'mailbox-chat-badge--muted'];
+                              }
+                              if ($groupLeft) {
+                                  $groupStateBadges[] = ['label' => 'Left', 'class' => 'mailbox-chat-badge--left'];
+                              }
                             ?>
                             <tr class="message-item <?= $rowClass ?>"
                                 data-id="<?= $messageId ?>"
@@ -3690,6 +4184,9 @@ $composeCsrfToken = security_get_csrf_token();
                               <td class="mailbox-subject">
                                 <?php if ($snippet !== ''): ?><span class="mailbox-snippet"><?= $snippet ?></span><?php endif; ?>
                                 <?php if ($hasAttachment): ?><span class="mailbox-chat-badge">Attachment</span><?php endif; ?>
+                                <?php foreach ($groupStateBadges as $badge): ?>
+                                  <span class="mailbox-chat-badge <?= htmlspecialchars($badge['class']) ?>"><?= htmlspecialchars($badge['label']) ?></span>
+                                <?php endforeach; ?>
                               </td>
                               <td class="mailbox-attachment text-center" style="width:40px;">
                                 <?php if ($hasAttachment): ?>
@@ -3746,6 +4243,60 @@ $composeCsrfToken = security_get_csrf_token();
           </section>
         </div>
       </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade compose-modal" id="groupComposeModal" tabindex="-1" aria-labelledby="groupComposeModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-content">
+      <form id="groupComposeForm" action="create_group_chat.php" method="POST" enctype="multipart/form-data">
+        <div class="modal-header">
+          <div>
+            <h5 class="modal-title" id="groupComposeModalLabel">Create group chat</h5>
+            <p class="compose-meta">Name the group and choose at least 2 members.</p>
+          </div>
+          <button type="button" class="close text-reset" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="compose-field">
+            <label for="groupComposeName">Group name</label>
+            <input type="text" name="group_name" id="groupComposeName" class="form-control" maxlength="255" required>
+          </div>
+          <div class="compose-field">
+            <label for="groupComposeMembers">Members</label>
+            <select name="members[]" id="groupComposeMembers" class="form-control" multiple required>
+              <?php foreach ($composeRecipients as $composeRecipient): ?>
+                <?php if ((int) $composeRecipient['id'] === (int) $userId) { continue; } ?>
+                <option
+                  value="user_<?php echo (int) $composeRecipient['id']; ?>"
+                  data-avatar="<?php echo htmlspecialchars($composeRecipient['avatar_url']); ?>"
+                  data-kind="user"
+                  data-name="<?php echo htmlspecialchars($composeRecipient['username']); ?>"
+                  data-email="<?php echo htmlspecialchars($composeRecipient['email']); ?>"
+                >
+                  <?php echo htmlspecialchars($composeRecipient['username']); ?>
+                </option>
+              <?php endforeach; ?>
+            </select>
+          </div>
+          <div class="compose-field">
+            <label for="groupComposePhoto">Group photo</label>
+            <input type="file" name="group_photo" id="groupComposePhoto" class="form-control" accept="image/jpeg,image/png,image/webp">
+          </div>
+          <div class="compose-body">
+            <label for="groupComposeMessage" class="mb-2">Opening message</label>
+            <textarea name="message" id="groupComposeMessage" class="form-control" rows="3" maxlength="5000"></textarea>
+          </div>
+          <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($composeCsrfToken, ENT_QUOTES) ?>">
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary"><i class="fas fa-users mr-1"></i> Create group</button>
+        </div>
+      </form>
     </div>
   </div>
 </div>
@@ -3838,6 +4389,35 @@ $composeCsrfToken = security_get_csrf_token();
   </div>
 </div>
 
+<div class="modal fade" id="groupMembersModal" tabindex="-1" aria-labelledby="groupMembersModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <div>
+          <h5 class="modal-title" id="groupMembersModalLabel">Group members</h5>
+          <p class="mb-0 text-muted small" id="groupMembersModalMeta">Members in this group chat</p>
+        </div>
+        <button type="button" class="close text-reset" data-dismiss="modal" data-bs-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div id="groupMembersList" class="group-members-list">
+          <div class="text-center text-muted py-4">
+            <i class="fas fa-spinner fa-spin mr-1"></i> Loading members...
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer justify-content-between">
+        <button type="button" class="btn btn-default" data-dismiss="modal" data-bs-dismiss="modal">Close</button>
+        <button type="button" class="btn btn-primary" id="groupMembersAddBtn" hidden>
+          <i class="fas fa-user-plus mr-1"></i> Add Member
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script src="<?php echo app_url('plugins/jquery/jquery.min.js'); ?>"></script>
 <script src="<?php echo app_url('plugins/bootstrap/js/bootstrap.bundle.min.js'); ?>"></script>
 <script src="<?php echo app_url('plugins/select2/js/select2.full.min.js'); ?>"></script>
@@ -3846,12 +4426,18 @@ $composeCsrfToken = security_get_csrf_token();
 
 <script>
 let lastOpenedId = null;
+window.KODUSActiveMessengerThreadId = null;
 let firstLoadDone = false;
 let typingHeartbeatTimer = null;
 let typingStopTimer = null;
 let lastTypingMessageId = null;
+let typingRefreshTimeout = null;
+let liveTypingUsers = {};
 let mailboxStateToken = null;
 let mailboxStatePollInFlight = false;
+const currentMessengerUserId = <?= json_encode(is_numeric($userId) ? (int) $userId : 0) ?>;
+window.currentUserId = String(currentMessengerUserId || '');
+window.activeThreadId = '';
 const currentMailboxFolder = <?= json_encode($currentFolder, JSON_UNESCAPED_SLASHES) ?>;
 const canReplyInCurrentFolder = currentMailboxFolder !== 'trash';
 const shouldOpenCompose = <?= $composeOpen ? 'true' : 'false' ?>;
@@ -4139,6 +4725,9 @@ function renderEmptyDetail() {
       </div>
     `);
     stopTypingHeartbeat();
+    clearTypingIndicator();
+    window.KODUSActiveMessengerThreadId = null;
+    window.activeThreadId = '';
     updateDetailTitle();
 }
 
@@ -4214,7 +4803,10 @@ function openMessage(id) {
     }
 
     stopTypingHeartbeat();
+    clearTypingIndicator();
     lastOpenedId = id;
+    window.KODUSActiveMessengerThreadId = Number(id) || null;
+    window.activeThreadId = String(id || '');
     firstLoadDone = false;
 
     $('.message-item').removeClass('active');
@@ -4320,8 +4912,30 @@ function scrollConversationToBottomOnOpen() {
     conv.scrollTop(conv[0].scrollHeight);
 }
 
+function isConversationNearBottom() {
+    const conv = $('#conversationWrapper .conversation-scroll');
+    if (!conv.length || !conv[0]) {
+        return true;
+    }
+
+    const node = conv[0];
+    return (node.scrollHeight - node.clientHeight - node.scrollTop) <= 96;
+}
+
 function escapeRegExp(value) {
     return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function escapeHtml(value) {
+    return String(value || '').replace(/[&<>"']/g, function(char) {
+        return {
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            '"': '&quot;',
+            "'": '&#039;'
+        }[char] || char;
+    });
 }
 
 function stopTypingHeartbeat() {
@@ -4344,6 +4958,143 @@ function stopTypingHeartbeat() {
         csrf_token: window.KODUS_CSRF_TOKEN
     });
     lastTypingMessageId = null;
+}
+
+function clearTypingIndicator() {
+    if (typingRefreshTimeout) {
+        clearTimeout(typingRefreshTimeout);
+        typingRefreshTimeout = null;
+    }
+    if (window.typingTimeout) {
+        clearTimeout(window.typingTimeout);
+        window.typingTimeout = null;
+    }
+    Object.values(liveTypingUsers).forEach(function(entry) {
+        if (entry && entry.timer) {
+            clearTimeout(entry.timer);
+        }
+    });
+    liveTypingUsers = {};
+    const el = document.getElementById('threadTypingIndicator');
+    if (el) {
+        el.hidden = true;
+        el.style.display = 'none';
+        console.log('KODUS typing indicator hidden', {
+            exists: true,
+            parent: el.parentElement ? el.parentElement.className : null
+        });
+    } else {
+        console.log('KODUS typing indicator hidden', { exists: false, parent: null });
+    }
+}
+
+function ensureTypingIndicatorPlacement() {
+    const conversation = document.querySelector('#conversationWrapper .conversation-scroll');
+    let el = document.getElementById('threadTypingIndicator');
+
+    console.log('KODUS typing indicator check', {
+        exists: !!el,
+        parent: el && el.parentElement ? el.parentElement.className : null
+    });
+
+    if (!conversation) {
+        return null;
+    }
+
+    if (!el) {
+        el = document.createElement('div');
+        el.id = 'threadTypingIndicator';
+        el.hidden = true;
+        el.style.display = 'none';
+    }
+
+    el.className = 'chat-typing-indicator reply theirs';
+    if (el.parentElement !== conversation) {
+        conversation.appendChild(el);
+    }
+
+    return el;
+}
+
+function renderLiveTypingIndicator() {
+    const el = ensureTypingIndicatorPlacement();
+    if (!el) {
+        return;
+    }
+
+    const names = Object.values(liveTypingUsers)
+        .map(function(entry) {
+            return String(entry.name || 'Someone').trim();
+        })
+        .filter(Boolean);
+
+    if (!names.length) {
+        el.hidden = true;
+        el.style.display = 'none';
+        return;
+    }
+
+    const copy = names.length === 1
+        ? `${names[0]} is typing...`
+        : `${names.slice(0, 2).join(', ')} are typing...`;
+    el.innerHTML = '<span class="chat-typing-dots"><span></span><span></span><span></span></span><span class="chat-typing-copy"></span>';
+    const copyEl = el.querySelector('.chat-typing-copy');
+    if (copyEl) {
+        copyEl.textContent = copy;
+    }
+    el.hidden = false;
+    el.style.display = 'flex';
+    console.log('KODUS typing indicator shown', {
+        exists: true,
+        parent: el.parentElement ? el.parentElement.className : null
+    });
+
+    const conversation = el.parentElement;
+    if (conversation) {
+        conversation.scrollTop = conversation.scrollHeight;
+    }
+}
+
+function showLiveTypingUser(userId, name) {
+    const key = String(userId || name || 'unknown');
+    if (liveTypingUsers[key]?.timer) {
+        clearTimeout(liveTypingUsers[key].timer);
+    }
+
+    liveTypingUsers[key] = {
+        name: String(name || 'Someone'),
+        timer: setTimeout(function() {
+            delete liveTypingUsers[key];
+            renderLiveTypingIndicator();
+        }, 3000)
+    };
+    renderLiveTypingIndicator();
+    clearTimeout(window.typingTimeout);
+    window.typingTimeout = setTimeout(function() {
+        const el = document.getElementById('threadTypingIndicator');
+        if (el) {
+            el.style.display = 'none';
+            el.hidden = true;
+            console.log('KODUS typing indicator hidden', {
+                exists: true,
+                parent: el.parentElement ? el.parentElement.className : null
+            });
+        }
+        liveTypingUsers = {};
+    }, 3000);
+}
+
+function hideLiveTypingUser(userId) {
+    const key = String(userId || 'unknown');
+    if (!liveTypingUsers[key]) {
+        return;
+    }
+
+    if (liveTypingUsers[key].timer) {
+        clearTimeout(liveTypingUsers[key].timer);
+    }
+    delete liveTypingUsers[key];
+    renderLiveTypingIndicator();
 }
 
 function sendTypingHeartbeat() {
@@ -4383,25 +5134,35 @@ function refreshTypingState() {
     const shell = $('#messageDetail .chat-shell');
     const indicator = $('#threadTypingIndicator');
     if (!shell.length || !lastOpenedId) {
-        indicator.attr('hidden', true);
+        clearTypingIndicator();
         return;
     }
 
     $.getJSON('get_typing_state.php', { message_id: lastOpenedId }, function(payload) {
         const typing = Array.isArray(payload?.typing) ? payload.typing : [];
         if (!typing.length) {
-            indicator.attr('hidden', true);
+            clearTypingIndicator();
             return;
         }
 
         const names = typing.map(function(entry) {
             return String(entry.username || 'Someone');
         });
+        Object.values(liveTypingUsers).forEach(function(entry) {
+            if (entry && entry.timer) {
+                clearTimeout(entry.timer);
+            }
+        });
+        liveTypingUsers = {};
         const copy = names.length === 1
             ? `${names[0]} is typing...`
             : `${names.slice(0, 2).join(', ')} are typing...`;
         indicator.find('.chat-typing-copy').text(copy);
         indicator.removeAttr('hidden');
+        if (typingRefreshTimeout) {
+            clearTimeout(typingRefreshTimeout);
+        }
+        typingRefreshTimeout = setTimeout(refreshTypingState, 12500);
     });
 }
 
@@ -4410,13 +5171,16 @@ function renderReactionSummary($container, summary) {
     const messageId = String($container.data('message-id') || '');
     const replyId = $container.attr('data-reply-id');
     const pickerEmojis = ['👍', '❤️', '😂', '🎉', '🔥', '👏', '🙏', '✅', '👀', '💡'];
+    const pickerEmojiChoices = ['👍', '❤️', '😂', '🎉', '🔥', '👏', '🙏', '✅', '👀', '💡'];
     const summaryHtml = summaryItems.map(function(item) {
         const emoji = String(item.emoji || '');
         const count = Number(item.count || 0);
         const active = item.reacted ? ' is-active' : '';
-        return `<button type="button" class="chat-reaction-chip${active}" data-emoji="${emoji}"><span class="chat-reaction-emoji">${emoji}</span><span class="chat-reaction-count">${count}</span></button>`;
+        const reactors = Array.isArray(item.reactors) ? item.reactors.filter(Boolean) : [];
+        const details = `${emoji} ${reactors.length ? reactors.join(', ') : 'No reactions yet'}`;
+        return `<button type="button" class="chat-reaction-chip${active}" data-emoji="${escapeReplyHtml(emoji)}" data-reaction-details="${escapeReplyHtml(details)}" aria-label="${escapeReplyHtml(details)}"><span class="chat-reaction-emoji">${escapeReplyHtml(emoji)}</span><span class="chat-reaction-count">${count}</span></button>`;
     }).join('');
-    const pickerHtml = pickerEmojis.map(function(emoji) {
+    const pickerHtml = pickerEmojiChoices.map(function(emoji) {
         return `<button type="button" class="chat-reaction-add" data-emoji="${emoji}">${emoji}</button>`;
     }).join('');
 
@@ -4531,8 +5295,6 @@ function initializeThreadExperience() {
             status.text('Search by keyword or phrase');
         }
     }
-
-    refreshTypingState();
 }
 
 function escapeReplyHtml(value) {
@@ -4668,6 +5430,475 @@ function confirmReplyDelete(replyId) {
         });
     });
 }
+
+function postConversationAction(messageId, action, extraData = null) {
+    const formData = extraData instanceof FormData ? extraData : new FormData();
+    formData.set('message_id', messageId);
+    formData.set('action', action);
+    formData.set('csrf_token', window.KODUS_CSRF_TOKEN);
+
+    return fetch('conversation_action.php', {
+        method: 'POST',
+        body: formData,
+        credentials: 'same-origin',
+        headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' }
+    }).then(response => response.json().then(payload => ({ response, payload })))
+      .then(({ response, payload }) => {
+          if (!response.ok || !payload.success) {
+              throw new Error(payload.error || 'Unable to update this conversation.');
+          }
+          return payload;
+      });
+}
+
+function resetActiveThreadUi() {
+    stopTypingHeartbeat();
+    clearTypingIndicator();
+    lastOpenedId = null;
+    window.KODUSActiveMessengerThreadId = null;
+    window.activeThreadId = '';
+    renderEmptyDetail();
+    setMobileMailboxView('list');
+}
+
+function showGroupEditDialog(messageId, currentName) {
+    Swal.fire({
+        title: 'Group details',
+        html: `
+            <input id="swalGroupName" class="swal2-input" placeholder="Group name" value="${escapeHtml(currentName || '')}">
+            <input id="swalGroupPhoto" class="swal2-file" type="file" accept="image/jpeg,image/png,image/webp">
+        `,
+        showCancelButton: true,
+        confirmButtonText: 'Save',
+        preConfirm: () => {
+            const name = String(document.getElementById('swalGroupName')?.value || '').trim();
+            if (!name) {
+                Swal.showValidationMessage('Group name is required.');
+                return false;
+            }
+            const data = new FormData();
+            data.set('group_name', name);
+            const file = document.getElementById('swalGroupPhoto')?.files?.[0];
+            if (file) {
+                data.set('group_photo', file);
+            }
+            return postConversationAction(messageId, 'update_group', data);
+        }
+    }).then(result => {
+        if (result.isConfirmed) {
+            refreshCurrentThread();
+            updateMessageList();
+        }
+    }).catch(error => Swal.fire('Not saved', error.message || 'Please try again.', 'error'));
+}
+
+function showConversationOptions(trigger) {
+    const messageId = Number(trigger.getAttribute('data-message-id') || 0);
+    const isGroup = trigger.getAttribute('data-is-group') === '1';
+    const isMuted = trigger.getAttribute('data-group-muted') === '1';
+    const hasLeft = trigger.getAttribute('data-group-left') === '1';
+    const groupName = trigger.getAttribute('data-group-name') || 'Group chat';
+    if (!messageId) {
+        return;
+    }
+
+    const buttons = [
+        '<button type="button" class="swal2-confirm swal2-styled" id="conversationDeleteBtn">Delete conversation</button>'
+    ];
+
+    if (isGroup && !hasLeft) {
+        buttons.unshift(`<button type="button" class="swal2-confirm swal2-styled" id="conversationMuteBtn">${isMuted ? 'Unmute group' : 'Mute group'}</button>`);
+        buttons.unshift('<button type="button" class="swal2-confirm swal2-styled" id="conversationEditGroupBtn">Edit group</button>');
+        buttons.push('<button type="button" class="swal2-deny swal2-styled" id="conversationLeaveBtn" style="display:inline-block;background:#dc3545;">Leave group</button>');
+    }
+    buttons.push('<button type="button" class="swal2-cancel swal2-styled" id="conversationCancelBtn">Cancel</button>');
+
+    Swal.fire({
+        title: 'Conversation options',
+        html: `<div class="d-flex flex-wrap justify-content-center" style="gap:0.5rem;">${buttons.join('')}</div>`,
+        showConfirmButton: false,
+        didOpen: () => {
+            const popup = Swal.getPopup();
+            popup.querySelector('#conversationCancelBtn')?.addEventListener('click', () => Swal.close());
+            popup.querySelector('#conversationEditGroupBtn')?.addEventListener('click', () => {
+                Swal.close();
+                showGroupEditDialog(messageId, groupName);
+            });
+            popup.querySelector('#conversationMuteBtn')?.addEventListener('click', () => {
+                Swal.close();
+                postConversationAction(messageId, isMuted ? 'unmute' : 'mute')
+                    .then(() => refreshCurrentThread())
+                    .catch(error => Swal.fire('Action failed', error.message, 'error'));
+            });
+            popup.querySelector('#conversationLeaveBtn')?.addEventListener('click', () => {
+                Swal.close();
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Leave this group?',
+                    text: 'You will stop receiving new group messages.',
+                    showCancelButton: true,
+                    confirmButtonText: 'Leave group',
+                    confirmButtonColor: '#dc3545'
+                }).then(result => {
+                    if (!result.isConfirmed) return;
+                    postConversationAction(messageId, 'leave')
+                        .then(() => {
+                            refreshCurrentThread();
+                            updateMessageList();
+                        })
+                        .catch(error => Swal.fire('Unable to leave', error.message, 'error'));
+                });
+            });
+            popup.querySelector('#conversationDeleteBtn')?.addEventListener('click', () => {
+                Swal.close();
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Delete conversation?',
+                    text: isGroup ? 'This removes the group from your chat list only.' : 'This hides the conversation for you only. The other person keeps their copy.',
+                    showCancelButton: true,
+                    confirmButtonText: 'Delete',
+                    confirmButtonColor: '#dc3545'
+                }).then(result => {
+                    if (!result.isConfirmed) return;
+                    postConversationAction(messageId, 'delete')
+                        .then(() => {
+                            $(`#messageList .message-item[data-id="${messageId}"]`).remove();
+                            resetActiveThreadUi();
+                            updateMessageList();
+                            updateUnreadCount();
+                        })
+                        .catch(error => Swal.fire('Unable to delete', error.message, 'error'));
+                });
+            });
+        }
+    });
+}
+
+$(document).on('click', '.conversation-options-trigger', function(e) {
+    e.stopPropagation();
+    closeReplyMenus();
+    closeReactionPickers();
+});
+
+function getConversationMenuTrigger(element) {
+    return $(element).closest('.chat-thread-options').find('.conversation-options-trigger').get(0);
+}
+
+function hideConversationDropdown(element) {
+    const $dropdown = $(element).closest('.dropdown');
+    const $trigger = $dropdown.find('[data-toggle="dropdown"]').first();
+    if ($trigger.length && typeof $trigger.dropdown === 'function') {
+        $trigger.dropdown('hide');
+    }
+}
+
+function showAddMemberDialog(messageId) {
+    const options = $('#groupComposeMembers option').map(function() {
+        return {
+            value: this.value,
+            label: $(this).text().trim()
+        };
+    }).get().filter(option => option.value && option.label);
+
+    if (!options.length) {
+        Swal.fire('No members available', 'There are no users available to add right now.', 'info');
+        return;
+    }
+
+    const optionsHtml = options.map(option => (
+        `<option value="${escapeReplyHtml(option.value)}">${escapeReplyHtml(option.label)}</option>`
+    )).join('');
+
+    Swal.fire({
+        title: 'Add member',
+        html: `<select id="swalGroupAddMembers" class="swal2-select" multiple style="min-height:12rem;width:100%;">${optionsHtml}</select>`,
+        showCancelButton: true,
+        confirmButtonText: 'Add member',
+        didOpen: () => {
+            const select = $('#swalGroupAddMembers');
+            if (window.jQuery && $.fn.select2) {
+                select.select2({
+                    theme: 'bootstrap4',
+                    width: '100%',
+                    dropdownParent: $(Swal.getPopup()),
+                    placeholder: 'Choose members'
+                });
+            }
+        },
+        preConfirm: () => {
+            const select = document.getElementById('swalGroupAddMembers');
+            const selected = Array.from(select?.selectedOptions || []).map(option => option.value);
+            if (!selected.length) {
+                Swal.showValidationMessage('Choose at least one member.');
+                return false;
+            }
+            const data = new FormData();
+            selected.forEach(value => data.append('members[]', value));
+            return postConversationAction(messageId, 'add_member', data);
+        }
+    }).then(result => {
+        if (result.isConfirmed) {
+            refreshGroupMembersModal(messageId);
+            refreshCurrentThread();
+            updateMessageList();
+        }
+    }).catch(error => Swal.fire('Member not added', error.message || 'Please try again.', 'error'));
+}
+
+let activeGroupMembersMessageId = null;
+
+function groupStatusBadgeClass(status) {
+    const normalized = String(status || '').toLowerCase();
+    if (normalized === 'left') {
+        return 'badge-secondary';
+    }
+    if (normalized === 'muted') {
+        return 'badge-warning';
+    }
+    return 'badge-success';
+}
+
+function renderGroupMembers(payload) {
+    const members = Array.isArray(payload?.members) ? payload.members : [];
+    const list = $('#groupMembersList');
+    $('#groupMembersModalLabel').text(payload?.group_name || 'Group members');
+    $('#groupMembersModalMeta').text(`${members.length} member${members.length === 1 ? '' : 's'} in this group chat`);
+    $('#groupMembersAddBtn').prop('hidden', !payload?.can_add_member).data('message-id', payload?.message_id || activeGroupMembersMessageId || 0);
+
+    if (!members.length) {
+        list.html('<div class="text-center text-muted py-4">No members found.</div>');
+        return;
+    }
+
+    list.html(members.map(function(member) {
+        const roles = Array.isArray(member.roles) ? member.roles : [];
+        const roleBadges = roles.map(role => `<span class="badge badge-info">${escapeReplyHtml(role)}</span>`).join('');
+        const status = String(member.status || 'Active');
+        const removeButton = member.can_remove
+            ? `<button type="button" class="btn btn-outline-danger btn-sm group-member-remove" data-user-id="${Number(member.user_id || 0)}"><i class="fas fa-user-minus mr-1"></i> Remove</button>`
+            : '';
+        return `
+          <div class="group-member-row">
+            <img src="${escapeReplyHtml(member.avatar_url || '../dist/img/default.webp')}" alt="${escapeReplyHtml(member.name || 'Member')}" class="group-member-avatar">
+            <div class="group-member-main">
+              <div class="group-member-name">${escapeReplyHtml(member.name || 'Member')}${member.is_self ? ' <span class="text-muted font-weight-normal">(You)</span>' : ''}</div>
+              <div class="group-member-email">${escapeReplyHtml(member.email || '')}</div>
+              <div class="group-member-badges">
+                ${roleBadges}
+                <span class="badge ${groupStatusBadgeClass(status)}">${escapeReplyHtml(status)}</span>
+              </div>
+            </div>
+            <div class="group-member-actions">${removeButton}</div>
+          </div>
+        `;
+    }).join(''));
+}
+
+function refreshGroupMembersModal(messageId = null) {
+    const targetId = Number(messageId || activeGroupMembersMessageId || 0);
+    if (!targetId) {
+        return;
+    }
+
+    activeGroupMembersMessageId = targetId;
+    $('#groupMembersList').html('<div class="text-center text-muted py-4"><i class="fas fa-spinner fa-spin mr-1"></i> Loading members...</div>');
+
+    $.getJSON('get_group_members.php', { message_id: targetId })
+        .done(renderGroupMembers)
+        .fail(function(xhr) {
+            $('#groupMembersList').html(`<div class="alert alert-danger mb-0">${escapeReplyHtml(xhr.responseJSON?.error || 'Unable to load group members.')}</div>`);
+            $('#groupMembersAddBtn').prop('hidden', true);
+        });
+}
+
+function openGroupMembersModal(messageId) {
+    if (!messageId) {
+        return;
+    }
+
+    activeGroupMembersMessageId = Number(messageId);
+    $('#groupMembersModal').modal('show');
+    refreshGroupMembersModal(activeGroupMembersMessageId);
+}
+
+$(document).on('click', '#messengerComposeMenu', function(e) {
+    if (window.jQuery && typeof $(this).dropdown === 'function') {
+        return;
+    }
+
+    if (window.bootstrap && window.bootstrap.Dropdown) {
+        e.preventDefault();
+        const dropdown = window.bootstrap.Dropdown.getInstance(this) || new window.bootstrap.Dropdown(this);
+        dropdown.toggle();
+    }
+});
+
+function removeGroupMember(messageId, memberId) {
+    if (!messageId || !memberId) {
+        return;
+    }
+
+    Swal.fire({
+        icon: 'warning',
+        title: 'Remove member?',
+        text: 'This marks the member as left for this group chat.',
+        showCancelButton: true,
+        confirmButtonText: 'Remove',
+        confirmButtonColor: '#dc3545'
+    }).then(result => {
+        if (!result.isConfirmed) {
+            return;
+        }
+        const data = new FormData();
+        data.set('member_id', memberId);
+        postConversationAction(messageId, 'remove_member', data)
+            .then(() => {
+                refreshGroupMembersModal(messageId);
+                refreshCurrentThread();
+                updateMessageList();
+            })
+            .catch(error => Swal.fire('Unable to remove member', error.message || 'Please try again.', 'error'));
+    });
+}
+
+$(document).on('click', '.conversation-see-members-trigger', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    const trigger = getConversationMenuTrigger(this);
+    hideConversationDropdown(this);
+    const messageId = Number(trigger?.getAttribute('data-message-id') || 0);
+    openGroupMembersModal(messageId);
+});
+
+$(document).on('click', '#groupMembersAddBtn', function(e) {
+    e.preventDefault();
+    const messageId = Number($(this).data('message-id') || activeGroupMembersMessageId || 0);
+    if (messageId) {
+        showAddMemberDialog(messageId);
+    }
+});
+
+$(document).on('click', '#groupMembersModal [data-dismiss="modal"], #groupMembersModal [data-bs-dismiss="modal"]', function(e) {
+    e.preventDefault();
+    const modalElement = document.getElementById('groupMembersModal');
+    if (!modalElement) {
+        return;
+    }
+
+    if (window.jQuery && typeof $('#groupMembersModal').modal === 'function') {
+        $('#groupMembersModal').modal('hide');
+        return;
+    }
+
+    if (window.bootstrap && window.bootstrap.Modal) {
+        const modalInstance = window.bootstrap.Modal.getInstance(modalElement) || new window.bootstrap.Modal(modalElement);
+        modalInstance.hide();
+    }
+});
+
+$(document).on('click', '.group-member-remove', function(e) {
+    e.preventDefault();
+    const memberId = Number($(this).data('user-id') || 0);
+    removeGroupMember(Number(activeGroupMembersMessageId || 0), memberId);
+});
+
+$('#groupMembersModal').on('hidden.bs.modal', function() {
+    activeGroupMembersMessageId = null;
+});
+
+$(document).on('click', '.conversation-add-member-trigger', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    const trigger = getConversationMenuTrigger(this);
+    hideConversationDropdown(this);
+    const messageId = Number(trigger?.getAttribute('data-message-id') || 0);
+    if (messageId) {
+        showAddMemberDialog(messageId);
+    }
+});
+
+$(document).on('click', '.conversation-edit-group-trigger', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    const trigger = getConversationMenuTrigger(this);
+    hideConversationDropdown(this);
+    const messageId = Number(trigger?.getAttribute('data-message-id') || 0);
+    if (messageId) {
+        showGroupEditDialog(messageId, trigger?.getAttribute('data-group-name') || 'Group chat');
+    }
+});
+
+$(document).on('click', '.conversation-mute-trigger', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    const trigger = getConversationMenuTrigger(this);
+    hideConversationDropdown(this);
+    const messageId = Number(trigger?.getAttribute('data-message-id') || 0);
+    const isMuted = trigger?.getAttribute('data-group-muted') === '1';
+    if (!messageId) {
+        return;
+    }
+    postConversationAction(messageId, isMuted ? 'unmute' : 'mute')
+        .then(() => refreshCurrentThread())
+        .catch(error => Swal.fire('Action failed', error.message, 'error'));
+});
+
+$(document).on('click', '.conversation-leave-trigger', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    const trigger = getConversationMenuTrigger(this);
+    hideConversationDropdown(this);
+    const messageId = Number(trigger?.getAttribute('data-message-id') || 0);
+    if (!messageId) {
+        return;
+    }
+    Swal.fire({
+        icon: 'warning',
+        title: 'Leave this group?',
+        text: 'You will stop receiving new group messages.',
+        showCancelButton: true,
+        confirmButtonText: 'Leave group',
+        confirmButtonColor: '#dc3545'
+    }).then(result => {
+        if (!result.isConfirmed) return;
+        postConversationAction(messageId, 'leave')
+            .then(() => {
+                refreshCurrentThread();
+                updateMessageList();
+            })
+            .catch(error => Swal.fire('Unable to leave', error.message, 'error'));
+    });
+});
+
+$(document).on('click', '.conversation-delete-trigger', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    const trigger = getConversationMenuTrigger(this);
+    hideConversationDropdown(this);
+    const messageId = Number(trigger?.getAttribute('data-message-id') || 0);
+    const isGroup = trigger?.getAttribute('data-is-group') === '1';
+    if (!messageId) {
+        return;
+    }
+    Swal.fire({
+        icon: 'warning',
+        title: 'Delete conversation?',
+        text: isGroup ? 'This removes the group from your chat list only.' : 'This hides the conversation for you only. The other person keeps their copy.',
+        showCancelButton: true,
+        confirmButtonText: 'Delete',
+        confirmButtonColor: '#dc3545'
+    }).then(result => {
+        if (!result.isConfirmed) return;
+        postConversationAction(messageId, 'delete')
+            .then(() => {
+                $(`#messageList .message-item[data-id="${messageId}"]`).remove();
+                resetActiveThreadUi();
+                updateMessageList();
+                updateUnreadCount();
+            })
+            .catch(error => Swal.fire('Unable to delete', error.message, 'error'));
+    });
+});
 
 function closeReplyMenus(exceptButton = null) {
     $('.reply-menu-dropdown').attr('hidden', true);
@@ -4841,6 +6072,20 @@ $(document).on('click', '.chat-reaction-picker', function(event) {
     event.stopPropagation();
 });
 
+$(document).on('click', '.chat-reaction-count', function(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation();
+    const details = $(this).closest('.chat-reaction-chip').attr('data-reaction-details') || '';
+    if (details) {
+        Swal.fire({
+            title: 'Reactions',
+            text: details,
+            confirmButtonText: 'Close'
+        });
+    }
+});
+
 $(document).on('click', '.chat-reaction-chip, .chat-reaction-add', function(event) {
     event.preventDefault();
     const $button = $(this);
@@ -4877,6 +6122,9 @@ $(document).on('click', '.chat-reaction-chip, .chat-reaction-add', function(even
 
 $(document).on('click', '#mobileBackToList', function() {
     stopTypingHeartbeat();
+    clearTypingIndicator();
+    window.KODUSActiveMessengerThreadId = null;
+    window.activeThreadId = '';
     setMobileMailboxView('list');
 });
 
@@ -4934,7 +6182,7 @@ $(document).on('submit', '#replyForm', function(e) {
                         $(`#messageList .message-item[data-id="${lastOpenedId}"]`).addClass('active').removeClass('unread');
                         $(`#messageList .message-item[data-id="${lastOpenedId}"]`).attr('data-unread', '0');
                         initializeThreadExperience();
-                        preserveConversationScrollPosition(previousScrollTop);
+                        scrollConversationToBottomOnOpen();
                     });
                 }
             } else {
@@ -4956,7 +6204,7 @@ $(document).on('submit', '#replyForm', function(e) {
     });
 });
 
-function refreshConversationIfChanged() {
+function refreshConversationIfChanged(options = {}) {
     if (!lastOpenedId) {
         return;
     }
@@ -4970,6 +6218,7 @@ function refreshConversationIfChanged() {
     const openReactionPicker = getOpenReactionPickerState();
     const conv = $('#conversationWrapper .conversation-scroll');
     const previousScrollTop = conv.length ? conv.scrollTop() : 0;
+    const shouldScrollToBottom = !!options.scrollToBottom || isConversationNearBottom();
 
     $.get('get_thread.php', { id: lastOpenedId, only_conversation: 1, folder: currentMailboxFolder }, function(html) {
         if (getComparableConversationMarkupFromHtml(html) === previousMarkup) {
@@ -4977,7 +6226,6 @@ function refreshConversationIfChanged() {
                 $('#replyText').val(draft);
             }
             restoreReactionPickerState(openReactionPicker);
-            refreshTypingState();
             return;
         }
 
@@ -4995,8 +6243,11 @@ function refreshConversationIfChanged() {
         if (threadSearchValue) {
             applyThreadSearch(threadSearchValue);
         }
-        refreshTypingState();
-        preserveConversationScrollPosition(previousScrollTop);
+        if (shouldScrollToBottom) {
+            scrollConversationToBottomOnOpen();
+        } else {
+            preserveConversationScrollPosition(previousScrollTop);
+        }
         restoreReactionPickerState(openReactionPicker);
         repositionOpenEmojiMenus();
         firstLoadDone = true;
@@ -5022,13 +6273,11 @@ function pollMailboxState() {
         if (mailboxStateToken === null) {
             mailboxStateToken = nextToken;
             updateRefreshLabel(false);
-            refreshTypingState();
             return;
         }
 
         if (nextToken === mailboxStateToken) {
             updateRefreshLabel(false);
-            refreshTypingState();
             return;
         }
 
@@ -5040,14 +6289,66 @@ function pollMailboxState() {
     });
 }
 
-setInterval(pollMailboxState, 5000);
+pollMailboxState();
 
 if (window.KODUSLiveRefresh && typeof window.KODUSLiveRefresh.watchSocket === 'function') {
     window.KODUSLiveRefresh.watchSocket({
+        key: 'inbox-mailbox',
         channel: 'kodus.mailbox',
-        events: ['mail.changed'],
-        onMessage: function() {
+        events: ['mail.changed', 'mail.typing'],
+        onMessage: function(payload) {
+            const data = payload && payload.data ? payload.data : {};
+            const action = String(data.action || '');
+            const messageId = Number(data.message_id || 0);
+            const actorId = Number(data.actor_id || data.user_id || 0);
+
+            if (payload && payload.event === 'mail.typing') {
+                console.log('KODUS mail.typing received', data);
+                const threadId = String(data.thread_id || data.conversation_id || messageId || '');
+                const senderId = String(data.sender_id || data.actor_id || data.user_id || '');
+                const receiverIds = Array.isArray(data.receiver_ids)
+                    ? data.receiver_ids.map(String)
+                    : [String(data.receiver_id || '')].filter(Boolean);
+                const currentUserId = String(window.currentUserId || currentMessengerUserId || '');
+                const activeThreadId = String(window.activeThreadId || lastOpenedId || '');
+                const isReceiver = receiverIds.includes(currentUserId);
+                const isSameThread = threadId === activeThreadId;
+
+                console.log('KODUS mail.typing match', { thread_id: threadId, active_thread_id: activeThreadId, is_receiver: isReceiver });
+
+                if (!threadId || !isSameThread || !isReceiver || senderId === currentUserId) {
+                    return;
+                }
+
+                if (action === 'typing_stopped') {
+                    hideLiveTypingUser(senderId);
+                } else {
+                    showLiveTypingUser(senderId, data.sender_name || data.actor_name || 'User');
+                }
+                return;
+            }
+
+            if ((action === 'reply_created' || action === 'message_created') && messageId && messageId === Number(lastOpenedId || 0)) {
+                clearTypingIndicator();
+            }
+
             pollMailboxState();
+            const groupMembershipActions = ['group_member_added', 'group_member_removed', 'group_left', 'group_muted', 'group_unmuted', 'group_updated'];
+            if (groupMembershipActions.includes(action) && messageId && messageId === Number(activeGroupMembersMessageId || 0) && $('#groupMembersModal').hasClass('show')) {
+                refreshGroupMembersModal(messageId);
+            }
+
+            if (groupMembershipActions.includes(action) && messageId && messageId === Number(lastOpenedId || 0)) {
+                refreshCurrentThread();
+            } else if ((action === 'reply_created' || action === 'message_created' || action === 'reaction_toggled') && messageId && messageId === Number(lastOpenedId || 0)) {
+                refreshConversationIfChanged({ scrollToBottom: isConversationNearBottom() });
+                if (action === 'reply_created' || action === 'message_created') {
+                    $.post('mark_read.php', { id: messageId, csrf_token: window.KODUS_CSRF_TOKEN }, function() {
+                        updateUnreadCount();
+                        updateMailboxSummary();
+                    });
+                }
+            }
             updateUnreadCount();
         }
     });
@@ -5918,6 +7219,59 @@ $(window).on('beforeunload pagehide', function() {
         });
         $('#composeRecipient').on('change', updateComposeRecipientMeta);
     }
+
+    const groupComposeModal = $('#groupComposeModal');
+    const groupComposeForm = document.getElementById('groupComposeForm');
+    const groupComposeMembers = document.getElementById('groupComposeMembers');
+
+    $(document).on('click', '.group-compose-trigger', function(e) {
+        e.preventDefault();
+        groupComposeModal.modal('show');
+    });
+
+    if (window.jQuery && $.fn.select2 && groupComposeMembers) {
+        $('#groupComposeMembers').select2({
+            theme: 'bootstrap4',
+            width: '100%',
+            dropdownParent: groupComposeModal,
+            placeholder: 'Choose at least 2 members',
+            templateResult: renderComposeRecipientOption,
+            templateSelection: renderComposeRecipientSelection,
+            escapeMarkup: function(markup) { return markup; }
+        });
+    }
+
+    groupComposeForm?.addEventListener('submit', function(e) {
+        e.preventDefault();
+        const selectedCount = Array.from(groupComposeMembers?.selectedOptions || []).length;
+        if (selectedCount < 2) {
+            Swal.fire('More members needed', 'Select at least 2 members for a group chat.', 'warning');
+            return;
+        }
+
+        fetch(groupComposeForm.action, {
+            method: 'POST',
+            body: new FormData(groupComposeForm),
+            credentials: 'same-origin',
+            headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' }
+        })
+        .then(response => response.json().then(payload => ({ response, payload })))
+        .then(({ response, payload }) => {
+            if (!response.ok || !payload.success) {
+                throw new Error(payload.error || 'Could not create the group chat.');
+            }
+            groupComposeModal.modal('hide');
+            groupComposeForm.reset();
+            $('#groupComposeMembers').val(null).trigger('change');
+            updateMessageList();
+            if (payload.message_id) {
+                openMessage(payload.message_id);
+            }
+        })
+        .catch(error => {
+            Swal.fire('Group not created', error.message || 'Please try again.', 'error');
+        });
+    });
 
     updateComposeRecipientMeta();
     updateComposePreview();

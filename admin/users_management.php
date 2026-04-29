@@ -1360,6 +1360,7 @@ $(document).ready(function () {
   if (window.KODUSLiveRefresh) {
     window.KODUSLiveRefresh.watch({
       channels: ['user_status_table'],
+      allowPollingFallback: true,
       onChange: refreshUserStatuses
     });
   }

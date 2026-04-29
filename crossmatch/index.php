@@ -205,6 +205,7 @@ loadRecentCrossmatchings();
 if (window.KODUSLiveRefresh) {
     window.KODUSLiveRefresh.watch({
         channels: ['crossmatch_recent_table'],
+        allowPollingFallback: true,
         onChange: loadRecentCrossmatchings
     });
 }

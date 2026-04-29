@@ -1071,6 +1071,7 @@ unset($_SESSION['meb_import_flash']);
               channels: ['meb_table'],
               table: table,
               socket: {
+                  key: 'data-tracking-meb',
                   channel: 'kodus.meb',
                   events: ['meb.changed']
               }

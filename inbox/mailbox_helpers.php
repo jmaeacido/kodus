@@ -45,6 +45,41 @@ function mailboxEnsureSchema(mysqli $conn): void
         }
     }
 
+    $messageColumns = [];
+    $messageStmt = $conn->prepare("
+        SELECT COLUMN_NAME
+        FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = ?
+          AND TABLE_NAME = 'contact_messages'
+    ");
+    if (!$messageStmt) {
+        throw new RuntimeException('Unable to prepare mailbox message schema check: ' . $conn->error);
+    }
+    $messageStmt->bind_param('s', $database);
+    $messageStmt->execute();
+    foreach (db_stmt_fetch_all_assoc($messageStmt) as $row) {
+        $messageColumns[] = (string) $row['COLUMN_NAME'];
+    }
+    $messageStmt->close();
+
+    if (!in_array('conversation_type', $messageColumns, true)) {
+        if (!$conn->query("ALTER TABLE contact_messages ADD COLUMN conversation_type VARCHAR(20) NOT NULL DEFAULT 'direct' AFTER id")) {
+            throw new RuntimeException('Unable to add conversation type: ' . $conn->error);
+        }
+    }
+
+    if (!in_array('group_name', $messageColumns, true)) {
+        if (!$conn->query("ALTER TABLE contact_messages ADD COLUMN group_name VARCHAR(255) NULL DEFAULT NULL AFTER conversation_type")) {
+            throw new RuntimeException('Unable to add group name: ' . $conn->error);
+        }
+    }
+
+    if (!in_array('group_photo', $messageColumns, true)) {
+        if (!$conn->query("ALTER TABLE contact_messages ADD COLUMN group_photo VARCHAR(255) NULL DEFAULT NULL AFTER group_name")) {
+            throw new RuntimeException('Unable to add group photo: ' . $conn->error);
+        }
+    }
+
     $replyColumns = [];
     $replyStmt = $conn->prepare("
         SELECT COLUMN_NAME
@@ -102,6 +137,41 @@ function mailboxEnsureSchema(mysqli $conn): void
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
     ")) {
         throw new RuntimeException('Unable to ensure mailbox recipient table: ' . $conn->error);
+    }
+
+    $recipientColumns = [];
+    $recipientStmt = $conn->prepare("
+        SELECT COLUMN_NAME
+        FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = ?
+          AND TABLE_NAME = 'contact_message_recipients'
+    ");
+    if (!$recipientStmt) {
+        throw new RuntimeException('Unable to prepare mailbox recipient schema check: ' . $conn->error);
+    }
+    $recipientStmt->bind_param('s', $database);
+    $recipientStmt->execute();
+    foreach (db_stmt_fetch_all_assoc($recipientStmt) as $row) {
+        $recipientColumns[] = (string) $row['COLUMN_NAME'];
+    }
+    $recipientStmt->close();
+
+    if (!in_array('muted_at', $recipientColumns, true)) {
+        if (!$conn->query("ALTER TABLE contact_message_recipients ADD COLUMN muted_at DATETIME NULL DEFAULT NULL AFTER created_at")) {
+            throw new RuntimeException('Unable to add group mute state: ' . $conn->error);
+        }
+    }
+
+    if (!in_array('left_at', $recipientColumns, true)) {
+        if (!$conn->query("ALTER TABLE contact_message_recipients ADD COLUMN left_at DATETIME NULL DEFAULT NULL AFTER muted_at")) {
+            throw new RuntimeException('Unable to add group leave state: ' . $conn->error);
+        }
+    }
+
+    if (!in_array('hidden_at', $recipientColumns, true)) {
+        if (!$conn->query("ALTER TABLE contact_message_recipients ADD COLUMN hidden_at DATETIME NULL DEFAULT NULL AFTER left_at")) {
+            throw new RuntimeException('Unable to add group hidden state: ' . $conn->error);
+        }
     }
 
     if (!$conn->query("
@@ -198,6 +268,45 @@ function mailboxEnsureSchema(mysqli $conn): void
 
         if (!$conn->query("ALTER TABLE message_reactions ADD UNIQUE KEY uq_message_reaction_target (message_id, target_key, user_id, emoji)")) {
             throw new RuntimeException('Unable to enforce mailbox reaction uniqueness: ' . $conn->error);
+        }
+    }
+
+    $reactionUniqueIndexes = [];
+    $uniqueIndexStmt = $conn->prepare("
+        SELECT INDEX_NAME, COLUMN_NAME
+        FROM information_schema.STATISTICS
+        WHERE TABLE_SCHEMA = ?
+          AND TABLE_NAME = 'message_reactions'
+          AND NON_UNIQUE = 0
+          AND INDEX_NAME <> 'PRIMARY'
+        ORDER BY INDEX_NAME, SEQ_IN_INDEX
+    ");
+    if (!$uniqueIndexStmt) {
+        throw new RuntimeException('Unable to prepare mailbox reaction unique index check: ' . $conn->error);
+    }
+    $uniqueIndexStmt->bind_param('s', $database);
+    $uniqueIndexStmt->execute();
+    foreach (db_stmt_fetch_all_assoc($uniqueIndexStmt) as $row) {
+        $indexName = (string) ($row['INDEX_NAME'] ?? '');
+        if ($indexName === '') {
+            continue;
+        }
+        $reactionUniqueIndexes[$indexName][] = (string) ($row['COLUMN_NAME'] ?? '');
+    }
+    $uniqueIndexStmt->close();
+
+    foreach ($reactionUniqueIndexes as $indexName => $columns) {
+        if ($indexName === 'uq_message_reaction_target') {
+            continue;
+        }
+        $hasMessage = in_array('message_id', $columns, true);
+        $hasUser = in_array('user_id', $columns, true);
+        $hasEmoji = in_array('emoji', $columns, true);
+        if ($hasMessage && $hasUser && !$hasEmoji) {
+            $safeIndexName = str_replace('`', '``', $indexName);
+            if (!$conn->query("ALTER TABLE message_reactions DROP INDEX `{$safeIndexName}`")) {
+                throw new RuntimeException('Unable to remove broad mailbox reaction uniqueness: ' . $conn->error);
+            }
         }
     }
 
@@ -321,6 +430,176 @@ function mailboxOwnerMatchesCurrentUser(?string $ownerEmail, ?string $ownerUsern
     return false;
 }
 
+function mailboxVisibilityPredicate(int $userId, string $messageAlias = 'cm', string $readAlias = 'mr'): string
+{
+    $messageAlias = preg_replace('/[^a-zA-Z0-9_]/', '', $messageAlias) ?: 'cm';
+    $userId = max(0, $userId);
+
+    return "(
+        COALESCE({$messageAlias}.conversation_type, 'direct') <> 'group'
+        OR EXISTS (
+            SELECT 1
+            FROM contact_message_recipients group_vis
+            WHERE group_vis.message_id = {$messageAlias}.id
+              AND group_vis.user_id = {$userId}
+              AND group_vis.hidden_at IS NULL
+        )
+    )";
+}
+
+function mailboxThreadAccessPredicate(string $messageAlias = 'cm'): string
+{
+    $messageAlias = preg_replace('/[^a-zA-Z0-9_]/', '', $messageAlias) ?: 'cm';
+
+    return "(
+        COALESCE({$messageAlias}.conversation_type, 'direct') <> 'group'
+        OR EXISTS (
+            SELECT 1
+            FROM contact_message_recipients group_member
+            WHERE group_member.message_id = {$messageAlias}.id
+              AND group_member.user_id = ?
+              AND group_member.hidden_at IS NULL
+        )
+    )";
+}
+
+function mailboxCanParticipateInThread(mysqli $conn, int $messageId, int $userId): bool
+{
+    if ($messageId <= 0 || $userId <= 0) {
+        return false;
+    }
+
+    $stmt = $conn->prepare("
+        SELECT cm.id
+        FROM contact_messages cm
+        WHERE cm.id = ?
+          AND (
+              COALESCE(cm.conversation_type, 'direct') <> 'group'
+              OR EXISTS (
+                  SELECT 1
+                  FROM contact_message_recipients cmr
+                  WHERE cmr.message_id = cm.id
+                    AND cmr.user_id = ?
+                    AND cmr.left_at IS NULL
+                    AND cmr.hidden_at IS NULL
+              )
+          )
+        LIMIT 1
+    ");
+    if (!$stmt) {
+        return false;
+    }
+    $stmt->bind_param('ii', $messageId, $userId);
+    $stmt->execute();
+    $row = db_stmt_fetch_one_assoc($stmt);
+    $stmt->close();
+
+    return !empty($row);
+}
+
+function mailboxCurrentParticipantIds(mysqli $conn, int $messageId, int $excludeUserId = 0, bool $excludeMuted = false): array
+{
+    if ($messageId <= 0) {
+        return [];
+    }
+
+    $mutedSql = $excludeMuted ? 'AND cmr.muted_at IS NULL' : '';
+    $stmt = $conn->prepare("
+        SELECT DISTINCT cmr.user_id
+        FROM contact_message_recipients cmr
+        INNER JOIN contact_messages cm ON cm.id = cmr.message_id
+        WHERE cmr.message_id = ?
+          AND cmr.user_id IS NOT NULL
+          AND cmr.left_at IS NULL
+          AND cmr.hidden_at IS NULL
+          {$mutedSql}
+          AND COALESCE(cm.conversation_type, 'direct') = 'group'
+    ");
+    if (!$stmt) {
+        return [];
+    }
+
+    $stmt->bind_param('i', $messageId);
+    $stmt->execute();
+    $ids = [];
+    foreach (db_stmt_fetch_all_assoc($stmt) as $row) {
+        $id = (int) ($row['user_id'] ?? 0);
+        if ($id > 0 && $id !== $excludeUserId) {
+            $ids[] = $id;
+        }
+    }
+    $stmt->close();
+
+    return array_values(array_unique($ids));
+}
+
+function mailboxIsGroupThread(array $row): bool
+{
+    return strtolower((string) ($row['conversation_type'] ?? 'direct')) === 'group';
+}
+
+function mailboxCanAccessMessage(mysqli $conn, int $messageId, ?string $userType, ?string $userEmail, ?string $userName): bool
+{
+    if ($messageId <= 0) {
+        return false;
+    }
+
+    $userEmail = (string) ($userEmail ?? '');
+    $userName = trim((string) ($userName ?? ''));
+
+    $sessionUserId = (int) ($_SESSION['user_id'] ?? 0);
+    $sql = "SELECT id FROM contact_messages WHERE id = ? AND " . mailboxThreadAccessPredicate('contact_messages');
+    if ($userType === 'admin') {
+        $sql .= "
+          AND (
+              COALESCE(conversation_type, 'direct') = 'group'
+              OR
+              user_email = ?
+              OR EXISTS (
+                  SELECT 1
+                  FROM contact_message_recipients cmr
+                  INNER JOIN users u ON u.id = cmr.user_id
+                  WHERE cmr.message_id = contact_messages.id
+                    AND u.userType = 'admin'
+              )
+          )
+          LIMIT 1
+        ";
+        $stmt = $conn->prepare($sql);
+        if (!$stmt) {
+            return false;
+        }
+        $stmt->bind_param('iis', $messageId, $sessionUserId, $userEmail);
+    } else {
+        $sql .= "
+          AND (
+              COALESCE(conversation_type, 'direct') = 'group'
+              OR
+              user_email = ?
+              OR user_name = ?
+              OR EXISTS (
+                  SELECT 1
+                  FROM contact_message_recipients cmr
+                  WHERE cmr.message_id = contact_messages.id
+                    AND LOWER(cmr.recipient_email) = LOWER(?)
+              )
+          )
+          LIMIT 1
+        ";
+        $stmt = $conn->prepare($sql);
+        if (!$stmt) {
+            return false;
+        }
+        $stmt->bind_param('iisss', $messageId, $sessionUserId, $userEmail, $userName, $userEmail);
+    }
+
+    $stmt->execute();
+    $row = db_stmt_fetch_one_assoc($stmt);
+    $stmt->close();
+
+    return !empty($row);
+}
+
 function mailboxSyncMessageRecipients(mysqli $conn, int $messageId, array $recipients): void
 {
     $deleteStmt = $conn->prepare('DELETE FROM contact_message_recipients WHERE message_id = ?');
@@ -435,14 +714,20 @@ function mailboxFetchReactionSummary(mysqli $conn, int $messageId, ?int $replyId
     }
 
     $sql = "
-        SELECT emoji,
+        SELECT mr.emoji,
                COUNT(*) AS reaction_count,
-               MAX(CASE WHEN user_id = ? THEN 1 ELSE 0 END) AS reacted_by_current_user
-        FROM message_reactions
-        WHERE message_id = ?
-          AND target_key = ?
-        GROUP BY emoji
-        ORDER BY reaction_count DESC, emoji ASC
+               MAX(CASE WHEN mr.user_id = ? THEN 1 ELSE 0 END) AS reacted_by_current_user,
+               GROUP_CONCAT(
+                   CONCAT(COALESCE(NULLIF(u.username, ''), CONCAT('User #', mr.user_id)), ' ', mr.emoji)
+                   ORDER BY COALESCE(NULLIF(u.username, ''), CONCAT('User #', mr.user_id))
+                   SEPARATOR '||'
+               ) AS reactor_details
+        FROM message_reactions mr
+        LEFT JOIN users u ON u.id = mr.user_id
+        WHERE mr.message_id = ?
+          AND mr.target_key = ?
+        GROUP BY mr.emoji
+        ORDER BY reaction_count DESC, mr.emoji ASC
     ";
 
     $stmt = $conn->prepare($sql);
@@ -468,6 +753,7 @@ function mailboxFetchReactionSummary(mysqli $conn, int $messageId, ?int $replyId
             'emoji' => $emoji,
             'count' => (int) ($row['reaction_count'] ?? 0),
             'reacted' => (int) ($row['reacted_by_current_user'] ?? 0) === 1,
+            'reactors' => array_values(array_filter(array_map('trim', explode('||', (string) ($row['reactor_details'] ?? ''))))),
         ];
     }
 

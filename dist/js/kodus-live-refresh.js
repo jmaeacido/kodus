@@ -1,12 +1,6 @@
 (function(window) {
   'use strict';
 
-  function wait(ms) {
-    return new Promise(function(resolve) {
-      window.setTimeout(resolve, ms);
-    });
-  }
-
   function normalizeChannels(channels) {
     if (!Array.isArray(channels)) {
       return [];
@@ -60,6 +54,7 @@
     var initPromise = null;
     var boundEvents = {};
     var joinedChannels = {};
+    var loggedConnectionError = false;
 
     function loadScript(src) {
       return new Promise(function(resolve, reject) {
@@ -91,7 +86,7 @@
     function buildSocketOptions() {
       var token = String(config.accessToken || '').trim();
       return {
-        transports: ['websocket', 'polling'],
+        transports: ['websocket'],
         auth: token ? { token: 'Bearer ' + token } : undefined,
         query: token ? { token: token, bearer_token: token } : undefined
       };
@@ -181,7 +176,6 @@
 
       joinedChannels[channel] = true;
       try {
-        socket.emit(joinEvent, { channel: channel });
         socket.emit(joinEvent, channel);
       } catch (error) {
         joinedChannels[channel] = false;
@@ -189,7 +183,7 @@
     }
 
     function ensureConnected() {
-      if (!enabled || !config.serverUrl || !config.accessToken) {
+      if (!enabled || !config.serverUrl) {
         return Promise.resolve(null);
       }
 
@@ -217,8 +211,10 @@
           socket = window.io(config.serverUrl, buildSocketOptions());
           boundEvents = {};
           joinedChannels = {};
+          loggedConnectionError = false;
 
           socket.on('connect', function() {
+            loggedConnectionError = false;
             watchers.forEach(function(watcher) {
               if (watcher.channel) {
                 joinChannel(watcher.channel);
@@ -226,6 +222,21 @@
               watcher.events.forEach(bindNamedEvent);
             });
             bindGenericEvents();
+          });
+
+          socket.on('connect_error', function(error) {
+            if (loggedConnectionError) {
+              return;
+            }
+
+            loggedConnectionError = true;
+            console.warn('KODUS socket connection failed.', error && error.message ? error.message : error);
+          });
+
+          socket.on('disconnect', function(reason) {
+            if (reason && reason !== 'io client disconnect') {
+              console.warn('KODUS socket disconnected.', reason);
+            }
           });
 
           bindGenericEvents();
@@ -245,11 +256,19 @@
     }
 
     function watch(options) {
+      var key = String((options && options.key) || '').trim();
       var watcher = {
+        key: key,
         channel: String((options && options.channel) || '').trim(),
         events: normalizeEvents(options && options.events),
         onMessage: options && options.onMessage
       };
+
+      if (key) {
+        watchers = watchers.filter(function(currentWatcher) {
+          return currentWatcher.key !== key;
+        });
+      }
 
       watchers.push(watcher);
 
@@ -276,8 +295,9 @@
 
     return {
       watch: watch,
+      connect: ensureConnected,
       isEnabled: function() {
-        return enabled && !!config.serverUrl && !!config.accessToken;
+        return enabled && !!config.serverUrl;
       }
     };
   }());
@@ -287,11 +307,12 @@
     var channels = normalizeChannels(options && options.channels);
     var timeoutSeconds = Math.max(5, Math.min(25, Math.floor(Number((options && options.timeoutMs) || 25000) / 1000) || 20));
     var retryDelayMs = Math.max(1000, Number((options && options.retryDelayMs) || 3000));
+    var allowPollingFallback = !!(options && options.allowPollingFallback);
     var token = '';
     var stopped = false;
     var activeController = null;
 
-    if (!endpoint || channels.length === 0) {
+    if (!allowPollingFallback || !endpoint || channels.length === 0) {
       return {
         stop: function() {},
         isActive: function() { return false; }
@@ -304,7 +325,9 @@
       }
 
       if (delayMs > 0) {
-        await wait(delayMs);
+        await new Promise(function(resolve) {
+          window.setTimeout(resolve, delayMs);
+        });
       }
 
       if (stopped) {
@@ -383,6 +406,7 @@
   }
 
   function watchDataTable(options) {
+    options = options || {};
     var throttledReload = throttle(function(payload) {
       if (options.beforeReload) {
         options.beforeReload(payload);
@@ -397,22 +421,29 @@
       }
     }, 300);
 
-    var pollWatcher = watch({
-      endpoint: options.endpoint,
-      channels: options.channels,
-      timeoutMs: options.timeoutMs,
-      retryDelayMs: options.retryDelayMs,
-      onChange: throttledReload,
-      onReady: options.onReady,
-      onError: options.onError
-    });
+    var pollWatcher = {
+      stop: function() {},
+      isActive: function() { return false; }
+    };
 
     var socketWatcher = null;
     if (options.socket && options.socket.channel) {
       socketWatcher = watchSocket({
+        key: options.socket.key,
         channel: options.socket.channel,
         events: options.socket.events,
         onMessage: throttledReload
+      });
+    } else if (options.allowPollingFallback) {
+      pollWatcher = watch({
+        endpoint: options.endpoint,
+        channels: options.channels,
+        timeoutMs: options.timeoutMs,
+        retryDelayMs: options.retryDelayMs,
+        allowPollingFallback: true,
+        onChange: throttledReload,
+        onReady: options.onReady,
+        onError: options.onError
       });
     }
 
@@ -433,6 +464,7 @@
     watch: watch,
     watchSocket: watchSocket,
     watchDataTable: watchDataTable,
+    connectSocket: socketBridge.connect,
     isSocketEnabled: socketBridge.isEnabled
   };
 })(window);

@@ -208,11 +208,23 @@ $messages = $conn->query("SELECT * FROM contact_messages ORDER BY sent_at DESC")
     });
   });
 
-  // Refresh badge every 30s
-  setInterval(updateUnreadCount, 30000);
+  updateUnreadCount();
 
-  // Refresh message list every 30s
-  setInterval(updateMessageList, 30000);
+  if (window.KODUSLiveRefresh && typeof window.KODUSLiveRefresh.watchSocket === 'function') {
+    window.KODUSLiveRefresh.watchSocket({
+      key: 'legacy-inbox-mailbox',
+      channel: 'kodus.mailbox',
+      events: ['mail.changed'],
+      onMessage: function(payload) {
+        const action = String(payload?.data?.action || '');
+        if (action === 'typing_started' || action === 'typing_stopped') {
+          return;
+        }
+        updateUnreadCount();
+        updateMessageList();
+      }
+    });
+  }
 
   function updateMessageList() {
     $.get('fetch_messages.php', function(html) {

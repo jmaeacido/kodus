@@ -4,6 +4,7 @@ require_once __DIR__ . '/security.php';
 require_once __DIR__ . '/notification_helpers.php';
 require_once __DIR__ . '/env_helpers.php';
 require_once __DIR__ . '/base_url.php';
+require_once __DIR__ . '/socket_helpers.php';
 
 function password_policy_current_version(): int
 {
@@ -371,6 +372,14 @@ function password_policy_send_in_app_notice(mysqli $conn, array $user, array $re
         $recipientReadStmt->execute();
         $recipientReadStmt->close();
     }
+
+    kodus_socket_broadcast('kodus.mailbox', 'mail.changed', [
+        'action' => 'message_created',
+        'message_id' => $messageId,
+        'actor_id' => $senderUserId ?? 0,
+        'recipient_ids' => [$recipientUserId],
+        'source' => 'password_policy',
+    ]);
 
     return true;
 }

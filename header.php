@@ -1577,6 +1577,7 @@ let maintenanceToastShown = false;
 
 const POLLING_INACTIVITY_LIMIT = 3 * 60 * 1000; // 3 minutes
 const LOGOUT_INACTIVITY_LIMIT  = 60 * 60 * 1000; // 1 hour
+const CURRENT_SESSION_USER_ID = <?php echo json_encode(isset($_SESSION['user_id']) && is_numeric($_SESSION['user_id']) ? (int) $_SESSION['user_id'] : null); ?>;
 
 function showInactivityTimeoutAlert() {
   Swal.fire({
@@ -1593,8 +1594,8 @@ function showInactivityTimeoutAlert() {
     }
   });
 }
-const ROLE_CHANGE_STATUS_URL = <?php echo json_encode($app_root . 'role-change-status.php'); ?>;
-const MAINTENANCE_STATUS_URL = <?php echo json_encode($app_root . 'get_maintenance_state.php'); ?>;
+const ROLE_CHANGE_STATUS_URL = <?php echo json_encode($app_root . 'role-change-status'); ?>;
+const MAINTENANCE_STATUS_URL = <?php echo json_encode($app_root . 'get_maintenance_state'); ?>;
 
 function formatRoleLabel(value) {
   const text = String(value || '').trim();
@@ -1878,8 +1879,68 @@ function pollRoleChangeState() {
   });
 }
 
+function startSessionSafetyPolling() {
+  if (!roleChangePollInterval) {
+    roleChangePollInterval = setInterval(pollRoleChangeState, 5000);
+  }
+  if (!maintenancePollInterval) {
+    maintenancePollInterval = setInterval(pollMaintenanceState, 5000);
+  }
+}
+
+function bindSessionSafetySocket() {
+  if (!window.KODUSLiveRefresh || typeof window.KODUSLiveRefresh.watchSocket !== 'function' || !window.KODUSLiveRefresh.isSocketEnabled()) {
+    startSessionSafetyPolling();
+    return;
+  }
+
+  window.KODUSLiveRefresh.watchSocket({
+    key: 'session-safety',
+    channel: 'kodus.session',
+    events: ['role.changed', 'maintenance.changed'],
+    onMessage: function(payload) {
+      const eventName = String(payload?.event || '');
+      const data = payload?.data && typeof payload.data === 'object' ? payload.data : {};
+
+      if (eventName === 'role.changed') {
+        const targetUserId = Number(data.user_id || 0);
+        if (!CURRENT_SESSION_USER_ID || targetUserId !== Number(CURRENT_SESSION_USER_ID)) {
+          return;
+        }
+
+        if (data.state && typeof data.state === 'object') {
+          handleRoleChangeState(Object.assign({ active: true }, data.state));
+          return;
+        }
+
+        pollRoleChangeState();
+        return;
+      }
+
+      if (eventName === 'maintenance.changed') {
+        if (data.state && typeof data.state === 'object') {
+          if (data.state.active || data.state.phase === 'pending') {
+            handleMaintenanceState(Object.assign({ active: true }, data.state));
+          } else {
+            handleMaintenanceState(null);
+          }
+          return;
+        }
+
+        pollMaintenanceState();
+      }
+    }
+  });
+
+  window.KODUSLiveRefresh.connectSocket().then(function(socket) {
+    if (!socket) {
+      startSessionSafetyPolling();
+    }
+  });
+}
+
 // ----------------------
-// UNREAD COUNT POLLING
+// UNREAD COUNT REFRESH
 // ----------------------
 function updateUnreadCount() {
   $.getJSON("<?php echo $app_root; ?>messenger/get_unread_count.php", function(data) {
@@ -1903,12 +1964,10 @@ function updateUnreadCount() {
 function startUnreadPolling() {
   if (!unreadInterval) {
     updateUnreadCount();
-    unreadInterval = setInterval(updateUnreadCount, 30000);
   }
 }
 
 function stopUnreadPolling() {
-  clearInterval(unreadInterval);
   unreadInterval = null;
 }
 
@@ -1916,11 +1975,6 @@ function stopUnreadPolling() {
 // INACTIVITY HANDLING
 // ----------------------
 function resetTimers() {
-  // Reset polling inactivity timer
-  clearTimeout(pollingTimer);
-  startUnreadPolling();
-  pollingTimer = setTimeout(stopUnreadPolling, POLLING_INACTIVITY_LIMIT);
-
   // Reset logout inactivity timer
   clearTimeout(logoutTimer);
   logoutTimer = setTimeout(() => {
@@ -1961,131 +2015,8 @@ $(document).ready(function() {
   if (currentMaintenanceState) {
     handleMaintenanceState(Object.assign({ active: true, message: currentMaintenanceState.warning_message || currentMaintenanceState.message || '' }, currentMaintenanceState));
   }
-  roleChangePollInterval = setInterval(pollRoleChangeState, 5000);
-  maintenancePollInterval = setInterval(pollMaintenanceState, 5000);
+  bindSessionSafetySocket();
 });
-
-(function () {
-  const POLL_INTERVAL_MS = 60000;
-  const APP_ROOT_PATH = <?php echo json_encode(rtrim(parse_url($app_root, PHP_URL_PATH) ?: '/', '/')); ?>;
-  const ENABLED_PATHS = new Set([
-    APP_ROOT_PATH + '/home',
-    APP_ROOT_PATH + '/pages/calendar',
-    APP_ROOT_PATH + '/pages/data-tracking-meb-validation',
-    APP_ROOT_PATH + '/pages/data-tracking-in',
-    APP_ROOT_PATH + '/pages/data-tracking-out',
-    APP_ROOT_PATH + '/pages/payout',
-    APP_ROOT_PATH + '/implementation-status/program-targets',
-    APP_ROOT_PATH + '/implementation-status/program-activities',
-    APP_ROOT_PATH + '/implementation-status/lawa-summary',
-    APP_ROOT_PATH + '/implementation-status/binhi-summary',
-    APP_ROOT_PATH + '/pages/summary/beneficiary-profile',
-    APP_ROOT_PATH + '/pages/summary/sectoral',
-    APP_ROOT_PATH + '/pages/summary/pwd/pwd',
-    APP_ROOT_PATH + '/pages/summary/pwd/sex-disaggregated-pwd',
-    APP_ROOT_PATH + '/crossmatch',
-    APP_ROOT_PATH + '/deduplication',
-    APP_ROOT_PATH + '/admin/maintenance',
-    APP_ROOT_PATH + '/admin/users_management',
-    APP_ROOT_PATH + '/admin/project_variables',
-    APP_ROOT_PATH + '/admin/password_security'
-  ]);
-
-  function normalizePollingPath(pathname) {
-    let normalized = String(pathname || '').toLowerCase().replace(/\\/g, '/');
-    normalized = normalized.replace(/\/index(?:\.php)?$/, '');
-    normalized = normalized.replace(/\.php$/, '');
-    normalized = normalized.replace(/\/+$/, '');
-    return normalized || '/';
-  }
-
-  function isPollingTargetPage() {
-    return ENABLED_PATHS.has(normalizePollingPath(window.location.pathname));
-  }
-
-  function hasVisibleBootstrapModal() {
-    return !!document.querySelector('.modal.show');
-  }
-
-  function hasVisibleSwal() {
-    return !!document.querySelector('.swal2-container.swal2-shown, .swal2-container.swal2-height-auto');
-  }
-
-  function hasBusyFocusedElement() {
-    const active = document.activeElement;
-    if (!active || active === document.body) {
-      return false;
-    }
-
-    if (active.isContentEditable) {
-      return true;
-    }
-
-    const tagName = String(active.tagName || '').toUpperCase();
-    if (tagName === 'INPUT' || tagName === 'TEXTAREA' || tagName === 'SELECT') {
-      return true;
-    }
-
-    return false;
-  }
-
-  function isPageSafeToPollRefresh() {
-    if (document.hidden) {
-      return false;
-    }
-
-    if (document.body && document.body.classList.contains('modal-open')) {
-      return false;
-    }
-
-    if (hasVisibleBootstrapModal() || hasVisibleSwal() || hasBusyFocusedElement()) {
-      return false;
-    }
-
-    return true;
-  }
-
-  function refreshPollingPage() {
-    if (!isPageSafeToPollRefresh()) {
-      return;
-    }
-
-    let handled = false;
-
-    if (window.jQuery && window.jQuery.fn && window.jQuery.fn.dataTable) {
-      try {
-        const dataTablesApi = window.jQuery.fn.dataTable.tables({ api: true });
-        if (dataTablesApi && typeof dataTablesApi.every === 'function') {
-          dataTablesApi.every(function() {
-            if (this.ajax && typeof this.ajax.reload === 'function') {
-              this.ajax.reload(null, false);
-              handled = true;
-            }
-          });
-        }
-      } catch (error) {
-        console.warn('KODUS partial refresh skipped DataTables reload.', error);
-      }
-    }
-
-    window.dispatchEvent(new CustomEvent('kodus:partial-refresh', {
-      detail: {
-        path: normalizePollingPath(window.location.pathname),
-        source: 'header-polling'
-      }
-    }));
-
-    if (!handled && window.KODUSLiveRefresh && typeof window.KODUSLiveRefresh.refresh === 'function') {
-      window.KODUSLiveRefresh.refresh();
-    }
-  }
-
-  if (!isPollingTargetPage()) {
-    return;
-  }
-
-  window.setInterval(refreshPollingPage, POLL_INTERVAL_MS);
-})();
 </script>
 <?php endif; ?>
 

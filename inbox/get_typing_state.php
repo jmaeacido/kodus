@@ -9,9 +9,17 @@ mailboxEnsureSchema($conn);
 header('Content-Type: application/json; charset=utf-8');
 
 $userId = (int) ($_SESSION['user_id'] ?? 0);
+$userType = $_SESSION['user_type'] ?? null;
+$userEmail = $_SESSION['email'] ?? null;
+$userName = trim((string) ($_SESSION['username'] ?? ''));
 $messageId = (int) ($_GET['message_id'] ?? 0);
 
 if ($userId <= 0 || $messageId <= 0) {
+    echo json_encode(['success' => true, 'typing' => []]);
+    exit;
+}
+
+if (!mailboxCanAccessMessage($conn, $messageId, $userType, $userEmail, $userName)) {
     echo json_encode(['success' => true, 'typing' => []]);
     exit;
 }

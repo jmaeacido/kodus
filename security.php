@@ -22,6 +22,61 @@ function security_compile_content_security_policy(array $directives): string
     return implode('; ', $directives);
 }
 
+function security_url_origin(?string $url): string
+{
+    $url = trim((string) $url);
+    if ($url === '') {
+        return '';
+    }
+
+    $parts = parse_url($url);
+    if (!isset($parts['scheme'], $parts['host'])) {
+        return '';
+    }
+
+    $origin = strtolower((string) $parts['scheme']) . '://' . strtolower((string) $parts['host']);
+    if (!empty($parts['port'])) {
+        $origin .= ':' . (int) $parts['port'];
+    }
+
+    return $origin;
+}
+
+function security_websocket_origin(string $origin): string
+{
+    if (str_starts_with($origin, 'https://')) {
+        return 'wss://' . substr($origin, 8);
+    }
+
+    if (str_starts_with($origin, 'http://')) {
+        return 'ws://' . substr($origin, 7);
+    }
+
+    return '';
+}
+
+function security_socket_csp_sources(): array
+{
+    $serverOrigin = security_url_origin(app_env('KODUS_SOCKET_SERVER_URL', ''));
+    $clientScriptOrigin = security_url_origin(app_env('KODUS_SOCKET_CLIENT_SCRIPT_URL', $serverOrigin !== '' ? $serverOrigin . '/socket.io/socket.io.js' : ''));
+
+    $scriptSources = array_values(array_unique(array_filter([
+        'https://caraga-connect.dswd.gov.ph',
+        $clientScriptOrigin,
+    ])));
+
+    $connectSources = array_values(array_unique(array_filter([
+        'https://caraga-connect.dswd.gov.ph',
+        $serverOrigin,
+        $serverOrigin !== '' ? security_websocket_origin($serverOrigin) : '',
+    ])));
+
+    return [
+        'script' => $scriptSources,
+        'connect' => $connectSources,
+    ];
+}
+
 function security_configure_runtime_for_web(): void
 {
     error_reporting(E_ALL & ~E_DEPRECATED & ~E_USER_DEPRECATED);
@@ -133,6 +188,10 @@ function security_content_security_policy(): string
         return $overridePolicy;
     }
 
+    $socketSources = security_socket_csp_sources();
+    $scriptSources = implode(' ', $socketSources['script']);
+    $connectSources = implode(' ', $socketSources['connect']);
+
     $directives = [
         "default-src 'self'",
         "base-uri 'self'",
@@ -142,8 +201,8 @@ function security_content_security_policy(): string
         "img-src 'self' data: blob:",
         "font-src 'self' data:",
         "style-src 'self' 'unsafe-inline'",
-        "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://caraga-connect.dswd.gov.ph",
-        "connect-src 'self' ws: wss: https://caraga-connect.dswd.gov.ph",
+        trim("script-src 'self' 'unsafe-inline' 'unsafe-eval' " . $scriptSources),
+        trim("connect-src 'self' " . $connectSources),
         "frame-src 'self'",
         "media-src 'self' data: blob:",
         "worker-src 'self' blob:",

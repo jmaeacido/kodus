@@ -46,6 +46,7 @@ scripts/__pycache__/
 .tmp.driveupload/
 .tmp.drivedownload/
 artifacts/
+kodus/
 scratch/
 screenshots/
 pandoc-main/

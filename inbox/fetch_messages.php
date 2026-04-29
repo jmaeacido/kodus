@@ -26,6 +26,8 @@ if ($userType === 'admin') {
                sender_user.sso_avatar_url AS sender_sso_avatar_url,
                sender_user.last_activity AS sender_last_activity,
                sender_user.is_online AS sender_is_online,
+               current_member.muted_at AS current_member_muted_at,
+               current_member.left_at AS current_member_left_at,
                TRIM(BOTH ', ' FROM CONCAT_WS(', ',
                    (
                        SELECT GROUP_CONCAT(DISTINCT u.username ORDER BY u.username SEPARATOR ', ')
@@ -75,7 +77,11 @@ if ($userType === 'admin') {
         LEFT JOIN users sender_user ON sender_user.email = cm.user_email
         LEFT JOIN message_reads mr
             ON cm.id = mr.message_id AND mr.user_id = ?
+        LEFT JOIN contact_message_recipients current_member
+            ON current_member.message_id = cm.id AND current_member.user_id = ?
         WHERE (
+            COALESCE(cm.conversation_type, 'direct') = 'group'
+            OR
             cm.user_email = ?
             OR EXISTS (
                 SELECT 1
@@ -86,9 +92,10 @@ if ($userType === 'admin') {
             )
         )
           AND {$trashPredicate}
+          AND " . mailboxVisibilityPredicate((int) $userId, 'cm', 'mr') . "
         ORDER BY latest_activity_at DESC, cm.id DESC
     ");
-    $stmt->bind_param("is", $userId, $userEmail);
+    $stmt->bind_param("iis", $userId, $userId, $userEmail);
 } else {
     $stmt = $conn->prepare("
         SELECT cm.*,
@@ -98,6 +105,8 @@ if ($userType === 'admin') {
                sender_user.sso_avatar_url AS sender_sso_avatar_url,
                sender_user.last_activity AS sender_last_activity,
                sender_user.is_online AS sender_is_online,
+               current_member.muted_at AS current_member_muted_at,
+               current_member.left_at AS current_member_left_at,
                TRIM(BOTH ', ' FROM CONCAT_WS(', ',
                    (
                        SELECT GROUP_CONCAT(DISTINCT u.username ORDER BY u.username SEPARATOR ', ')
@@ -147,6 +156,8 @@ if ($userType === 'admin') {
         LEFT JOIN users sender_user ON sender_user.email = cm.user_email
         LEFT JOIN message_reads mr
             ON cm.id = mr.message_id AND mr.user_id = ?
+        LEFT JOIN contact_message_recipients current_member
+            ON current_member.message_id = cm.id AND current_member.user_id = ?
         WHERE (cm.user_email = ?
            OR cm.user_name = ?
            OR EXISTS (
@@ -154,11 +165,13 @@ if ($userType === 'admin') {
                FROM contact_message_recipients cmr
                WHERE cmr.message_id = cm.id
                  AND LOWER(cmr.recipient_email) = LOWER(?)
-           ))
+           )
+           OR COALESCE(cm.conversation_type, 'direct') = 'group')
           AND {$trashPredicate}
+          AND " . mailboxVisibilityPredicate((int) $userId, 'cm', 'mr') . "
         ORDER BY latest_activity_at DESC, cm.id DESC
     ");
-    $stmt->bind_param("isss", $userId, $userEmail, $userName, $userEmail);
+    $stmt->bind_param("iisss", $userId, $userId, $userEmail, $userName, $userEmail);
 }
 
 $stmt->execute();
@@ -184,6 +197,7 @@ if ($messages === []): ?>
             <?php foreach ($messages as $row): ?>
                 <?php
                     $messageId = (int) $row['id'];
+                    $isGroupThread = mailboxIsGroupThread($row);
                     $recipientLabel = trim((string) ($row['recipient_names'] ?? ''));
                     $senderLabel = trim((string) ($row['user_name'] ?? ''));
                     if ($senderLabel === '') {
@@ -195,14 +209,18 @@ if ($messages === []): ?>
                         (string) ($_SESSION['email'] ?? ''),
                         (string) ($_SESSION['username'] ?? '')
                     );
-                    $displayLabel = $isSenderView
+                    $displayLabel = $isGroupThread
+                        ? (trim((string) ($row['group_name'] ?? '')) !== '' ? (string) $row['group_name'] : 'Group chat')
+                        : ($isSenderView
                         ? ($recipientLabel !== '' ? $recipientLabel : 'Unknown')
-                        : $senderLabel;
+                        : $senderLabel);
                     $name = htmlspecialchars($displayLabel);
-                    $displayPicture = $isSenderView ? ($row['recipient_picture'] ?? '') : ($row['sender_picture'] ?? '');
+                    $displayPicture = $isGroupThread ? '' : ($isSenderView ? ($row['recipient_picture'] ?? '') : ($row['sender_picture'] ?? ''));
                     $displaySsoAvatar = $isSenderView ? ($row['recipient_sso_avatar_url'] ?? '') : ($row['sender_sso_avatar_url'] ?? '');
-                    $avatarUrl = avatar_resolve_url($displayPicture, $displaySsoAvatar, $base_url, dirname(__DIR__));
-                    $presence = mailboxClassifyPresence(
+                    $avatarUrl = $isGroupThread && trim((string) ($row['group_photo'] ?? '')) !== ''
+                        ? $base_url . 'inbox/uploads/group_photos/' . rawurlencode((string) $row['group_photo'])
+                        : avatar_resolve_url($displayPicture, $displaySsoAvatar, $base_url, dirname(__DIR__));
+                    $presence = $isGroupThread ? ['detail' => 'Group chat', 'class' => 'online'] : mailboxClassifyPresence(
                         $isSenderView ? ($row['recipient_last_activity'] ?? null) : ($row['sender_last_activity'] ?? null),
                         (int) ($isSenderView ? ($row['recipient_is_online'] ?? 0) : ($row['sender_is_online'] ?? 0))
                     );
@@ -218,7 +236,16 @@ if ($messages === []): ?>
                     $timestamp = $activityAt !== '' ? strtotime($activityAt) : false;
                     $dateLabel = $timestamp ? date('M d', $timestamp) : '';
                     $hasAttachment = !empty($row['attachment']);
-                    $rowClass = ((int) ($row['user_read'] ?? 0) === 0) ? 'unread' : '';
+                    $groupMuted = $isGroupThread && !empty($row['current_member_muted_at']);
+                    $groupLeft = $isGroupThread && !empty($row['current_member_left_at']);
+                    $rowClass = (!$groupMuted && !$groupLeft && (int) ($row['user_read'] ?? 0) === 0) ? 'unread' : '';
+                    $groupStateBadges = [];
+                    if ($groupMuted) {
+                        $groupStateBadges[] = ['label' => 'Muted', 'class' => 'mailbox-chat-badge--muted'];
+                    }
+                    if ($groupLeft) {
+                        $groupStateBadges[] = ['label' => 'Left', 'class' => 'mailbox-chat-badge--left'];
+                    }
                 ?>
                 <tr class="message-item <?= $rowClass ?>"
                     data-id="<?= $messageId ?>"
@@ -248,6 +275,9 @@ if ($messages === []): ?>
                     <td class="mailbox-name"><?= $name ?></td>
                     <td class="mailbox-subject">
                         <span class="mailbox-subject-line"><?= $subject ?></span><?php if ($snippet !== ''): ?><span class="mailbox-snippet"> - <?= $snippet ?></span><?php endif; ?>
+                        <?php foreach ($groupStateBadges as $badge): ?>
+                            <span class="mailbox-chat-badge <?= htmlspecialchars($badge['class']) ?>"><?= htmlspecialchars($badge['label']) ?></span>
+                        <?php endforeach; ?>
                     </td>
                     <td class="mailbox-attachment text-center" style="width:40px;">
                         <?php if ($hasAttachment): ?>

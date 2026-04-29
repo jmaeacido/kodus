@@ -28,6 +28,8 @@ if ($userType === 'admin') {
         FROM contact_messages cm
         WHERE cm.id = ?
           AND (
+              COALESCE(cm.conversation_type, 'direct') = 'group'
+              OR
               cm.user_email = ?
               OR EXISTS (
                   SELECT 1
@@ -37,9 +39,10 @@ if ($userType === 'admin') {
                     AND u.userType = 'admin'
               )
           )
+          AND " . mailboxThreadAccessPredicate('cm') . "
         LIMIT 1
     ");
-    $accessStmt->bind_param("is", $messageId, $userEmail);
+    $accessStmt->bind_param("isi", $messageId, $userEmail, $userId);
 } else {
     $accessStmt = $conn->prepare("
         SELECT id
@@ -50,10 +53,12 @@ if ($userType === 'admin') {
               FROM contact_message_recipients cmr
               WHERE cmr.message_id = contact_messages.id
                 AND LOWER(cmr.recipient_email) = LOWER(?)
-          ))
+          )
+          OR COALESCE(conversation_type, 'direct') = 'group')
+          AND " . mailboxThreadAccessPredicate('contact_messages') . "
         LIMIT 1
     ");
-    $accessStmt->bind_param("isss", $messageId, $userEmail, $userName, $userEmail);
+    $accessStmt->bind_param("isssi", $messageId, $userEmail, $userName, $userEmail, $userId);
 }
 
 $accessStmt->execute();

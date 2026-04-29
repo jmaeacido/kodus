@@ -36,58 +36,14 @@ if ($userId <= 0 || $messageId <= 0 || $emoji === '') {
     exit;
 }
 
-$allowedEmojis = ['👍','❤️','😂','🎉','🔥','👏','🙏','✅','👀','💡'];
+$allowedEmojis = ["\u{1F44D}", "\u{2764}\u{FE0F}", "\u{1F602}", "\u{1F389}", "\u{1F525}", "\u{1F44F}", "\u{1F64F}", "\u{2705}", "\u{1F440}", "\u{1F4A1}"];
 if (!in_array($emoji, $allowedEmojis, true)) {
     http_response_code(422);
     echo json_encode(['success' => false, 'error' => 'Unsupported reaction.']);
     exit;
 }
 
-$threadAccessSql = "
-    SELECT cm.id
-    FROM contact_messages cm
-    WHERE cm.id = ?
-";
-
-if ($userType === 'admin') {
-    $threadAccessSql .= "
-      AND (
-          cm.user_email = ?
-          OR EXISTS (
-              SELECT 1
-              FROM contact_message_recipients cmr
-              INNER JOIN users u ON u.id = cmr.user_id
-              WHERE cmr.message_id = cm.id
-                AND u.userType = 'admin'
-          )
-      )
-      LIMIT 1
-    ";
-    $accessStmt = $conn->prepare($threadAccessSql);
-    $accessStmt->bind_param('is', $messageId, $userEmail);
-} else {
-    $threadAccessSql .= "
-      AND (
-          cm.user_email = ?
-          OR cm.user_name = ?
-          OR EXISTS (
-              SELECT 1
-              FROM contact_message_recipients cmr
-              WHERE cmr.message_id = cm.id
-                AND LOWER(cmr.recipient_email) = LOWER(?)
-          )
-      )
-      LIMIT 1
-    ";
-    $accessStmt = $conn->prepare($threadAccessSql);
-    $accessStmt->bind_param('isss', $messageId, $userEmail, $userName, $userEmail);
-}
-
-$accessStmt->execute();
-$thread = db_stmt_fetch_one_assoc($accessStmt);
-$accessStmt->close();
-
-if (!$thread) {
+if (!mailboxCanAccessMessage($conn, $messageId, $userType, $userEmail, $userName)) {
     http_response_code(403);
     echo json_encode(['success' => false, 'error' => 'You are not allowed to react to this conversation.']);
     exit;
@@ -122,13 +78,13 @@ if ($existing) {
     $deleteStmt->execute();
     $deleteStmt->close();
 } else {
-    $insertSql = 'INSERT INTO message_reactions (message_id, reply_id, target_key, user_id, emoji) VALUES (?, ?, ?, ?, ?)';
+    $insertSql = 'INSERT IGNORE INTO message_reactions (message_id, reply_id, target_key, user_id, emoji) VALUES (?, ?, ?, ?, ?)';
     $insertStmt = $conn->prepare($insertSql);
     $insertReplyId = $replyId !== null && $replyId > 0 ? $replyId : null;
     $insertStmt->bind_param('iisis', $messageId, $insertReplyId, $targetKey, $userId, $emoji);
     $insertStmt->execute();
+    $reacted = $insertStmt->affected_rows > 0;
     $insertStmt->close();
-    $reacted = true;
 }
 
 $summary = mailboxFetchReactionSummary($conn, $messageId, $replyId > 0 ? $replyId : null, $userId);

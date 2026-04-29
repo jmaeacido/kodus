@@ -36,7 +36,7 @@ function kodus_socket_config(): array
         return $config;
     }
 
-    $origin = rtrim((string) app_env('KODUS_SOCKET_SERVER_URL', kodus_socket_origin_from_sso()), '/');
+    $origin = rtrim((string) app_env('KODUS_SOCKET_SERVER_URL', ''), '/');
     $broadcastUrl = (string) app_env('KODUS_SOCKET_BROADCAST_URL', $origin !== '' ? $origin . '/socket/broadcast' : '');
     $clientScriptUrl = (string) app_env('KODUS_SOCKET_CLIENT_SCRIPT_URL', $origin !== '' ? $origin . '/socket.io/socket.io.js' : '');
     $enabled = kodus_socket_env_bool('KODUS_SOCKET_ENABLED', $broadcastUrl !== '' || $origin !== '');
@@ -63,14 +63,13 @@ function kodus_socket_is_enabled(): bool
 function kodus_socket_frontend_config(): array
 {
     $config = kodus_socket_config();
-    $sessionToken = !empty($config['enabled']) ? trim((string) ($_SESSION['idp_access_token'] ?? '')) : '';
 
     return [
         'enabled' => (bool) ($config['enabled'] ?? false),
         'serverUrl' => (string) ($config['server_url'] ?? ''),
         'clientScriptUrl' => (string) ($config['client_script_url'] ?? ''),
         'joinEvent' => (string) ($config['join_event'] ?? 'subscribe'),
-        'accessToken' => $sessionToken,
+        'accessToken' => '',
     ];
 }
 
@@ -82,15 +81,14 @@ function kodus_socket_broadcast(string $channel, string $event, array $data = []
         return false;
     }
 
-    $token = trim((string) ($_SESSION['idp_access_token'] ?? ''));
-    if ($token === '') {
-        $token = trim((string) ($config['service_token'] ?? ''));
-    }
+    $token = trim((string) ($config['service_token'] ?? ''), " \t\n\r\0\x0B\"'");
 
     if ($token === '') {
         error_log('KODUS socket broadcast skipped: missing bearer token.');
         return false;
     }
+
+    error_log('KODUS socket broadcast token length: ' . strlen($token));
 
     if (!function_exists('curl_init')) {
         error_log('KODUS socket broadcast skipped: cURL extension is unavailable.');
@@ -133,8 +131,10 @@ function kodus_socket_broadcast(string $channel, string $event, array $data = []
     $error = curl_error($curl);
     curl_close($curl);
 
+    error_log('KODUS socket broadcast HTTP status: ' . $status);
+
     if ($response === false || $status < 200 || $status >= 300) {
-        error_log('KODUS socket broadcast failed: HTTP ' . $status . ' ' . ($error !== '' ? $error : ''));
+        error_log('KODUS socket broadcast failed: HTTP ' . $status);
         return false;
     }
 

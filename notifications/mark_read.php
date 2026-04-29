@@ -44,6 +44,11 @@ $countUnread = static function () use ($conn, $userId): int {
 if ($markAll) {
     $markedCount = $countUnread();
     app_notification_mark_all_read($conn, $userId);
+    kodus_socket_broadcast('kodus.notifications', 'notifications.changed', [
+        'action' => 'mark_all_read',
+        'actor_id' => $userId,
+        'marked_count' => $markedCount,
+    ]);
 
     security_send_json([
         'success' => true,
@@ -60,9 +65,18 @@ if (!is_array($ids)) {
 app_notification_mark_read($conn, $userId, $ids);
 
 $unreadCount = $countUnread();
+$normalizedIds = array_values(array_unique(array_filter(array_map('intval', $ids))));
+
+if ($normalizedIds !== []) {
+    kodus_socket_broadcast('kodus.notifications', 'notifications.changed', [
+        'action' => 'mark_read',
+        'actor_id' => $userId,
+        'notification_ids' => $normalizedIds,
+    ]);
+}
 
 security_send_json([
     'success' => true,
-    'marked_count' => count(array_values(array_unique(array_filter(array_map('intval', $ids))))),
+    'marked_count' => count($normalizedIds),
     'unread_count' => $unreadCount,
 ]);

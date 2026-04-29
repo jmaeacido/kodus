@@ -2,6 +2,7 @@
 require_once __DIR__ . '/../security.php';
 security_bootstrap_session();
 require_once __DIR__ . '/../config.php';
+require_once __DIR__ . '/../socket_helpers.php';
 
 security_require_method(['POST']);
 security_require_csrf_token();
@@ -50,6 +51,17 @@ $saved = kodus_setting_set($conn, 'maintenance_enabled', $maintenanceEnabled, $u
     && kodus_setting_set($conn, 'maintenance_redirect_seconds', (string) $redirectSeconds, $userId);
 
 if ($saved) {
+    $maintenanceState = kodus_maintenance_state($conn);
+    kodus_socket_broadcast('kodus.session', 'maintenance.changed', [
+        'state' => [
+            'active' => ($maintenanceState['phase'] ?? 'inactive') === 'pending',
+            'phase' => $maintenanceState['phase'] ?? 'inactive',
+            'message' => (string) ($maintenanceState['warning_message'] ?? ''),
+            'effective_at' => $maintenanceState['effective_at'] ?? null,
+            'seconds_remaining' => (int) ($maintenanceState['seconds_remaining'] ?? 0),
+        ],
+    ]);
+
     $stateLabel = $maintenanceEnabled === '1' ? 'enabled' : 'disabled';
     audit_log(
         $conn,

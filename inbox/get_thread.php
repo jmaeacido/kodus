@@ -96,6 +96,8 @@ $query = "
 if ($userType === 'admin') {
     $query .= "
       AND (
+          COALESCE(cm.conversation_type, 'direct') = 'group'
+          OR
           cm.user_email = ?
           OR EXISTS (
               SELECT 1
@@ -105,19 +107,22 @@ if ($userType === 'admin') {
                 AND u.userType = 'admin'
           )
       )
+      AND " . mailboxThreadAccessPredicate('cm') . "
       LIMIT 1
     ";
     $stmt = $conn->prepare($query);
-    $stmt->bind_param('is', $id, $userEmail);
+    $stmt->bind_param('isi', $id, $userEmail, $userId);
 } else {
     $query .= " AND (cm.user_email = ? OR cm.user_name = ? OR EXISTS (
         SELECT 1
         FROM contact_message_recipients cmr
         WHERE cmr.message_id = cm.id
           AND LOWER(cmr.recipient_email) = LOWER(?)
-    )) LIMIT 1";
+    ) OR COALESCE(cm.conversation_type, 'direct') = 'group')
+    AND " . mailboxThreadAccessPredicate('cm') . "
+    LIMIT 1";
     $stmt = $conn->prepare($query);
-    $stmt->bind_param('isss', $id, $userEmail, $userName, $userEmail);
+    $stmt->bind_param('isssi', $id, $userEmail, $userName, $userEmail, $userId);
 }
 
 $stmt->execute();
@@ -150,6 +155,22 @@ $canDeleteForEveryone = $userType === 'admin'
         $currentUserEmail,
         $currentUserName
     );
+$isGroupThread = mailboxIsGroupThread($message);
+$groupMemberState = ['left_at' => null, 'muted_at' => null, 'hidden_at' => null];
+if ($isGroupThread) {
+    $memberStateStmt = $conn->prepare("
+        SELECT muted_at, left_at, hidden_at
+        FROM contact_message_recipients
+        WHERE message_id = ? AND user_id = ?
+        LIMIT 1
+    ");
+    if ($memberStateStmt) {
+        $memberStateStmt->bind_param('ii', $id, $userId);
+        $memberStateStmt->execute();
+        $groupMemberState = db_stmt_fetch_one_assoc($memberStateStmt) ?: $groupMemberState;
+        $memberStateStmt->close();
+    }
+}
 
 $stmt = $conn->prepare("
     SELECT r.*, u.username, u.userType, u.picture, u.sso_avatar_url, deleter.username AS deleted_by_username
@@ -196,15 +217,19 @@ $primaryRecipientAvatarUrl = avatar_resolve_url(
     $base_url,
     dirname(__DIR__)
 );
-$chatTitle = $originalIsMine
+$chatTitle = $isGroupThread
+    ? (trim((string) ($message['group_name'] ?? '')) !== '' ? (string) $message['group_name'] : 'Group chat')
+    : ($originalIsMine
     ? ($primaryRecipientName !== '' ? $primaryRecipientName : ($recipientDisplay !== '' ? $recipientDisplay : 'Admin'))
-    : $originalDisplayName;
+    : $originalDisplayName);
 
 if ($chatTitle === '' || strcasecmp($chatTitle, 'unknown') === 0) {
     $chatTitle = 'Chat';
 }
 
-$chatAvatarUrl = $originalIsMine ? $primaryRecipientAvatarUrl : $originalAvatarUrl;
+$chatAvatarUrl = $isGroupThread
+    ? (trim((string) ($message['group_photo'] ?? '')) !== '' ? $base_url . 'inbox/uploads/group_photos/' . rawurlencode((string) $message['group_photo']) : $base_url . 'dist/img/default.webp')
+    : ($originalIsMine ? $primaryRecipientAvatarUrl : $originalAvatarUrl);
 if (trim((string) $chatAvatarUrl) === '') {
     $chatAvatarUrl = $originalAvatarUrl;
 }
@@ -213,7 +238,15 @@ $chatPresence = mailboxClassifyPresence(
     $originalIsMine ? ($message['primary_recipient_last_activity'] ?? null) : ($message['sender_last_activity'] ?? null),
     (int) ($originalIsMine ? ($message['primary_recipient_is_online'] ?? 0) : ($message['sender_is_online'] ?? 0))
 );
-$chatStatusCopy = $currentFolder === 'trash' ? 'Archived chat' : $chatPresence['detail'];
+$chatStatusCopy = $currentFolder === 'trash'
+    ? 'Archived chat'
+    : ($isGroupThread
+        ? (!empty($groupMemberState['left_at'])
+            ? 'You left this group'
+            : (!empty($groupMemberState['muted_at'])
+                ? 'Muted - ' . count($participantLabels) . ' members'
+                : count($participantLabels) . ' members'))
+        : $chatPresence['detail']);
 $chatMetaCopy = $currentFolder === 'trash'
     ? 'Restore this chat to send new updates.'
     : '';
@@ -274,18 +307,28 @@ function renderAttachments($attachmentCsv, $basePath, $type = 'contact')
 
 function renderReactionBar(array $summary, int $messageId, ?int $replyId): string
 {
-    $pickerEmojis = ['👍', '❤️', '😂', '🎉', '🔥', '👏', '🙏', '✅', '👀', '💡'];
+    $pickerEmojis = ["\u{1F44D}", "\u{2764}\u{FE0F}", "\u{1F602}", "\u{1F389}", "\u{1F525}", "\u{1F44F}", "\u{1F64F}", "\u{2705}", "\u{1F440}", "\u{1F4A1}"];
     ob_start();
     ?>
     <div class="chat-reactions" data-message-id="<?= $messageId ?>"<?= $replyId !== null ? ' data-reply-id="' . (int) $replyId . '"' : '' ?>>
       <div class="chat-reaction-summary">
         <?php foreach ($summary as $reaction): ?>
+          <?php
+            $emoji = (string) ($reaction['emoji'] ?? '');
+            $reactors = $reaction['reactors'] ?? [];
+            $reactorCopy = is_array($reactors) && $reactors !== []
+                ? implode(', ', array_map('strval', $reactors))
+                : 'No reactions yet';
+            $reactionTitle = $emoji . ' ' . $reactorCopy;
+          ?>
           <button
             type="button"
             class="chat-reaction-chip<?= !empty($reaction['reacted']) ? ' is-active' : '' ?>"
-            data-emoji="<?= htmlspecialchars((string) ($reaction['emoji'] ?? ''), ENT_QUOTES) ?>"
+            data-emoji="<?= htmlspecialchars($emoji, ENT_QUOTES) ?>"
+            data-reaction-details="<?= htmlspecialchars($reactionTitle, ENT_QUOTES) ?>"
+            aria-label="<?= htmlspecialchars($reactionTitle, ENT_QUOTES) ?>"
           >
-            <span class="chat-reaction-emoji"><?= htmlspecialchars((string) ($reaction['emoji'] ?? '')) ?></span>
+            <span class="chat-reaction-emoji"><?= htmlspecialchars($emoji) ?></span>
             <span class="chat-reaction-count"><?= (int) ($reaction['count'] ?? 0) ?></span>
           </button>
         <?php endforeach; ?>
@@ -450,6 +493,40 @@ if ($onlyConversation) {
           </div>
         </div>
       </div>
+      <div class="chat-thread-options">
+        <div class="dropdown">
+          <button
+            type="button"
+            class="btn btn-sm chat-thread-options-btn conversation-options-trigger"
+            aria-label="Conversation options"
+            aria-expanded="false"
+            data-toggle="dropdown"
+            data-message-id="<?= (int) $id ?>"
+            data-is-group="<?= $isGroupThread ? '1' : '0' ?>"
+            data-group-name="<?= htmlspecialchars($chatTitle, ENT_QUOTES) ?>"
+            data-group-muted="<?= !empty($groupMemberState['muted_at']) ? '1' : '0' ?>"
+            data-group-left="<?= !empty($groupMemberState['left_at']) ? '1' : '0' ?>"
+            data-can-send="<?= $currentFolder !== 'trash' && (!$isGroupThread || empty($groupMemberState['left_at'])) ? '1' : '0' ?>"
+          >
+            <i class="fas fa-ellipsis-h"></i>
+          </button>
+          <div class="dropdown-menu dropdown-menu-right chat-thread-options-menu">
+            <?php if ($isGroupThread && empty($groupMemberState['left_at'])): ?>
+              <button type="button" class="dropdown-item conversation-see-members-trigger"><i class="fas fa-address-book mr-2"></i>See Members</button>
+              <button type="button" class="dropdown-item conversation-add-member-trigger"><i class="fas fa-user-plus mr-2"></i>Add member</button>
+              <button type="button" class="dropdown-item conversation-edit-group-trigger"><i class="fas fa-users-cog mr-2"></i>Edit group</button>
+              <button type="button" class="dropdown-item conversation-mute-trigger"><i class="fas fa-bell-slash mr-2"></i><?= !empty($groupMemberState['muted_at']) ? 'Unmute' : 'Mute' ?></button>
+              <div class="dropdown-divider"></div>
+              <button type="button" class="dropdown-item text-danger conversation-leave-trigger"><i class="fas fa-sign-out-alt mr-2"></i>Leave group</button>
+            <?php elseif ($isGroupThread): ?>
+              <button type="button" class="dropdown-item conversation-see-members-trigger"><i class="fas fa-address-book mr-2"></i>See Members</button>
+              <button type="button" class="dropdown-item text-danger conversation-delete-trigger"><i class="far fa-trash-alt mr-2"></i>Delete/Hide</button>
+            <?php else: ?>
+              <button type="button" class="dropdown-item text-danger conversation-delete-trigger"><i class="far fa-trash-alt mr-2"></i>Delete conversation</button>
+            <?php endif; ?>
+          </div>
+        </div>
+      </div>
     </div>
     <div class="mailbox-read-meta chat-thread-participants">
       <div class="mailbox-read-meta-item">
@@ -469,7 +546,6 @@ if ($onlyConversation) {
 
   <div class="mailbox-controls with-border text-right mb-3 mailbox-detail-actions">
     <div class="btn-group mailbox-tools">
-      <a href="?compose=1" class="btn btn-default btn-sm mailbox-compose-trigger"><i class="fas fa-pen mr-1"></i> New chat</a>
       <?php if ($currentFolder === 'trash'): ?>
         <button type="button" class="btn btn-success btn-sm mailbox-restore-trigger" data-id="<?= (int) $id ?>">
           <i class="fas fa-undo mr-1"></i> Restore
@@ -491,10 +567,6 @@ if ($onlyConversation) {
     <div class="mailbox-thread-heading">
       <h6 class="text-uppercase">Chat flow</h6>
     </div>
-    <div class="chat-typing-indicator" id="threadTypingIndicator" hidden>
-      <span class="chat-typing-dots"><span></span><span></span><span></span></span>
-      <span class="chat-typing-copy">Someone is typing...</span>
-    </div>
   </div>
 
   <div id="conversationWrapper" class="mt-4">
@@ -503,10 +575,14 @@ if ($onlyConversation) {
       <?php foreach ($replies as $reply): ?>
           <?= renderReply($reply, $userId, (string) $userType, $replyReactionSummary[(int) ($reply['id'] ?? 0)] ?? [], (int) $message['id']) ?>
       <?php endforeach; ?>
+      <div class="chat-typing-indicator reply theirs" id="threadTypingIndicator" hidden>
+        <span class="chat-typing-dots"><span></span><span></span><span></span></span>
+        <span class="chat-typing-copy">Someone is typing...</span>
+      </div>
     </div>
   </div>
 
-  <?php if ($currentFolder !== 'trash'): ?>
+  <?php if ($currentFolder !== 'trash' && (!$isGroupThread || empty($groupMemberState['left_at']))): ?>
     <div class="mt-3">
       <form id="replyForm" enctype="multipart/form-data" class="reply-form-shell chat-composer-shell" data-no-loader="true">
         <div class="chat-mentions-shell">
@@ -535,7 +611,7 @@ if ($onlyConversation) {
     </div>
   <?php else: ?>
     <div class="alert alert-light border mt-4 mb-0">
-      This chat is archived. Restore it if you want to jump back in.
+      <?= $isGroupThread && !empty($groupMemberState['left_at']) ? 'You left this group. You can delete it from your chat list.' : 'This chat is archived. Restore it if you want to jump back in.' ?>
     </div>
   <?php endif; ?>
 </div>
@@ -561,7 +637,7 @@ if ($onlyConversation) {
             return [];
         }
     })();
-    const emojis = ['😀', '😂', '😊', '😍', '😉', '👍', '👏', '🙏', '🎉', '🔥', '❤️', '✨', '📎', '📩', '✅', '🤝', '🙌', '😎', '📌', '💡'];
+    const composerEmojis = ['😀', '😂', '😊', '😍', '😉', '👍', '👏', '🙏', '🎉', '🔥', '❤️', '✨', '📎', '📩', '✅', '🤝', '🙌', '😎', '📌', '💡'];
 
     if (!replyForm || !attachBtn || !fileInput || !preview || !replyText || !emojiTrigger || !emojiMenu || !mentionMenu) {
         return;
@@ -633,7 +709,7 @@ if ($onlyConversation) {
         mentionMenu.hidden = false;
     }
 
-    emojis.forEach(function(emoji) {
+    composerEmojis.forEach(function(emoji) {
         const button = document.createElement('button');
         button.type = 'button';
         button.className = 'emoji-item';

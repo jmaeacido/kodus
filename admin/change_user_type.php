@@ -12,6 +12,7 @@ require_once '../vendor/autoload.php'; // make sure PHPMailer is autoloaded
 require_once '../mail_config.php';
 require_once '../notification_helpers.php';
 require_once '../role_change_helpers.php';
+require_once '../socket_helpers.php';
 
 header('Content-Type: application/json');
 
@@ -96,6 +97,13 @@ $update->close();
 
 if ($oldType !== $newType) {
     role_change_schedule($conn, $userId, $oldType, $newType, 20);
+    $roleChangeState = role_change_get_state($conn, $userId);
+    if ($roleChangeState) {
+        kodus_socket_broadcast('kodus.session', 'role.changed', [
+            'user_id' => $userId,
+            'state' => $roleChangeState,
+        ]);
+    }
 }
 
 // Audit log

@@ -1,6 +1,7 @@
 <?php
 require_once '../security.php';
 // This page uses Leaflet tiles from OpenStreetMap and Esri, so allow only those image hosts here.
+$socketSources = security_socket_csp_sources();
 security_set_content_security_policy(security_compile_content_security_policy([
     "default-src 'self'",
     "base-uri 'self'",
@@ -10,8 +11,8 @@ security_set_content_security_policy(security_compile_content_security_policy([
     "img-src 'self' data: blob: https://*.tile.openstreetmap.org https://services.arcgisonline.com",
     "font-src 'self' data:",
     "style-src 'self' 'unsafe-inline'",
-    "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://caraga-connect.dswd.gov.ph",
-    "connect-src 'self' ws: wss: https://caraga-connect.dswd.gov.ph",
+    trim("script-src 'self' 'unsafe-inline' 'unsafe-eval' " . implode(' ', $socketSources['script'])),
+    trim("connect-src 'self' " . implode(' ', $socketSources['connect'])),
     "frame-src 'self'",
     "media-src 'self' data: blob:",
     "worker-src 'self' blob:",

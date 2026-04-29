@@ -612,6 +612,7 @@ function openIncomingDetails(rowData) {
               channels: ['incoming_table'],
               table: table,
               socket: {
+                  key: 'data-tracking-in',
                   channel: 'kodus.incoming',
                   events: ['incoming.changed']
               }

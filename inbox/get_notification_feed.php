@@ -64,6 +64,8 @@ if ($userType === 'admin') {
         LEFT JOIN message_reads mr
           ON cm.id = mr.message_id AND mr.user_id = ?
         WHERE (
+            COALESCE(cm.conversation_type, 'direct') = 'group'
+            OR
             cm.user_email = ?
             OR EXISTS (
                 SELECT 1
@@ -74,17 +76,22 @@ if ($userType === 'admin') {
             )
         )
           AND COALESCE(mr.is_trashed, 0) = 0
+          AND " . mailboxVisibilityPredicate((int) $userId, 'cm', 'mr') . "
+          AND NOT EXISTS (
+              SELECT 1 FROM contact_message_recipients muted
+              WHERE muted.message_id = cm.id AND muted.user_id = ? AND (muted.muted_at IS NOT NULL OR muted.left_at IS NOT NULL)
+          )
           AND (mr.is_read IS NULL OR mr.is_read = 0)
     ";
     $countStmt = $conn->prepare($countSql);
-    $countStmt->bind_param('is', $userId, $userEmail);
+    $countStmt->bind_param('isi', $userId, $userEmail, $userId);
     $countStmt->execute();
     $countResult = db_stmt_fetch_one_assoc($countStmt);
     $unreadCount = (int) ($countResult['unread'] ?? 0);
     $countStmt->close();
 
     $feedSql = "
-        SELECT cm.id, cm.user_name, cm.user_email, cm.subject, cm.message,
+        SELECT cm.id, cm.user_name, cm.user_email, cm.subject, cm.message, cm.conversation_type, cm.group_name, cm.group_photo,
                COALESCE(reply_summary.latest_reply_at, cm.sent_at) AS latest_activity_at,
                u.first_name, u.last_name, u.picture, u.sso_avatar_url
         FROM contact_messages cm
@@ -97,6 +104,8 @@ if ($userType === 'admin') {
         LEFT JOIN message_reads mr
           ON cm.id = mr.message_id AND mr.user_id = ?
         WHERE (
+            COALESCE(cm.conversation_type, 'direct') = 'group'
+            OR
             cm.user_email = ?
             OR EXISTS (
                 SELECT 1
@@ -107,12 +116,17 @@ if ($userType === 'admin') {
             )
         )
           AND COALESCE(mr.is_trashed, 0) = 0
+          AND " . mailboxVisibilityPredicate((int) $userId, 'cm', 'mr') . "
+          AND NOT EXISTS (
+              SELECT 1 FROM contact_message_recipients muted
+              WHERE muted.message_id = cm.id AND muted.user_id = ? AND (muted.muted_at IS NOT NULL OR muted.left_at IS NOT NULL)
+          )
           AND (mr.is_read IS NULL OR mr.is_read = 0)
         ORDER BY latest_activity_at DESC, cm.id DESC
         LIMIT 5
     ";
     $feedStmt = $conn->prepare($feedSql);
-    $feedStmt->bind_param('is', $userId, $userEmail);
+    $feedStmt->bind_param('isi', $userId, $userEmail, $userId);
 } else {
     $countSql = "
         SELECT COUNT(*) AS unread
@@ -124,19 +138,24 @@ if ($userType === 'admin') {
             FROM contact_message_recipients cmr
             WHERE cmr.message_id = cm.id
               AND LOWER(cmr.recipient_email) = LOWER(?)
-        ))
+        ) OR COALESCE(cm.conversation_type, 'direct') = 'group')
           AND COALESCE(mr.is_trashed, 0) = 0
+          AND " . mailboxVisibilityPredicate((int) $userId, 'cm', 'mr') . "
+          AND NOT EXISTS (
+              SELECT 1 FROM contact_message_recipients muted
+              WHERE muted.message_id = cm.id AND muted.user_id = ? AND (muted.muted_at IS NOT NULL OR muted.left_at IS NOT NULL)
+          )
           AND (mr.is_read IS NULL OR mr.is_read = 0)
     ";
     $countStmt = $conn->prepare($countSql);
-    $countStmt->bind_param('isss', $userId, $userEmail, $userName, $userEmail);
+    $countStmt->bind_param('isssi', $userId, $userEmail, $userName, $userEmail, $userId);
     $countStmt->execute();
     $countResult = db_stmt_fetch_one_assoc($countStmt);
     $unreadCount = (int) ($countResult['unread'] ?? 0);
     $countStmt->close();
 
     $feedSql = "
-        SELECT cm.id, cm.user_name, cm.user_email, cm.subject, cm.message,
+        SELECT cm.id, cm.user_name, cm.user_email, cm.subject, cm.message, cm.conversation_type, cm.group_name, cm.group_photo,
                COALESCE(reply_summary.latest_reply_at, cm.sent_at) AS latest_activity_at,
                u.first_name, u.last_name, u.picture, u.sso_avatar_url
         FROM contact_messages cm
@@ -153,14 +172,19 @@ if ($userType === 'admin') {
             FROM contact_message_recipients cmr
             WHERE cmr.message_id = cm.id
               AND LOWER(cmr.recipient_email) = LOWER(?)
-        ))
+        ) OR COALESCE(cm.conversation_type, 'direct') = 'group')
           AND COALESCE(mr.is_trashed, 0) = 0
+          AND " . mailboxVisibilityPredicate((int) $userId, 'cm', 'mr') . "
+          AND NOT EXISTS (
+              SELECT 1 FROM contact_message_recipients muted
+              WHERE muted.message_id = cm.id AND muted.user_id = ? AND (muted.muted_at IS NOT NULL OR muted.left_at IS NOT NULL)
+          )
           AND (mr.is_read IS NULL OR mr.is_read = 0)
         ORDER BY latest_activity_at DESC, cm.id DESC
         LIMIT 5
     ";
     $feedStmt = $conn->prepare($feedSql);
-    $feedStmt->bind_param('isss', $userId, $userEmail, $userName, $userEmail);
+    $feedStmt->bind_param('isssi', $userId, $userEmail, $userName, $userEmail, $userId);
 }
 
 $feedStmt->execute();
@@ -174,7 +198,8 @@ $latestPreviews = mailboxLatestThreadPreviews(
 );
 
 foreach ($feedRows as $row) {
-    $senderName = trim((string) ($row['first_name'] ?? '') . ' ' . (string) ($row['last_name'] ?? ''));
+    $isGroupThread = mailboxIsGroupThread($row);
+    $senderName = $isGroupThread ? trim((string) ($row['group_name'] ?? 'Group chat')) : trim((string) ($row['first_name'] ?? '') . ' ' . (string) ($row['last_name'] ?? ''));
     if ($senderName === '') {
         $senderName = trim((string) ($row['user_name'] ?? 'Unknown'));
     }
@@ -191,7 +216,10 @@ foreach ($feedRows as $row) {
         'subject' => (string) ($row['subject'] ?? '(No Subject)'),
         'snippet' => mailboxFormatThreadPreview($latestPreview, 50),
         'sent_label' => notification_time_label($row['latest_activity_at'] ?? null),
-        'avatar' => notification_avatar_url($row, $base_url),
+        'activity_key' => $messageId . ':' . (string) ($latestPreview['sent_at'] ?? $row['latest_activity_at'] ?? ''),
+        'avatar' => $isGroupThread && trim((string) ($row['group_photo'] ?? '')) !== ''
+            ? $base_url . 'inbox/uploads/group_photos/' . rawurlencode((string) $row['group_photo'])
+            : notification_avatar_url($row, $base_url),
         'url' => $app_root . 'messenger/index.php?msg=' . $messageId,
     ];
 }

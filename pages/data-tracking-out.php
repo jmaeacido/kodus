@@ -605,6 +605,7 @@ function openOutgoingDetails(rowData) {
               channels: ['outgoing_table'],
               table: table,
               socket: {
+                  key: 'data-tracking-out',
                   channel: 'kodus.outgoing',
                   events: ['outgoing.changed']
               }

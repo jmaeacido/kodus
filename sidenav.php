@@ -59,6 +59,7 @@ if (isset($_SESSION['user_id'])) {
     $userId   = $_SESSION['user_id'];
     $userType = $_SESSION['user_type'] ?? null;
     $userEmail = $_SESSION['email'] ?? '';
+    $userName = trim((string) ($_SESSION['username'] ?? ''));
 
     if ($userType === 'admin') {
         $sql = "
@@ -67,6 +68,8 @@ if (isset($_SESSION['user_id'])) {
             LEFT JOIN message_reads mr
               ON cm.id = mr.message_id AND mr.user_id = ?
             WHERE (
+                COALESCE(cm.conversation_type, 'direct') = 'group'
+                OR
                 cm.user_email = ?
                 OR EXISTS (
                     SELECT 1
@@ -77,10 +80,16 @@ if (isset($_SESSION['user_id'])) {
                 )
             )
               AND COALESCE(mr.is_trashed, 0) = 0
+              AND " . mailboxVisibilityPredicate((int) $userId, 'cm', 'mr') . "
+              AND NOT EXISTS (
+                  SELECT 1 FROM contact_message_recipients muted
+                  WHERE muted.message_id = cm.id AND muted.user_id = ?
+                    AND (muted.muted_at IS NOT NULL OR muted.left_at IS NOT NULL)
+              )
               AND (mr.is_read IS NULL OR mr.is_read = 0)
         ";
         $stmt = $conn->prepare($sql);
-        $stmt->bind_param("is", $userId, $userEmail);
+        $stmt->bind_param("isi", $userId, $userEmail, $userId);
         $stmt->execute();
         if ($row = db_stmt_fetch_one_assoc($stmt)) {
             $unreadCount = (int)$row['unread'];
@@ -94,16 +103,23 @@ if (isset($_SESSION['user_id'])) {
             FROM contact_messages cm
             LEFT JOIN message_reads mr 
               ON cm.id = mr.message_id AND mr.user_id = ?
-            WHERE (cm.user_email = ? OR EXISTS (
+            WHERE (cm.user_email = ? OR cm.user_name = ? OR EXISTS (
                 SELECT 1
                 FROM contact_message_recipients cmr
                 WHERE cmr.message_id = cm.id
                   AND LOWER(cmr.recipient_email) = LOWER(?)
-            ))
+            ) OR COALESCE(cm.conversation_type, 'direct') = 'group')
+              AND COALESCE(mr.is_trashed, 0) = 0
+              AND " . mailboxVisibilityPredicate((int) $userId, 'cm', 'mr') . "
+              AND NOT EXISTS (
+                  SELECT 1 FROM contact_message_recipients muted
+                  WHERE muted.message_id = cm.id AND muted.user_id = ?
+                    AND (muted.muted_at IS NOT NULL OR muted.left_at IS NOT NULL)
+              )
               AND (mr.is_read IS NULL OR mr.is_read = 0)
         ";
         $stmt = $conn->prepare($sql);
-        $stmt->bind_param("iss", $userId, $userEmail, $userEmail);
+        $stmt->bind_param("isssi", $userId, $userEmail, $userName, $userEmail, $userId);
         $stmt->execute();
         if ($row = db_stmt_fetch_one_assoc($stmt)) {
             $unreadCount = (int)$row['unread'];
@@ -557,6 +573,7 @@ if (isset($_SESSION['user_id']) && is_numeric($_SESSION['user_id'])) {
               $userId   = $_SESSION['user_id'];
               $userType = $_SESSION['user_type'] ?? null;
               $userEmail = $_SESSION['email'] ?? null;
+              $userName = trim((string) ($_SESSION['username'] ?? ''));
 
               if ($userType === 'admin') {
                   // Admin: fetch latest unread messages visible to admins
@@ -573,6 +590,8 @@ if (isset($_SESSION['user_id']) && is_numeric($_SESSION['user_id'])) {
                       LEFT JOIN message_reads mr
                         ON cm.id = mr.message_id AND mr.user_id = ?
                       WHERE (
+                          COALESCE(cm.conversation_type, 'direct') = 'group'
+                          OR
                           cm.user_email = ?
                           OR EXISTS (
                               SELECT 1
@@ -583,12 +602,18 @@ if (isset($_SESSION['user_id']) && is_numeric($_SESSION['user_id'])) {
                           )
                       )
                       AND COALESCE(mr.is_trashed, 0) = 0
+                      AND " . mailboxVisibilityPredicate((int) $userId, 'cm', 'mr') . "
+                      AND NOT EXISTS (
+                          SELECT 1 FROM contact_message_recipients muted
+                          WHERE muted.message_id = cm.id AND muted.user_id = ?
+                            AND (muted.muted_at IS NOT NULL OR muted.left_at IS NOT NULL)
+                      )
                       AND (mr.is_read IS NULL OR mr.is_read = 0)
                       ORDER BY latest_activity_at DESC, cm.id DESC
                       LIMIT 5
                   ";
                   $stmt = $conn->prepare($sql);
-                  $stmt->bind_param("is", $userId, $userEmail);
+                  $stmt->bind_param("isi", $userId, $userEmail, $userId);
               } else {
                   // Non-admin: fetch their unread messages
                   $sql = "
@@ -603,18 +628,25 @@ if (isset($_SESSION['user_id']) && is_numeric($_SESSION['user_id'])) {
                       LEFT JOIN users u ON u.email = cm.user_email
                       LEFT JOIN message_reads mr 
                         ON cm.id = mr.message_id AND mr.user_id = ?
-                      WHERE (cm.user_email = ? OR EXISTS (
+                      WHERE (cm.user_email = ? OR cm.user_name = ? OR EXISTS (
                           SELECT 1
                           FROM contact_message_recipients cmr
                           WHERE cmr.message_id = cm.id
                             AND LOWER(cmr.recipient_email) = LOWER(?)
-                      ))
+                      ) OR COALESCE(cm.conversation_type, 'direct') = 'group')
+                        AND COALESCE(mr.is_trashed, 0) = 0
+                        AND " . mailboxVisibilityPredicate((int) $userId, 'cm', 'mr') . "
+                        AND NOT EXISTS (
+                            SELECT 1 FROM contact_message_recipients muted
+                            WHERE muted.message_id = cm.id AND muted.user_id = ?
+                              AND (muted.muted_at IS NOT NULL OR muted.left_at IS NOT NULL)
+                        )
                         AND (mr.is_read IS NULL OR mr.is_read = 0)
                       ORDER BY latest_activity_at DESC, cm.id DESC
                       LIMIT 5
                   ";
                   $stmt = $conn->prepare($sql);
-                  $stmt->bind_param("iss", $userId, $userEmail, $userEmail);
+                  $stmt->bind_param("isssi", $userId, $userEmail, $userName, $userEmail, $userId);
               }
 
               $stmt->execute();
@@ -1097,6 +1129,8 @@ if (isset($_SESSION['user_id']) && is_numeric($_SESSION['user_id'])) {
   <script>
 let topbarNotificationInitialized = false;
 let topbarSeenNotificationIds = [];
+let topbarSeenMailActivityKeys = [];
+const topbarShownMailActivityKeys = new Set();
 let topbarAppNotificationInitialized = false;
 let topbarSeenAppNotificationIds = [];
 let mailBellAudioContext = null;
@@ -1195,6 +1229,15 @@ let timer = window.setTimeout(dismissToast, 5000);
     timer = window.setTimeout(dismissToast, 1800);
   });
   toast.addEventListener('click', dismissToast, { once: true });
+}
+
+function getMailActivityKey(item) {
+  return String(item?.activity_key || `${Number(item?.id || 0)}:${item?.sent_label || ''}:${item?.snippet || ''}`);
+}
+
+function isActiveMessengerThread(messageId) {
+  const activeThreadId = Number(window.KODUSActiveMessengerThreadId || 0);
+  return activeThreadId > 0 && activeThreadId === Number(messageId || 0);
 }
 
 function looksLikeKodusUrlTitle(value) {
@@ -1319,11 +1362,17 @@ function refreshUnreadCount() {
       const count = Number(data.count || 0);
       const items = Array.isArray(data.items) ? data.items : [];
       const itemIds = items.map(item => Number(item.id || 0)).filter(id => id > 0);
+      const activityKeys = items.map(getMailActivityKey).filter(Boolean);
       kodusUnreadMailCount = count;
       const unseenItems = topbarNotificationInitialized
         ? items.filter(item => {
             const id = Number(item.id || 0);
-            return id > 0 && !topbarSeenNotificationIds.includes(id);
+            const activityKey = getMailActivityKey(item);
+            return id > 0
+              && activityKey !== ''
+              && !topbarSeenMailActivityKeys.includes(activityKey)
+              && !topbarShownMailActivityKeys.has(activityKey)
+              && !isActiveMessengerThread(id);
           })
         : [];
 
@@ -1391,11 +1440,13 @@ function refreshUnreadCount() {
       }
 
       if (unseenItems.length > 0) {
+        topbarShownMailActivityKeys.add(getMailActivityKey(unseenItems[0]));
         playMailBell();
         showMailAlert(unseenItems[0]);
       }
 
       topbarSeenNotificationIds = itemIds.slice(0, 20);
+      topbarSeenMailActivityKeys = activityKeys.slice(0, 20);
       topbarNotificationInitialized = true;
       syncKodusDocumentTitle();
     })
@@ -1615,13 +1666,19 @@ document.addEventListener('click', function (event) {
 
 if (window.KODUSLiveRefresh && typeof window.KODUSLiveRefresh.watchSocket === 'function') {
   window.KODUSLiveRefresh.watchSocket({
+    key: 'topbar-mail-feed',
     channel: 'kodus.mailbox',
     events: ['mail.changed'],
-    onMessage: function () {
+    onMessage: function (payload) {
+      const action = String(payload?.data?.action || '');
+      if (action === 'typing_started' || action === 'typing_stopped') {
+        return;
+      }
       refreshUnreadCount();
     }
   });
   window.KODUSLiveRefresh.watchSocket({
+    key: 'topbar-app-notifications',
     channel: 'kodus.notifications',
     events: ['notifications.changed'],
     onMessage: function () {
@@ -1695,14 +1752,11 @@ document.addEventListener('click', function (event) {
   notificationLink.classList.remove('is-unread');
 });
 
-// Run once and then every 15s
 syncKodusDocumentTitle();
 document.addEventListener('DOMContentLoaded', refreshKodusBaseDocumentTitle);
 window.addEventListener('load', refreshKodusBaseDocumentTitle);
 refreshAppNotifications();
 refreshUnreadCount();
-setInterval(refreshAppNotifications, 15000);
-setInterval(refreshUnreadCount, 15000);
 document.addEventListener('click', unlockMailBell, { passive: true });
 document.addEventListener('keydown', unlockMailBell, { passive: true });
 document.addEventListener('touchstart', unlockMailBell, { passive: true });

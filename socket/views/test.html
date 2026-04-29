@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Socket.IO Token Test</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 800px;
+      margin: 50px auto;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    .section {
+      background: white;
+      padding: 20px;
+      margin-bottom: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    h2 {
+      color: #333;
+      border-bottom: 2px solid #667eea;
+      padding-bottom: 10px;
+    }
+    button {
+      background: #667eea;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 5px;
+      cursor: pointer;
+      margin: 5px;
+    }
+    button:hover {
+      background: #5568d3;
+    }
+    input {
+      width: 100%;
+      padding: 10px;
+      margin: 5px 0;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+      box-sizing: border-box;
+    }
+    .log {
+      background: #f8f9fa;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+      padding: 10px;
+      max-height: 300px;
+      overflow-y: auto;
+      font-family: monospace;
+      font-size: 12px;
+      margin-top: 10px;
+    }
+    .log-item {
+      padding: 5px;
+      margin: 2px 0;
+      border-left: 3px solid #667eea;
+      padding-left: 10px;
+    }
+    .success { border-left-color: #10b981; }
+    .error { border-left-color: #ef4444; }
+    .info { border-left-color: #3b82f6; }
+  </style>
+</head>
+<body>
+  <h1><i class="fas fa-plug"></i> Socket.IO Token Authentication Test</h1>
+
+  <!-- Step 1: Register to get token -->
+  <div class="section">
+    <h2>Step 1: Register & Get Token</h2>
+    <input type="text" id="regName" placeholder="Your Name" value="Test User">
+    <input type="text" id="regPurpose" placeholder="Purpose" value="Testing Socket.IO">
+    <button onclick="register()">Register & Get Token</button>
+    <div id="tokenDisplay" style="margin-top: 10px; padding: 10px; background: #e8f5e9; border-radius: 5px; display: none;">
+      <strong>Your Token:</strong>
+      <div id="tokenValue" style="word-break: break-all; font-family: monospace; font-size: 11px; margin-top: 5px;"></div>
+    </div>
+  </div>
+
+  <!-- Step 2: Test Method 1 - auth object -->
+  <div class="section">
+    <h2>Test Method 1 (auth object)</h2>
+    <p><code id="method1Code">io('APP_URL', { auth: { token: 'YOUR_TOKEN' } })</code></p>
+    <button onclick="connectMethod1()">Connect with Method 1</button>
+    <button onclick="disconnectMethod1()">Disconnect</button>
+    <div id="log1" class="log"></div>
+  </div>
+
+  <!-- Step 3: Test Method 2 - query parameter -->
+  <div class="section">
+    <h2>Test Method 2 (query parameter)</h2>
+    <p><code id="method2Code">io('APP_URL?token=YOUR_TOKEN')</code></p>
+    <button onclick="connectMethod2()">Connect with Method 2</button>
+    <button onclick="disconnectMethod2()">Disconnect</button>
+    <div id="log2" class="log"></div>
+  </div>
+
+  <!-- Test Socket.IO Features -->
+  <div class="section">
+    <h2>Test Socket.IO Features</h2>
+    <input type="text" id="channelName" placeholder="Channel name (e.g., channel-name)" value="channel-name">
+    <button onclick="subscribeChannel()">Subscribe to Channel</button>
+    
+    <div style="margin-top: 15px;">
+      <input type="text" id="messageInput" placeholder="Enter your message..." style="width: calc(100% - 150px); margin-right: 10px;" onkeypress="if(event.key === 'Enter') sendBroadcast()">
+      <button onclick="sendBroadcast()">Send Broadcast Event</button>
+    </div>
+    
+    <div id="log3" class="log">
+      <div class="log-item info">
+        <strong><i class="fas fa-info-circle"></i> Instructions:</strong><br>
+        1) Connect with Method 1 or 2<br>
+        2) Subscribe to the channel (e.g., "channel-name")<br>
+        3) Type a message and send broadcast using the button above<br>
+        <strong><i class="fas fa-exclamation-triangle"></i> Important:</strong> Make sure the channel name in the broadcast matches the channel you subscribed to!
+      </div>
+    </div>
+  </div>
+
+  <!-- Test /broadcast HTTP Endpoint -->
+  <div class="section">
+    <h2><i class="fas fa-satellite-dish"></i> Test /broadcast HTTP Endpoint</h2>
+    <p>Test the <code>POST /broadcast</code> endpoint that Laravel would use to send broadcasts.</p>
+    
+    <div style="margin-bottom: 15px;">
+      <label style="display: block; margin-bottom: 5px; font-weight: bold;">Channel:</label>
+      <input type="text" id="httpChannel" placeholder="Channel name" value="test-channel">
+    </div>
+
+    <div style="margin-bottom: 15px;">
+      <label style="display: block; margin-bottom: 5px; font-weight: bold;">Event Name:</label>
+      <input type="text" id="httpEvent" placeholder="Event name" value="notification">
+    </div>
+
+    <div style="margin-bottom: 15px;">
+      <label style="display: block; margin-bottom: 5px; font-weight: bold;">Data (JSON):</label>
+      <textarea id="httpData" placeholder='{"message": "Hello World"}' style="width: 100%; height: 80px; padding: 10px; border: 1px solid #ddd; border-radius: 5px; font-family: monospace; font-size: 12px;">{"message": "Hello from HTTP endpoint!", "timestamp": "2024-01-01T12:00:00Z"}</textarea>
+    </div>
+
+    <div style="margin-bottom: 15px;">
+      <button onclick="testBroadcastEndpoint()">
+        <i class="fas fa-paper-plane"></i> Send HTTP POST to /broadcast
+      </button>
+      <button onclick="clearHttpLog()">
+        <i class="fas fa-trash"></i> Clear Log
+      </button>
+    </div>
+
+    <div id="httpLog" class="log">
+      <div class="log-item info">
+        <strong><i class="fas fa-info-circle"></i> How it works:</strong><br>
+        1) First, connect and subscribe to a channel above<br>
+        2) Then use this section to send an HTTP POST to /broadcast<br>
+        3) Watch for the event to arrive in your subscribed Socket.IO connection<br>
+        <strong><i class="fas fa-lightbulb"></i> Tip:</strong> This simulates how Laravel would send broadcasts to this server!
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Get APP_URL and SOCKET_TOKEN from window (injected by server)
+    const APP_URL = window.APP_URL || 'http://localhost:6001';
+    const SOCKET_TOKEN = window.SOCKET_TOKEN || 'default_secret_token';
+    
+    // Update code examples with actual URL
+    document.addEventListener('DOMContentLoaded', () => {
+      const method1Code = document.getElementById('method1Code');
+      const method2Code = document.getElementById('method2Code');
+      if (method1Code) method1Code.textContent = `io('${APP_URL}', { auth: { token: 'YOUR_TOKEN' } })`;
+      if (method2Code) method2Code.textContent = `io('${APP_URL}?token=YOUR_TOKEN')`;
+    });
+    
+    let token = '25f03678c5db2a4960da7c72b0be629d55e519eba6f9eb3c48a40d7af56883c1';
+    let socket1 = null;
+    let socket2 = null;
+
+    // Register user
+    async function register() {
+      const name = document.getElementById('regName').value;
+      const purpose = document.getElementById('regPurpose').value;
+
+      if (!name || !purpose) {
+        alert('Please fill in name and purpose');
+        return;
+      }
+
+      try {
+        const response = await fetch('/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, purpose })
+        });
+
+        const data = await response.json();
+        
+        if (data.success) {
+          token = data.user.token;
+          document.getElementById('tokenValue').textContent = token;
+          document.getElementById('tokenDisplay').style.display = 'block';
+          addLog('log1', '[OK] Registration successful! Token saved.', 'success');
+          addLog('log2', '[OK] Registration successful! Token saved.', 'success');
+        } else {
+          alert('Registration failed: ' + data.error);
+        }
+      } catch (error) {
+        alert('Error: ' + error.message);
+      }
+    }
+
+    // Method 1: Using auth object
+    function connectMethod1() {
+      if (!token) {
+        alert('Please register first to get a token');
+        return;
+      }
+
+      if (socket1) {
+        socket1.disconnect();
+      }
+
+      addLog('log1', '[...] Connecting with Method 1 (auth object)...', 'info');
+
+      socket1 = io(APP_URL, {
+        auth: {
+          token: token
+        }
+      });
+
+      socket1.on('connect', () => {
+        addLog('log1', `[OK] Connected! Socket ID: ${socket1.id}`, 'success');
+      });
+
+      socket1.on('disconnect', (reason) => {
+        addLog('log1', `[X] Disconnected: ${reason}`, 'error');
+      });
+
+      socket1.on('connect_error', (error) => {
+        addLog('log1', `[X] Connection Error: ${error.message}`, 'error');
+      });
+
+      // Listen for any events (this will catch all broadcasts)
+      socket1.onAny((eventName, ...args) => {
+        const logMessage = `[MSG] Received event "${eventName}": ${JSON.stringify(args)}`;
+        addLog('log1', logMessage, 'success');
+        addLog('log3', logMessage, 'success');
+      });
+    }
+
+    function disconnectMethod1() {
+      if (socket1) {
+        socket1.disconnect();
+        socket1 = null;
+        addLog('log1', '[DISCONNECT] Disconnected Method 1', 'info');
+      }
+    }
+
+    // Method 2: Using query parameter
+    function connectMethod2() {
+      if (!token) {
+        alert('Please register first to get a token');
+        return;
+      }
+
+      if (socket2) {
+        socket2.disconnect();
+      }
+
+      addLog('log2', '[...] Connecting with Method 2 (query parameter)...', 'info');
+
+      socket2 = io(`${APP_URL}?token=${token}`);
+
+      socket2.on('connect', () => {
+        addLog('log2', `[OK] Connected! Socket ID: ${socket2.id}`, 'success');
+      });
+
+      socket2.on('disconnect', (reason) => {
+        addLog('log2', `[X] Disconnected: ${reason}`, 'error');
+      });
+
+      socket2.on('connect_error', (error) => {
+        addLog('log2', `[X] Connection Error: ${error.message}`, 'error');
+      });
+
+      // Listen for any events (this will catch all broadcasts)
+      socket2.onAny((eventName, ...args) => {
+        const logMessage = `[MSG] Received event "${eventName}": ${JSON.stringify(args)}`;
+        addLog('log2', logMessage, 'success');
+        addLog('log3', logMessage, 'success');
+      });
+    }
+
+    function disconnectMethod2() {
+      if (socket2) {
+        socket2.disconnect();
+        socket2 = null;
+        addLog('log2', '[DISCONNECT] Disconnected Method 2', 'info');
+      }
+    }
+
+    // Test Socket.IO features
+    function subscribeChannel() {
+      const channel = document.getElementById('channelName').value;
+      const activeSocket = socket1 || socket2;
+
+      if (!activeSocket || !activeSocket.connected) {
+        alert('Please connect to Socket.IO first (Method 1 or 2)');
+        return;
+      }
+
+      if (!channel) {
+        alert('Please enter a channel name');
+        return;
+      }
+
+      activeSocket.emit('subscribe', channel);
+      addLog('log3', `[SUBSCRIBE] Subscribed to channel: "${channel}"`, 'success');
+      addLog('log3', `[WAIT] Waiting for broadcasts on channel: "${channel}"...`, 'info');
+      addLog('log3', `[TIP] Use the same channel name in your curl command!`, 'info');
+    }
+
+    function sendBroadcast() {
+      const channel = document.getElementById('channelName').value;
+      const message = document.getElementById('messageInput').value;
+      const activeSocket = socket1 || socket2;
+
+      if (!activeSocket || !activeSocket.connected) {
+        alert('Please connect to Socket.IO first (Method 1 or 2)');
+        return;
+      }
+
+      if (!message.trim()) {
+        alert('Please enter a message to send');
+        return;
+      }
+
+      activeSocket.emit('broadcast-event', {
+        channel: channel,
+        event: 'test-message',
+        socket_token: SOCKET_TOKEN,
+        data: { 
+          message: message,
+          timestamp: new Date().toISOString()
+        }
+      });
+
+      addLog('log3', `[SEND] Sent broadcast to channel: ${channel} - "${message}" (with token)`, 'info');
+      
+      // Clear the message input after sending
+      document.getElementById('messageInput').value = '';
+    }
+
+    function addLog(logId, message, type = 'info') {
+      const log = document.getElementById(logId);
+      const item = document.createElement('div');
+      item.className = `log-item ${type}`;
+      item.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+      log.appendChild(item);
+      log.scrollTop = log.scrollHeight;
+    }
+
+    // Test /broadcast HTTP endpoint
+    async function testBroadcastEndpoint() {
+      const channel = document.getElementById('httpChannel').value;
+      const event = document.getElementById('httpEvent').value;
+      const dataStr = document.getElementById('httpData').value;
+
+      if (!channel || !event) {
+        alert('Please enter both channel and event name');
+        return;
+      }
+
+      let data;
+      try {
+        data = JSON.parse(dataStr);
+      } catch (e) {
+        alert('Invalid JSON in data field: ' + e.message);
+        return;
+      }
+
+      addLog('httpLog', `[SENDING] POST /broadcast → channel: "${channel}", event: "${event}"`, 'info');
+
+      try {
+        const response = await fetch(`${APP_URL}/broadcast`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            channel: channel,
+            event: event,
+            data: data,
+            socket_token: SOCKET_TOKEN
+          })
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+          addLog('httpLog', `[✓ SUCCESS] Server responded: ${JSON.stringify(result)}`, 'success');
+          addLog('httpLog', `[INFO] Broadcast sent to channel "${channel}" with event "${event}" (with token)`, 'info');
+          addLog('httpLog', `[WAITING] If you're subscribed to "${channel}", you should receive the event...`, 'info');
+        } else {
+          addLog('httpLog', `[✗ ERROR] Server error (${response.status}): ${JSON.stringify(result)}`, 'error');
+        }
+      } catch (error) {
+        addLog('httpLog', `[✗ ERROR] Request failed: ${error.message}`, 'error');
+      }
+    }
+
+    function clearHttpLog() {
+      const log = document.getElementById('httpLog');
+      log.innerHTML = `
+        <div class="log-item info">
+          <strong><i class="fas fa-info-circle"></i> How it works:</strong><br>
+          1) First, connect and subscribe to a channel above<br>
+          2) Then use this section to send an HTTP POST to /broadcast<br>
+          3) Watch for the event to arrive in your subscribed Socket.IO connection<br>
+          <strong><i class="fas fa-lightbulb"></i> Tip:</strong> This simulates how Laravel would send broadcasts to this server!
+        </div>
+      `;
+    }
+  </script>
+</body>
+</html>
+

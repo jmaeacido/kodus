@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>API Documentation - Socket.IO Server</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: #f5f7fa;
+      color: #333;
+      line-height: 1.6;
+    }
+    
+    .header {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 30px 0;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+    
+    .header-content {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 20px;
+    }
+    
+    .header h1 {
+      font-size: 32px;
+      margin-bottom: 10px;
+    }
+    
+    .header p {
+      opacity: 0.9;
+      font-size: 16px;
+    }
+    
+    .nav-links {
+      margin-top: 20px;
+    }
+    
+    .nav-links a {
+      color: white;
+      text-decoration: none;
+      margin-right: 20px;
+      padding: 8px 16px;
+      border-radius: 5px;
+      background: rgba(255,255,255,0.2);
+      transition: background 0.3s;
+    }
+    
+    .nav-links a:hover {
+      background: rgba(255,255,255,0.3);
+    }
+    
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 40px 20px;
+    }
+    
+    .section {
+      background: white;
+      border-radius: 12px;
+      padding: 30px;
+      margin-bottom: 30px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    
+    .section h2 {
+      color: #667eea;
+      font-size: 28px;
+      margin-bottom: 20px;
+      padding-bottom: 10px;
+      border-bottom: 3px solid #667eea;
+    }
+    
+    .section h3 {
+      color: #333;
+      font-size: 20px;
+      margin: 25px 0 15px 0;
+    }
+    
+    .section p {
+      color: #666;
+      margin-bottom: 15px;
+      font-size: 15px;
+    }
+    
+    .section ul, .section ol {
+      margin-left: 30px;
+      margin-bottom: 15px;
+      color: #666;
+    }
+    
+    .section li {
+      margin-bottom: 8px;
+    }
+    
+    pre {
+      background: #f8f9fa;
+      border: 1px solid #e0e0e0;
+      border-left: 4px solid #667eea;
+      padding: 20px;
+      border-radius: 8px;
+      overflow-x: auto;
+      font-size: 14px;
+      margin: 15px 0;
+    }
+    
+    code {
+      font-family: 'Courier New', 'Monaco', monospace;
+      font-size: 13px;
+    }
+    
+    .code-block {
+      background: #f8f9fa;
+      padding: 15px;
+      border-radius: 8px;
+      border-left: 4px solid #667eea;
+      margin: 15px 0;
+    }
+    
+    .endpoint {
+      background: #e8f5e9;
+      padding: 15px;
+      border-radius: 8px;
+      margin: 15px 0;
+      border-left: 4px solid #4caf50;
+    }
+    
+    .endpoint-method {
+      display: inline-block;
+      background: #4caf50;
+      color: white;
+      padding: 4px 12px;
+      border-radius: 4px;
+      font-weight: 600;
+      font-size: 12px;
+      margin-right: 10px;
+    }
+    
+    .endpoint-url {
+      font-family: monospace;
+      font-size: 14px;
+      color: #333;
+    }
+    
+    .note {
+      background: #fff3cd;
+      border-left: 4px solid #ffc107;
+      padding: 15px;
+      border-radius: 8px;
+      margin: 15px 0;
+    }
+    
+    .note strong {
+      color: #856404;
+    }
+    
+    .warning {
+      background: #f8d7da;
+      border-left: 4px solid #dc3545;
+      padding: 15px;
+      border-radius: 8px;
+      margin: 15px 0;
+    }
+    
+    .toc {
+      background: #f8f9fa;
+      padding: 20px;
+      border-radius: 8px;
+      margin-bottom: 30px;
+    }
+    
+    .toc h3 {
+      margin-top: 0;
+      color: #667eea;
+    }
+    
+    .toc ul {
+      list-style: none;
+      margin-left: 0;
+    }
+    
+    .toc a {
+      color: #667eea;
+      text-decoration: none;
+    }
+    
+    .toc a:hover {
+      text-decoration: underline;
+    }
+    
+    .toc li {
+      margin: 8px 0;
+    }
+    
+    .toc li::before {
+      content: "▸ ";
+      color: #667eea;
+      margin-right: 5px;
+    }
+    
+    .section h2 {
+      scroll-margin-top: 20px;
+    }
+    
+    pre code {
+      display: block;
+      white-space: pre;
+      overflow-x: auto;
+    }
+    
+    .info-box {
+      background: #e3f2fd;
+      border-left: 4px solid #2196f3;
+      padding: 15px;
+      border-radius: 8px;
+      margin: 15px 0;
+    }
+    
+    .info-box strong {
+      color: #1565c0;
+    }
+  </style>
+  <script>
+    // Update all URLs when page loads
+    document.addEventListener('DOMContentLoaded', () => {
+      const APP_URL = window.APP_URL || 'http://localhost:6001';
+      
+      // Update code examples
+      const updates = {
+        'codeStep2': `const socket = io('${APP_URL}', {\n  auth: { token: 'YOUR_TOKEN_HERE' }\n});`,
+        'codeMethod1': `const socket = io('${APP_URL}', {\n  auth: {\n    token: 'YOUR_TOKEN_HERE'\n  }\n});`,
+        'codeMethod2': `const socket = io('${APP_URL}?token=YOUR_TOKEN_HERE');`,
+        'codeCurl': `curl -X POST ${APP_URL}/broadcast \\\n  -H "Content-Type: application/json" \\\n  -H "Authorization: Bearer YOUR_TOKEN" \\\n  -d '{\n    "channel": "test-channel",\n    "event": "message",\n    "data": {\n      "text": "Hello World",\n      "timestamp": "2024-01-01T12:00:00Z"\n    }\n  }'`,
+        'codeExample1': `// 1. Connect with token\nconst socket = io('${APP_URL}', {\n  auth: { token: 'YOUR_TOKEN' }\n});\n\n// 2. Wait for connection\nsocket.on('connect', () => {\n  console.log('Connected!');\n  \n  // 3. Subscribe to chat channel\n  socket.emit('subscribe', 'chat-room');\n});\n\n// 4. Send message\nfunction sendMessage(text) {\n  socket.emit('broadcast-event', {\n    channel: 'chat-room',\n    event: 'chat-message',\n    data: { text, user: 'MyName' }\n  });\n}\n\n// 5. Receive messages\nsocket.on('chat-message', (data) => {\n  console.log(\`\${data.fromUser}: \${data.text}\`);\n});`,
+        'codeExample2': `const socket = io('${APP_URL}', {\n  auth: { token: 'YOUR_TOKEN' }\n});\n\nsocket.on('connect', () => {\n  // Subscribe to user-specific notification channel\n  socket.emit('subscribe', \`notifications-user-123\`);\n});\n\n// Listen for notifications\nsocket.on('notification', (data) => {\n  showNotification(data.message);\n});`,
+        'codeExample3': `// Send broadcast via API (e.g., from backend server)\nasync function sendBroadcast(channel, event, data) {\n  const response = await fetch('${APP_URL}/broadcast', {\n    method: 'POST',\n    headers: {\n      'Content-Type': 'application/json',\n      'Authorization': \`Bearer \${YOUR_TOKEN}\`\n    },\n    body: JSON.stringify({\n      channel,\n      event,\n      data\n    })\n  });\n  \n  return await response.json();\n}\n\n// Usage\nsendBroadcast('notifications', 'alert', {\n  message: 'New update available!',\n  type: 'info'\n});`
+      };
+      
+      Object.keys(updates).forEach(id => {
+        const element = document.getElementById(id);
+        if (element) element.textContent = updates[id];
+      });
+      
+      // Update links
+      const testLink1 = document.getElementById('testLink1');
+      const testLink2 = document.getElementById('testLink2');
+      if (testLink1) testLink1.textContent = APP_URL + '/test';
+      if (testLink2) testLink2.textContent = APP_URL + '/test';
+    });
+  </script>
+</head>
+<body>
+  <div class="header">
+    <div class="header-content">
+      <h1><i class="fas fa-book"></i> API Documentation</h1>
+      <p>Complete guide for Socket.IO Server with Token Authentication</p>
+      <div class="nav-links">
+        <a href="/"><i class="fas fa-home"></i> Home</a>
+        <a href="/test"><i class="fas fa-flask"></i> Test Page</a>
+        <a href="/docs"><i class="fas fa-book-open"></i> Documentation</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="container">
+    <!-- Table of Contents -->
+    <div class="toc">
+      <h3><i class="fas fa-list"></i> Table of Contents</h3>
+      <ul>
+        <li><a href="#quick-start">1. Quick Start</a></li>
+        <li><a href="#user-registration">2. User Registration</a></li>
+        <li><a href="#socketio-connection">3. Socket.IO Connection</a></li>
+        <li><a href="#broadcasting">4. Broadcasting Messages</a></li>
+        <li><a href="#channels">5. Channel Management</a></li>
+        <li><a href="#examples">6. Complete Examples</a></li>
+        <li><a href="#troubleshooting">7. Troubleshooting</a></li>
+      </ul>
+    </div>
+
+    <!-- Quick Start -->
+    <div class="section" id="quick-start">
+      <h2>1. Quick Start</h2>
+      
+      <h3>Step 1: Register a User</h3>
+      <p>Register and get a token from the server using the interactive test page.</p>
+      <div class="info-box">
+        <strong><i class="fas fa-edit"></i> Registration:</strong> Go to <a href="/test" id="testLink1" style="color: #1565c0; text-decoration: underline;">/test</a> and use the registration form to get your authentication token.
+      </div>
+      <div class="note">
+        <strong><i class="fas fa-exclamation-triangle"></i> Important:</strong> Save the token from the response! You'll need it for all future requests.
+      </div>
+
+      <h3>Step 2: Connect to Socket.IO</h3>
+      <pre><code id="codeStep2">const socket = io('APP_URL', {
+  auth: { token: 'YOUR_TOKEN_HERE' }
+});</code></pre>
+
+      <h3>Step 3: Subscribe to a Channel</h3>
+      <pre><code>socket.emit('subscribe', 'my-channel');</code></pre>
+
+      <h3>Step 4: Send and Receive Messages</h3>
+      <pre><code>// Send a broadcast
+socket.emit('broadcast-event', {
+  channel: 'my-channel',
+  event: 'message',
+  data: { text: 'Hello!' }
+});
+
+// Listen for messages
+socket.on('message', (data) => {
+  console.log('Received:', data);
+});</code></pre>
+    </div>
+
+    <!-- User Registration -->
+    <div class="section" id="user-registration">
+      <h2>2. User Registration</h2>
+      
+      <p>Register a new user to get an authentication token. Registration is done through the interactive test page UI.</p>
+      
+      <div class="info-box">
+        <strong><i class="fas fa-globe"></i> Register via Test Page:</strong> Visit <a href="/test" id="testLink2" style="color: #1565c0; text-decoration: underline;">/test</a> and fill in the registration form with your name and purpose.
+      </div>
+
+      <h3>Registration Form</h3>
+      <p>On the test page, you'll find a registration form where you can:</p>
+      <ol>
+        <li>Enter your name</li>
+        <li>Enter your purpose</li>
+        <li>Click "Register & Get Token"</li>
+        <li>Copy and save your token from the displayed result</li>
+      </ol>
+
+      <h3>Response</h3>
+      <p>After successful registration, you'll receive:</p>
+      <pre><code>{
+  "success": true,
+  "message": "User registered successfully",
+  "user": {
+    "id": 1,
+    "name": "Your Name",
+    "purpose": "Your Purpose",
+    "token": "64-character-hexadecimal-token"
+  }
+}</code></pre>
+
+      <div class="note">
+        <strong>Token Information:</strong>
+        <ul>
+          <li>Tokens are 64-character hexadecimal strings</li>
+          <li>Each registration creates a unique token</li>
+          <li>Tokens are stored in SQLite database</li>
+          <li>Save your token immediately - you'll need it for authentication</li>
+        </ul>
+      </div>
+
+      <div class="warning">
+        <strong>API Endpoint Available:</strong> While registration is recommended via the UI, the API endpoint <code>POST /register</code> is also available for programmatic registration if needed.
+      </div>
+    </div>
+
+    <!-- Socket.IO Connection -->
+    <div class="section" id="socketio-connection">
+      <h2>3. Socket.IO Connection</h2>
+      
+      <div class="warning">
+        <strong><i class="fas fa-exclamation-triangle"></i> Authentication Required:</strong> All Socket.IO connections require a valid token. Without a token, the connection will be rejected.
+      </div>
+
+      <h3>Method 1: Using auth Object (Recommended)</h3>
+      <pre><code id="codeMethod1">const socket = io('APP_URL', {
+  auth: {
+    token: 'YOUR_TOKEN_HERE'
+  }
+});</code></pre>
+
+      <h3>Method 2: Using Query Parameter</h3>
+      <pre><code id="codeMethod2">const socket = io('APP_URL?token=YOUR_TOKEN_HERE');</code></pre>
+
+      <h3>Connection Events</h3>
+      <pre><code>// Connection successful
+socket.on('connect', () => {
+  console.log('Connected! Socket ID:', socket.id);
+});
+
+// Connection error (invalid token, etc.)
+socket.on('connect_error', (error) => {
+  console.error('Connection error:', error.message);
+});
+
+// Disconnected
+socket.on('disconnect', (reason) => {
+  console.log('Disconnected:', reason);
+});</code></pre>
+    </div>
+
+    <!-- Broadcasting -->
+    <div class="section" id="broadcasting">
+      <h2>4. Broadcasting Messages</h2>
+      
+      <h3>Method 1: Via API Endpoint</h3>
+      
+      <div class="endpoint">
+        <span class="endpoint-method">POST</span>
+        <span class="endpoint-url">/broadcast</span>
+        <span style="margin-left: 15px; color: #666;">(Requires Authentication)</span>
+      </div>
+
+      <p><strong>Token Methods:</strong> You can provide the token in three ways:</p>
+      <ul>
+        <li>Authorization header: <code>Authorization: Bearer &lt;token&gt;</code></li>
+        <li>Request body: <code>{"token": "&lt;token&gt;", ...}</code></li>
+        <li>Query parameter: <code>?token=&lt;token&gt;</code></li>
+      </ul>
+
+      <h3>Example Request</h3>
+      <pre><code id="codeCurl">curl -X POST APP_URL/broadcast \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -d '{
+    "channel": "test-channel",
+    "event": "message",
+    "data": {
+      "text": "Hello World",
+      "timestamp": "2024-01-01T12:00:00Z"
+    }
+  }'</code></pre>
+
+      <h3>Method 2: Via Socket.IO</h3>
+      <p>Send broadcasts directly from a Socket.IO client:</p>
+      <pre><code>socket.emit('broadcast-event', {
+  channel: 'test-channel',
+  event: 'message',
+  data: {
+    text: 'Hello from Socket.IO!',
+    timestamp: new Date().toISOString()
+  }
+});</code></pre>
+
+      <h3>Receiving Broadcasts</h3>
+      <p>Listen for broadcasts in your Socket.IO client:</p>
+      <pre><code>// Listen for specific event
+socket.on('message', (data) => {
+  console.log('Message received:', data);
+  // data will include: { text, timestamp, fromUser, ... }
+});
+
+// Listen for any event (recommended for testing)
+socket.onAny((eventName, ...args) => {
+  console.log('Event received:', eventName, args);
+});</code></pre>
+      <div class="info-box">
+        <strong><i class="fas fa-lightbulb"></i> Tip:</strong> Use <code>socket.onAny()</code> to catch all events, including custom event names like "event-name" from your broadcasts.
+      </div>
+    </div>
+
+    <!-- Channel Management -->
+    <div class="section" id="channels">
+      <h2>5. Channel Management</h2>
+      
+      <h3>Subscribe to Channel</h3>
+      <p>Join a channel to receive broadcasts sent to that channel.</p>
+      <pre><code>socket.emit('subscribe', 'channel-name');</code></pre>
+      <div class="note">
+        <strong>Note:</strong> You must be subscribed to a channel to receive broadcasts sent to that channel.
+      </div>
+
+      <h3>Leave Channel</h3>
+      <p>Leave a channel to stop receiving broadcasts.</p>
+      <pre><code>socket.emit('leave', 'channel-name');</code></pre>
+
+      <h3>Multiple Channels</h3>
+      <p>You can subscribe to multiple channels:</p>
+      <pre><code>socket.emit('subscribe', 'channel-1');
+socket.emit('subscribe', 'channel-2');
+socket.emit('subscribe', 'channel-3');</code></pre>
+    </div>
+
+    <!-- Complete Examples -->
+    <div class="section" id="examples">
+      <h2>6. Complete Examples</h2>
+      
+      <h3>Example 1: Basic Chat Application</h3>
+      <pre><code id="codeExample1">// 1. Connect with token
+const socket = io('APP_URL', {
+  auth: { token: 'YOUR_TOKEN' }
+});
+
+// 2. Wait for connection
+socket.on('connect', () => {
+  console.log('Connected!');
+  
+  // 3. Subscribe to chat channel
+  socket.emit('subscribe', 'chat-room');
+});
+
+// 4. Send message
+function sendMessage(text) {
+  socket.emit('broadcast-event', {
+    channel: 'chat-room',
+    event: 'chat-message',
+    data: { text, user: 'MyName' }
+  });
+}
+
+// 5. Receive messages
+socket.on('chat-message', (data) => {
+  console.log(`${data.fromUser}: ${data.text}`);
+});</code></pre>
+
+      <h3>Example 2: Real-time Notifications</h3>
+      <pre><code id="codeExample2">const socket = io('APP_URL', {
+  auth: { token: 'YOUR_TOKEN' }
+});
+
+socket.on('connect', () => {
+  // Subscribe to user-specific notification channel
+  socket.emit('subscribe', `notifications-user-123`);
+});
+
+// Listen for notifications
+socket.on('notification', (data) => {
+  showNotification(data.message);
+});</code></pre>
+
+      <h3>Example 3: Using API to Send Broadcasts</h3>
+      <pre><code id="codeExample3">// Send broadcast via API (e.g., from backend server)
+async function sendBroadcast(channel, event, data) {
+  const response = await fetch('APP_URL/broadcast', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${YOUR_TOKEN}`
+    },
+    body: JSON.stringify({
+      channel,
+      event,
+      data
+    })
+  });
+  
+  return await response.json();
+}
+
+// Usage
+sendBroadcast('notifications', 'alert', {
+  message: 'New update available!',
+  type: 'info'
+});</code></pre>
+    </div>
+
+    <!-- Troubleshooting -->
+    <div class="section" id="troubleshooting">
+      <h2>7. Troubleshooting</h2>
+      
+      <h3>Connection Fails with "Token required"</h3>
+      <p><strong>Problem:</strong> Socket.IO connection is rejected.</p>
+      <p><strong>Solution:</strong></p>
+      <ul>
+        <li>Make sure you're providing the token</li>
+        <li>Check that the token is correct (64 characters)</li>
+        <li>Verify the token exists in the database (register again if needed)</li>
+      </ul>
+
+      <h3>Not Receiving Broadcasts</h3>
+      <p><strong>Problem:</strong> Broadcasts are sent but not received.</p>
+      <p><strong>Solution:</strong></p>
+      <ol>
+        <li>Verify you're subscribed to the correct channel:
+          <pre><code>socket.emit('subscribe', 'channel-name');</code></pre>
+        </li>
+        <li>Check that the channel name matches exactly (case-sensitive)</li>
+        <li>Verify your Socket.IO connection is active:
+          <pre><code>console.log('Connected:', socket.connected);</code></pre>
+        </li>
+        <li>Use <code>socket.onAny()</code> to catch all events, not just "message"</li>
+        <li>Make sure you're connected and subscribed <strong>before</strong> sending the broadcast</li>
+      </ol>
+      <div class="note">
+        <strong>Common Issue:</strong> If you send a broadcast via curl before subscribing to the channel, you won't receive it. Always subscribe first!
+      </div>
+
+      <h3>"Invalid or expired token" Error</h3>
+      <p><strong>Problem:</strong> API requests return 403 error.</p>
+      <p><strong>Solution:</strong></p>
+      <ul>
+        <li>Token might be incorrect</li>
+        <li>Register a new user to get a fresh token</li>
+        <li>Check that you're sending the token correctly (header, body, or query)</li>
+      </ul>
+
+      <h3>Broadcast API Returns 401</h3>
+      <p><strong>Problem:</strong> Broadcast endpoint returns "Token required".</p>
+      <p><strong>Solution:</strong></p>
+      <ul>
+        <li>Include token in Authorization header: <code>Authorization: Bearer &lt;token&gt;</code></li>
+        <li>Or include in request body: <code>{"token": "&lt;token&gt;", ...}</code></li>
+        <li>Or include in query: <code>?token=&lt;token&gt;</code></li>
+      </ul>
+    </div>
+
+    <!-- Footer -->
+    <div class="section" style="text-align: center; background: #f8f9fa;">
+      <p style="color: #666; margin: 0;">
+        <strong>Author:</strong> ITO I Julieto Ompad | 
+        <strong>Version:</strong> 1.0.0 | 
+        <a href="/test" style="color: #667eea;"><i class="fas fa-flask"></i> Test Page</a> | 
+        <a href="/" style="color: #667eea;"><i class="fas fa-home"></i> Home</a>
+      </p>
+    </div>
+  </div>
+</body>
+</html>
+

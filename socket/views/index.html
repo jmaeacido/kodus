@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DSWD Socket Server</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    
+    .container {
+      background: white;
+      border-radius: 20px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      padding: 60px 40px;
+      text-align: center;
+      max-width: 600px;
+      width: 100%;
+      animation: fadeInUp 0.6s ease-out;
+    }
+    
+    @keyframes fadeInUp {
+      from {
+        opacity: 0;
+        transform: translateY(30px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+    
+    .logo-container {
+      width: 180px;
+      height: 180px;
+      margin: 0 auto 30px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: white;
+      border-radius: 50%;
+      box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4);
+      padding: 20px;
+    }
+    
+    .logo-container svg {
+      width: 100%;
+      height: 100%;
+      max-width: 140px;
+      max-height: 140px;
+    }
+    
+    h1 {
+      color: #333;
+      font-size: 36px;
+      margin-bottom: 15px;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+    }
+    
+    .subtitle {
+      color: #667eea;
+      font-size: 18px;
+      margin-bottom: 30px;
+      font-weight: 600;
+    }
+    
+    .status {
+      display: inline-block;
+      background: #10b981;
+      color: white;
+      padding: 12px 24px;
+      border-radius: 50px;
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 40px;
+      box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);
+    }
+    
+    .info {
+      background: #f8f9fa;
+      border-radius: 12px;
+      padding: 25px;
+      margin-top: 30px;
+    }
+    
+    .info-title {
+      color: #666;
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 10px;
+      font-weight: 600;
+    }
+    
+    .info-content {
+      color: #333;
+      font-size: 16px;
+      font-weight: 500;
+    }
+    
+    .author {
+      margin-top: 20px;
+      color: #888;
+      font-size: 14px;
+    }
+    
+    .author strong {
+      color: #667eea;
+    }
+    
+    .powered-by {
+      margin-top: 15px;
+      color: #999;
+      font-size: 12px;
+      font-weight: 500;
+    }
+    
+    .powered-by strong {
+      color: #667eea;
+      font-weight: 600;
+    }
+    
+    .divider {
+      height: 2px;
+      background: linear-gradient(90deg, transparent, #e0e0e0, transparent);
+      margin: 30px 0;
+    }
+    
+    .features {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 15px;
+      margin-top: 30px;
+    }
+    
+    .feature {
+      padding: 15px;
+      background: #f8f9fa;
+      border-radius: 10px;
+      font-size: 13px;
+      color: #666;
+    }
+    
+    .feature strong {
+      display: block;
+      color: #333;
+      margin-bottom: 5px;
+    }
+    
+    .docs-section {
+      text-align: left;
+      margin-top: 30px;
+    }
+    
+    .docs-section h3 {
+      color: #667eea;
+      margin: 20px 0 10px 0;
+      font-size: 18px;
+    }
+    
+    .docs-section pre {
+      background: #f8f9fa;
+      padding: 15px;
+      border-radius: 8px;
+      overflow-x: auto;
+      font-size: 12px;
+      margin: 10px 0;
+      border-left: 3px solid #667eea;
+      text-align: left;
+    }
+    
+    .docs-section code {
+      font-family: 'Courier New', monospace;
+    }
+    
+    .docs-section p {
+      color: #666;
+      margin: 10px 0;
+      font-size: 14px;
+      line-height: 1.6;
+    }
+    
+    .test-link {
+      display: inline-block;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 12px 30px;
+      border-radius: 8px;
+      text-decoration: none;
+      font-weight: 600;
+      margin: 15px 0;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    
+    .test-link:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="logo-container">
+      <svg
+        xmlns:dc="http://purl.org/dc/elements/1.1/"
+        xmlns:cc="http://creativecommons.org/ns#"
+        xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+        xmlns:svg="http://www.w3.org/2000/svg"
+        xmlns="http://www.w3.org/2000/svg"
+        xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+        xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+        viewBox="0 0 177.58324 192.76212"
+        version="1.1"
+        id="svg8">
+        <title>Department of Social Welfare and Development (DSWD)</title>
+        <g
+          inkscape:label="Layer 1"
+          inkscape:groupmode="layer"
+          id="layer1"
+          transform="translate(-5.1854501,-26.571163)">
+          <path
+            inkscape:connector-curvature="0"
+            id="rect3046"
+            style="color:#000000;fill:#ffffff;fill-opacity:1;stroke:#fcd116;stroke-width:4.4979167;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:none;stroke-opacity:1;enable-background:accumulate"
+            d="m 51.956418,49.456777 h 83.563352 24.69356 v 95.440503 c 0,13.68028 -11.01328,24.69356 -24.69356,24.69356 H 51.956418 C 38.276137,169.58819 27.262856,158.57623 27.262856,144.89728 V 49.456777 Z"
+            stroke-miterlimit="4" />
+          <path
+            style="fill:#0038a8;fill-opacity:1;stroke-width:0.26458332"
+            inkscape:connector-curvature="0"
+            id="path2987"
+            d="m 45.027775,60.820631 v 31.797625 l 45.005624,36.967584 v 29.56189 H 62.18865 V 140.27897 L 37.060906,117.26552 V 60.808725 Z" />
+          <path
+            style="fill:#0038a8;fill-opacity:1;stroke-width:0.26458332"
+            inkscape:connector-curvature="0"
+            id="path2987-7"
+            d="M 142.44656,60.820631 V 92.618256 L 97.440939,129.58584 v 29.56189 h 27.844751 v -18.86876 l 25.12774,-23.01345 V 60.808725 Z" />
+          <path
+            style="fill:#ce1126;fill-opacity:1;stroke-width:0.26458332"
+            inkscape:connector-curvature="0"
+            id="path3025-4"
+            d="M 50.584025,88.924673 V 63.821535 c 0,-1.79406 1.313127,-2.507853 2.507853,-2.507853 h 32.453791 l 8.192294,7.054057 8.192297,-7.054057 h 32.45379 c 1.19472,0 2.50785,0.713793 2.50785,2.507853 V 88.924673 L 93.73836,122.70403 Z" />
+          <g
+            aria-label="DSWD"
+            style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:38.79579163px;line-height:1.25;font-family:'Square721 BdEx BT';-inkscape-font-specification:'Square721 BdEx BT Bold';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-feature-settings:normal;text-align:center;letter-spacing:4.84947395px;writing-mode:lr-tb;text-anchor:middle;opacity:1;fill:#0038a8;fill-opacity:1;fill-rule:nonzero;stroke:none;stroke-width:1;stroke-linecap:square;stroke-linejoin:bevel;stroke-miterlimit:4;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:1"
+            id="text845">
+            <path
+              d="m 35.121142,203.32779 h 4.603212 q 3.997027,0 5.777694,-2.08376 1.799609,-2.1027 1.799609,-6.80063 0,-4.67898 -1.667007,-6.8764 -1.667006,-2.19742 -5.209395,-2.19742 h -5.304113 z m -5.626147,5.03891 v -27.90342 h 10.93026 q 6.421764,0 9.566345,3.46662 3.163524,3.46661 3.163524,10.5135 0,3.82654 -1.174482,6.7438 -1.155539,2.91727 -3.3719,4.69793 -1.667007,1.32603 -3.788652,1.91327 -2.121645,0.5683 -5.948183,0.5683 z"
+              style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-family:'Swis721 BT';-inkscape-font-specification:'Swis721 BT Bold';letter-spacing:4.84947395px;fill:#0038a8;fill-opacity:1;stroke:none;stroke-width:1;stroke-miterlimit:4;stroke-dasharray:none;stroke-opacity:1"
+              id="path1002" />
+            <path
+              d="m 61.243894,199.74752 h 5.664034 q 0.322035,2.29213 1.875383,3.40978 1.553347,1.09871 4.489552,1.09871 2.50051,0 3.769708,-0.89033 1.269198,-0.89033 1.269198,-2.63311 0,-2.5384 -7.293154,-4.20541 -0.09472,-0.0189 -0.170489,-0.0379 -0.189433,-0.0379 -0.587241,-0.13261 -3.902311,-0.85244 -5.569318,-1.91327 -1.477574,-0.94716 -2.254248,-2.53839 -0.776673,-1.61018 -0.776673,-3.78865 0,-4.0728 2.765715,-6.23233 2.765716,-2.17848 7.994055,-2.17848 4.887361,0 7.634133,2.31108 2.765716,2.31108 2.917262,6.51648 h -5.512488 q -0.151546,-2.02693 -1.553348,-3.08775 -1.401801,-1.06082 -3.997027,-1.06082 -2.254248,0 -3.485559,0.89033 -1.212369,0.87139 -1.212369,2.50051 0,2.21636 4.754758,3.31507 1.288141,0.30309 2.007985,0.47358 3.049865,0.77667 4.319063,1.21237 1.288141,0.43569 2.235304,0.9661 1.704894,0.94717 2.55734,2.51946 0.852447,1.55334 0.852447,3.73182 0,4.35695 -2.936205,6.76274 -2.936205,2.38685 -8.278204,2.38685 -5.266225,0 -8.25926,-2.44368 -2.993035,-2.44368 -3.220354,-6.95217 z"
+              style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-family:'Swis721 BT';-inkscape-font-specification:'Swis721 BT Bold';letter-spacing:4.84947395px;fill:#0038a8;fill-opacity:1;stroke:none;stroke-width:1;stroke-miterlimit:4;stroke-dasharray:none;stroke-opacity:1"
+              id="path1004" />
+            <path
+              d="m 98.713658,208.3667 -7.994054,-27.90342 h 5.948183 l 4.773703,19.68205 4.03491,-19.68205 h 6.11867 l 4.03492,19.68205 4.7737,-19.68205 h 5.89135 l -7.97511,27.90342 h -5.4746 l -4.31906,-21.368 -4.33801,21.368 z"
+              style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-family:'Swis721 BT';-inkscape-font-specification:'Swis721 BT Bold';letter-spacing:4.84947395px;fill:#0038a8;fill-opacity:1;stroke:none;stroke-width:1;stroke-miterlimit:4;stroke-dasharray:none;stroke-opacity:1"
+              id="path1006" />
+            <path
+              d="m 139.99102,203.32779 h 4.60321 q 3.99702,0 5.77769,-2.08376 1.79961,-2.1027 1.79961,-6.80063 0,-4.67898 -1.66701,-6.8764 -1.667,-2.19742 -5.20939,-2.19742 h -5.30411 z m -5.62615,5.03891 v -27.90342 h 10.93026 q 6.42176,0 9.56634,3.46662 3.16353,3.46661 3.16353,10.5135 0,3.82654 -1.17449,6.7438 -1.15553,2.91727 -3.3719,4.69793 -1.667,1.32603 -3.78865,1.91327 -2.12164,0.5683 -5.94818,0.5683 z"
+              style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-family:'Swis721 BT';-inkscape-font-specification:'Swis721 BT Bold';letter-spacing:4.84947395px;fill:#0038a8;fill-opacity:1;stroke:none;stroke-width:1;stroke-miterlimit:4;stroke-dasharray:none;stroke-opacity:1"
+              id="path1008" />
+          </g>
+        </g>
+      </svg>
+    </div>
+    <h1>Socket Server</h1>
+    <div class="subtitle">Real-time Communication Platform</div>
+    <div class="status"><i class="fas fa-circle" style="color: #10b981; margin-right: 8px;"></i>Server Running & Connected</div>
+    
+    <div class="info">
+      <div class="info-title">Server Status</div>
+      <div class="info-content">Socket.IO server is running on port 6002</div>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- Quick Links -->
+    <div class="info" style="text-align: center;">
+      <div class="info-title">Quick Links</div>
+      <div class="info-content" style="margin-top: 15px; display: flex; gap: 15px; justify-content: center; flex-wrap: wrap;">
+        <a href="/docs" class="test-link" style="background: linear-gradient(135deg, #4caf50 0%, #45a049 100%);"><i class="fas fa-book"></i> View Documentation</a>
+        <a href="/test" class="test-link"><i class="fas fa-flask"></i> Test Page</a>
+      </div>
+      <p style="margin-top: 20px; color: #666; font-size: 14px;">
+        Visit the documentation page for complete API reference, examples, and troubleshooting guide.
+      </p>
+    </div>
+    
+    <div class="divider"></div>
+    
+    <div class="features">
+      <div class="feature">
+        <strong><i class="fas fa-broadcast-tower"></i> Broadcasting</strong>
+        Ready for real-time events
+      </div>
+      <div class="feature">
+        <strong><i class="fas fa-plug"></i> WebSocket</strong>
+        Live connection support
+      </div>
+      <div class="feature">
+        <strong><i class="fas fa-key"></i> Token Auth</strong>
+        Secure authentication
+      </div>
+    </div>
+    
+    <div class="author">
+      Developed by <strong>ITO I Julieto Ompad</strong>
+    </div>
+    
+    <div class="powered-by">
+      Powered by <strong>RICTMS</strong>
+    </div>
+  </div>
+</body>
+</html>
+

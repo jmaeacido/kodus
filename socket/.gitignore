@@ -1,0 +1,6 @@
+node_modules/
+.env
+.env.local
+.env.*.localnode_modules/
+.env
+users.db

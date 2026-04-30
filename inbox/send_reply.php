@@ -30,6 +30,7 @@ $reply = trim($_POST['reply'] ?? '');
 $subject = $_POST['subject'] ?? '(No Subject)';
 $originalMessage = $_POST['message'] ?? '(No Message)';
 $postedMentionIds = array_values(array_unique(array_filter(array_map('intval', preg_split('/[,\s]+/', (string) ($_POST['mentioned_user_ids'] ?? ''), -1, PREG_SPLIT_NO_EMPTY)))));
+$attachmentLimits = mailboxAttachmentLimits();
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     echo json_encode([
@@ -166,66 +167,40 @@ $originalMessage = (string) ($thread['message'] ?? $originalMessage);
 // ---------------------------
 $uploadedFiles = [];
 $filenamesForDB = [];
+$attachmentUploadErrors = [];
 
 if (!empty($_FILES['replyAttachments']['name'][0])) {
-    $allowedMimeToExtensions = [
-        'image/jpeg' => ['jpg', 'jpeg'],
-        'image/png' => ['png'],
-        'application/pdf' => ['pdf'],
-        'application/msword' => ['doc'],
-        'application/vnd.openxmlformats-officedocument.wordprocessingml.document' => ['docx'],
-        'application/vnd.ms-excel' => ['xls'],
-        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' => ['xlsx'],
-    ];
-    $maxSize = 25 * 1024 * 1024; // 25 MB
+    $uploadResult = mailboxSaveUploadedAttachments($_FILES['replyAttachments'], __DIR__ . '/uploads/reply_attachments/');
+    $uploadedFiles = $uploadResult['paths'];
+    $filenamesForDB = $uploadResult['filenames'];
+    $attachmentUploadErrors = $uploadResult['errors'];
+}
 
-    // Using __DIR__ (inbox folder) so attachments are served from /inbox/uploads/...
-    $uploadDir = __DIR__ . "/uploads/reply_attachments/";
-    if (!is_dir($uploadDir)) {
-        mkdir($uploadDir, 0777, true);
-    }
-
-    // Support multiple files
-    $names = $_FILES['replyAttachments']['name'];
-    $errors = $_FILES['replyAttachments']['error'];
-    $sizes = $_FILES['replyAttachments']['size'];
-    $tmps = $_FILES['replyAttachments']['tmp_name'];
-
-    for ($i = 0; $i < count($names); $i++) {
-        $originalName = $names[$i];
-        if ($errors[$i] === UPLOAD_ERR_OK) {
-            $fileSize = $sizes[$i];
-            $tmpName  = $tmps[$i];
-            $detectedMime = security_detect_upload_mime($tmpName);
-            $extension = strtolower(pathinfo((string) $originalName, PATHINFO_EXTENSION));
-
-            if (
-                $fileSize <= $maxSize
-                && isset($allowedMimeToExtensions[$detectedMime])
-                && in_array($extension, $allowedMimeToExtensions[$detectedMime], true)
-            ) {
-                // Sanitize filename to avoid traversal and unsafe chars
-                $safeBaseName = preg_replace("/[^a-zA-Z0-9_-]/", "_", pathinfo((string) $originalName, PATHINFO_FILENAME));
-                // Add a microtime + random to avoid collisions
-                $filename = time() . "_" . mt_rand(1000,9999) . "_" . $safeBaseName . "." . $extension;
-                $filePath = $uploadDir . $filename;
-
-                if (move_uploaded_file($tmpName, $filePath)) {
-                    $uploadedFiles[] = $filePath;        // absolute path for PHPMailer
-                    $filenamesForDB[] = $filename;      // filename to store in DB
-                }
-            }
+if (!empty($attachmentUploadErrors)) {
+    foreach ($uploadedFiles as $uploadedFile) {
+        if (is_string($uploadedFile) && is_file($uploadedFile)) {
+            @unlink($uploadedFile);
         }
     }
+    $buf = ob_get_clean();
+    echo json_encode([
+        'status' => 'error',
+        'message' => 'The selected attachment could not be uploaded. Please choose supported files up to ' . $attachmentLimits['max_file_size_label'] . ' each and ' . $attachmentLimits['max_total_size_label'] . ' total.',
+        'debug' => $buf ?: null
+    ]);
+    exit;
 }
 
 $hasAttachments = !empty($filenamesForDB);
 
 if ($reply === '' && !$hasAttachments) {
     $buf = ob_get_clean();
+    $message = !empty($attachmentUploadErrors)
+        ? 'The selected attachment could not be uploaded. Please choose supported files up to ' . $attachmentLimits['max_file_size_label'] . ' each and ' . $attachmentLimits['max_total_size_label'] . ' total.'
+        : 'Your reply needs either text or at least one attachment.';
     echo json_encode([
         'status' => 'error',
-        'message' => 'Your reply needs either text or at least one attachment.',
+        'message' => $message,
         'debug' => $buf ?: null
     ]);
     exit;

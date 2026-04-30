@@ -1,6 +1,7 @@
 <?php
 
 require_once __DIR__ . '/env_helpers.php';
+require_once __DIR__ . '/base_url.php';
 
 function kodus_socket_env_bool(string $key, bool $default = false): bool
 {
@@ -38,7 +39,12 @@ function kodus_socket_config(): array
 
     $origin = rtrim((string) app_env('KODUS_SOCKET_SERVER_URL', ''), '/');
     $broadcastUrl = (string) app_env('KODUS_SOCKET_BROADCAST_URL', $origin !== '' ? $origin . '/socket/broadcast' : '');
-    $clientScriptUrl = (string) app_env('KODUS_SOCKET_CLIENT_SCRIPT_URL', $origin !== '' ? $origin . '/socket.io/socket.io.js' : '');
+    $configuredClientScriptUrl = trim((string) app_env('KODUS_SOCKET_CLIENT_SCRIPT_URL', ''));
+    $localClientScriptUrl = app_url('dist/js/socket.io.js');
+    $clientScriptUrl = $configuredClientScriptUrl !== '' ? $configuredClientScriptUrl : $localClientScriptUrl;
+    if (preg_match('~/socket\.io/socket\.io\.js(?:[?#].*)?$~i', $clientScriptUrl) === 1) {
+        $clientScriptUrl = $localClientScriptUrl;
+    }
     $enabled = kodus_socket_env_bool('KODUS_SOCKET_ENABLED', $broadcastUrl !== '' || $origin !== '');
 
     $config = [

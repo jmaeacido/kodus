@@ -222,7 +222,7 @@ server {
     root /var/www;
     index index.php index.html;
 
-    client_max_body_size 25m;
+    client_max_body_size 80m;
 
     add_header X-Frame-Options "SAMEORIGIN" always;
     add_header X-Content-Type-Options "nosniff" always;
@@ -334,6 +334,8 @@ Common configuration points:
 - Set `post_max_size`
 - Set `max_execution_time`
 - Confirm the correct timezone
+
+KODUS attachment sends expect `upload_max_filesize = 64M`, `post_max_size = 80M`, and an Nginx `client_max_body_size` of `80m`.
 
 Example PHP configuration checks:
 

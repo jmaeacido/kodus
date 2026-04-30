@@ -32,7 +32,9 @@ $oldPassword = (string) ($loginFormOld['password'] ?? '');
 $loginError = isset($_SESSION['login_error']) ? (string) $_SESSION['login_error'] : '';
 unset($_SESSION['login_error'], $_SESSION['login_debug_error']);
 $ssoConfigured = sso_is_configured();
-$showPasswordLogin = !$ssoConfigured || $loginError !== '';
+$localLoginAvailable = is_file(__DIR__ . '/login.php');
+$localLoginRequested = isset($_GET['local']) && (string) $_GET['local'] === '1';
+$showPasswordLogin = $localLoginAvailable && (!$ssoConfigured || $loginError !== '' || $localLoginRequested);
 ?>
 
 <!DOCTYPE html>
@@ -185,6 +187,23 @@ $showPasswordLogin = !$ssoConfigured || $loginError !== '';
       font-size: 0.82rem;
       color: #7a8696;
     }
+    .local-login-option {
+      margin-top: 0.2rem;
+      text-align: center;
+    }
+    .local-login-option .btn {
+      font-size: 0.84rem;
+      font-weight: 500;
+      color: #6c757d;
+      text-decoration: none;
+      box-shadow: none;
+    }
+    .local-login-option .btn:hover,
+    .local-login-option .btn:focus {
+      color: #495057;
+      text-decoration: underline;
+      box-shadow: none;
+    }
     body.dark-mode .sso-pane__badge,
     body[data-theme="dark"] .sso-pane__badge {
       color: #8cbcff;
@@ -219,6 +238,16 @@ $showPasswordLogin = !$ssoConfigured || $loginError !== '';
     body[data-theme="dark"] .sso-pane__hint {
       color: #8fa3bc;
     }
+    body.dark-mode .local-login-option .btn,
+    body[data-theme="dark"] .local-login-option .btn {
+      color: #8fa3bc;
+    }
+    body.dark-mode .local-login-option .btn:hover,
+    body.dark-mode .local-login-option .btn:focus,
+    body[data-theme="dark"] .local-login-option .btn:hover,
+    body[data-theme="dark"] .local-login-option .btn:focus {
+      color: #cbd5e1;
+    }
   </style>
 </head>
 <body class="<?= htmlspecialchars($loginBodyClass, ENT_QUOTES, 'UTF-8') ?>" data-theme="<?= htmlspecialchars($themePreference, ENT_QUOTES, 'UTF-8') ?>">
@@ -247,13 +276,20 @@ $showPasswordLogin = !$ssoConfigured || $loginError !== '';
               <span>Sign In with Caraga-Connect SSO</span>
             </a>
             <p class="sso-pane__hint">Single sign-on is the recommended login method.</p>
+            <?php if ($localLoginAvailable && !$showPasswordLogin): ?>
+            <div class="local-login-option">
+              <a href="<?php echo $app_root; ?>?local=1" class="btn btn-link btn-sm">
+                Continue with local account
+              </a>
+            </div>
+            <?php endif; ?>
           </div>
           <?php endif; ?>
           <?php if ($showPasswordLogin): ?>
           <?php if ($ssoConfigured): ?>
-          <div class="login-divider">SSO Fallback</div>
+          <div class="login-divider">Alternative Login</div>
           <p class="text-muted text-center mt-2" style="font-size: 0.85rem;">
-            SSO is currently unavailable. You can use your local KODUS credentials below.
+            Use your local KODUS credentials below if SSO is unavailable.
           </p>
           <?php endif; ?>
           <form id="login-form" action="<?php echo $app_root; ?>login" method="post" autocomplete="on">

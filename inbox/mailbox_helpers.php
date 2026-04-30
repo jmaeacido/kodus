@@ -858,3 +858,160 @@ function mailboxFormatThreadPreview(array $preview, int $width = 54): string
 
     return mb_strimwidth($text, 0, $width, '...');
 }
+
+function mailboxAllowedAttachmentMimeExtensions(): array
+{
+    return [
+        'image/jpeg' => ['jpg', 'jpeg'],
+        'image/png' => ['png'],
+        'image/gif' => ['gif'],
+        'image/webp' => ['webp'],
+        'image/avif' => ['avif'],
+        'application/pdf' => ['pdf'],
+        'application/msword' => ['doc'],
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document' => ['docx'],
+        'application/vnd.ms-excel' => ['xls'],
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' => ['xlsx'],
+        'video/mp4' => ['mp4', 'm4v'],
+        'video/webm' => ['webm'],
+        'video/ogg' => ['ogg', 'ogv'],
+        'video/quicktime' => ['mov'],
+        'audio/mpeg' => ['mp3'],
+        'audio/wav' => ['wav'],
+        'audio/x-wav' => ['wav'],
+        'audio/ogg' => ['ogg'],
+        'audio/mp4' => ['m4a', 'aac'],
+        'audio/aac' => ['aac'],
+        'audio/flac' => ['flac'],
+    ];
+}
+
+function mailboxAttachmentLimits(): array
+{
+    return [
+        'max_file_size' => 67108864,
+        'max_total_size' => 83886080,
+        'max_file_count' => 50,
+        'max_file_size_label' => '64 MB',
+        'max_total_size_label' => '80 MB',
+    ];
+}
+
+function mailboxNormalizeUploadedFilesArray(array $files): array
+{
+    $names = $files['name'] ?? [];
+    if (!is_array($names)) {
+        $names = [$names];
+    }
+
+    $normalized = [];
+    foreach ($names as $index => $name) {
+        $normalized[] = [
+            'name' => (string) $name,
+            'type' => (string) ($files['type'][$index] ?? ''),
+            'tmp_name' => (string) ($files['tmp_name'][$index] ?? ''),
+            'error' => (int) ($files['error'][$index] ?? UPLOAD_ERR_NO_FILE),
+            'size' => (int) ($files['size'][$index] ?? 0),
+        ];
+    }
+
+    return $normalized;
+}
+
+function mailboxSafeAttachmentFilename(string $originalName, string $extension): string
+{
+    $baseName = pathinfo($originalName, PATHINFO_FILENAME);
+    $safeBaseName = preg_replace('/[^A-Za-z0-9_-]+/', '_', $baseName);
+    $safeBaseName = trim((string) $safeBaseName, '_-');
+    if ($safeBaseName === '') {
+        $safeBaseName = 'attachment';
+    }
+
+    $safeBaseName = substr($safeBaseName, 0, 72);
+    return 'att_' . gmdate('Ymd_His') . '_' . bin2hex(random_bytes(8)) . '_' . $safeBaseName . '.' . $extension;
+}
+
+function mailboxIsMediaAttachmentMime(string $mime): bool
+{
+    return str_starts_with($mime, 'image/')
+        || str_starts_with($mime, 'video/')
+        || str_starts_with($mime, 'audio/');
+}
+
+function mailboxGeneratedMediaAttachmentFilename(string $extension): string
+{
+    return 'att_' . gmdate('Ymd_His') . '_' . bin2hex(random_bytes(12)) . '.' . $extension;
+}
+
+function mailboxSaveUploadedAttachments(array $files, string $uploadDir, ?int $maxSize = null): array
+{
+    if (!is_dir($uploadDir)) {
+        mkdir($uploadDir, 0777, true);
+    }
+
+    $limits = mailboxAttachmentLimits();
+    $maxSize = $maxSize ?? (int) $limits['max_file_size'];
+    $maxTotalSize = (int) $limits['max_total_size'];
+    $maxFileCount = (int) $limits['max_file_count'];
+    $allowedMimeToExtensions = mailboxAllowedAttachmentMimeExtensions();
+    $uploadedFiles = [];
+    $filenamesForDB = [];
+    $errors = [];
+    $normalizedFiles = array_values(array_filter(
+        mailboxNormalizeUploadedFilesArray($files),
+        static fn (array $file): bool => $file['error'] !== UPLOAD_ERR_NO_FILE && $file['name'] !== ''
+    ));
+
+    if (count($normalizedFiles) > $maxFileCount) {
+        return [
+            'paths' => [],
+            'filenames' => [],
+            'errors' => array_column($normalizedFiles, 'name'),
+        ];
+    }
+
+    $totalSize = array_sum(array_map(static fn (array $file): int => max(0, (int) $file['size']), $normalizedFiles));
+    if ($totalSize > $maxTotalSize) {
+        return [
+            'paths' => [],
+            'filenames' => [],
+            'errors' => array_column($normalizedFiles, 'name'),
+        ];
+    }
+
+    foreach ($normalizedFiles as $file) {
+        if ($file['error'] !== UPLOAD_ERR_OK || $file['size'] <= 0 || $file['tmp_name'] === '' || !is_uploaded_file($file['tmp_name'])) {
+            $errors[] = $file['name'];
+            continue;
+        }
+
+        $detectedMime = security_detect_upload_mime($file['tmp_name']);
+        $extension = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+
+        if (
+            $file['size'] > $maxSize
+            || !isset($allowedMimeToExtensions[$detectedMime])
+            || !in_array($extension, $allowedMimeToExtensions[$detectedMime], true)
+        ) {
+            $errors[] = $file['name'];
+            continue;
+        }
+
+        $filename = mailboxIsMediaAttachmentMime($detectedMime)
+            ? mailboxGeneratedMediaAttachmentFilename($extension)
+            : mailboxSafeAttachmentFilename($file['name'], $extension);
+        $filePath = rtrim($uploadDir, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . $filename;
+        if (move_uploaded_file($file['tmp_name'], $filePath)) {
+            $uploadedFiles[] = $filePath;
+            $filenamesForDB[] = $filename;
+        } else {
+            $errors[] = $file['name'];
+        }
+    }
+
+    return [
+        'paths' => $uploadedFiles,
+        'filenames' => $filenamesForDB,
+        'errors' => $errors,
+    ];
+}

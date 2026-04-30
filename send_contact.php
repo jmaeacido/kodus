@@ -19,6 +19,7 @@ ob_start();
 $expectsJson = strtolower((string) ($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '')) === 'xmlhttprequest'
     || str_contains(strtolower((string) ($_SERVER['HTTP_ACCEPT'] ?? '')), 'application/json');
 $responseFinished = false;
+$attachmentLimits = mailboxAttachmentLimits();
 
 function send_contact_respond(array $payload, int $statusCode = 200): void
 {
@@ -76,56 +77,47 @@ if ($subject === '') {
 // ---------------------------
 $uploadedFiles = [];
 $filenamesForDB = [];
+$attachmentUploadErrors = [];
 
 if (!empty($_FILES['attachments']['name'][0])) {
-    $allowedMimeToExtensions = [
-        'image/jpeg' => ['jpg', 'jpeg'],
-        'image/png' => ['png'],
-        'application/pdf' => ['pdf'],
-        'application/msword' => ['doc'],
-        'application/vnd.openxmlformats-officedocument.wordprocessingml.document' => ['docx'],
-        'application/vnd.ms-excel' => ['xls'],
-        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' => ['xlsx'],
-    ];
-    $maxSize = 25 * 1024 * 1024; // 25 MB
+    $uploadResult = mailboxSaveUploadedAttachments($_FILES['attachments'], __DIR__ . '/inbox/uploads/contact_attachments/');
+    $uploadedFiles = $uploadResult['paths'];
+    $filenamesForDB = $uploadResult['filenames'];
+    $attachmentUploadErrors = $uploadResult['errors'];
+}
 
-    $uploadDir = __DIR__ . "/inbox/uploads/contact_attachments/";
-    if (!is_dir($uploadDir)) mkdir($uploadDir, 0777, true);
-
-    foreach ($_FILES['attachments']['name'] as $i => $originalName) {
-        if ($_FILES['attachments']['error'][$i] === UPLOAD_ERR_OK) {
-            $fileSize = $_FILES['attachments']['size'][$i];
-            $tmpName  = $_FILES['attachments']['tmp_name'][$i];
-            $detectedMime = security_detect_upload_mime($tmpName);
-            $extension = strtolower(pathinfo((string) $originalName, PATHINFO_EXTENSION));
-
-            if (
-                $fileSize <= $maxSize
-                && isset($allowedMimeToExtensions[$detectedMime])
-                && in_array($extension, $allowedMimeToExtensions[$detectedMime], true)
-            ) {
-                $safeBaseName = preg_replace('/[^A-Za-z0-9_\-]/', '_', pathinfo((string) $originalName, PATHINFO_FILENAME));
-                $filename = time() . "_" . bin2hex(random_bytes(4)) . "_" . $safeBaseName . "." . $extension;
-                $filePath = $uploadDir . $filename;
-                if (move_uploaded_file($tmpName, $filePath)) {
-                    $uploadedFiles[] = $filePath;
-                    $filenamesForDB[] = $filename;
-                }
-            }
+if (!empty($attachmentUploadErrors)) {
+    foreach ($uploadedFiles as $uploadedFile) {
+        if (is_string($uploadedFile) && is_file($uploadedFile)) {
+            @unlink($uploadedFile);
         }
     }
+    $validationMessage = 'The selected attachment could not be uploaded. Please choose supported files up to ' . $attachmentLimits['max_file_size_label'] . ' each and ' . $attachmentLimits['max_total_size_label'] . ' total.';
+    send_contact_respond([
+        'success' => false,
+        'title' => 'Attachment not uploaded',
+        'message' => $validationMessage,
+        'icon' => 'warning',
+        'script' => "
+            Swal.fire({ icon: 'warning', title: 'Attachment not uploaded', text: '" . addslashes($validationMessage) . "' })
+            .then(() => window.location.href = '{$returnTo}');
+        ",
+    ], 422);
 }
 
 $hasAttachments = !empty($filenamesForDB);
 
 if (empty($message) && !$hasAttachments) {
+    $validationMessage = !empty($attachmentUploadErrors)
+        ? 'The selected attachment could not be uploaded. Please choose supported files up to ' . $attachmentLimits['max_file_size_label'] . ' each and ' . $attachmentLimits['max_total_size_label'] . ' total.'
+        : 'Your chat needs either text or at least one attachment.';
     send_contact_respond([
         'success' => false,
         'title' => 'Missing Fields',
-        'message' => 'Your chat needs either text or at least one attachment.',
+        'message' => $validationMessage,
         'icon' => 'warning',
         'script' => "
-            Swal.fire({ icon: 'warning', title: 'Missing Fields', text: 'Your chat needs either text or at least one attachment.' })
+            Swal.fire({ icon: 'warning', title: 'Missing Fields', text: '" . addslashes($validationMessage) . "' })
             .then(() => window.location.href = '{$returnTo}');
         ",
     ], 422);

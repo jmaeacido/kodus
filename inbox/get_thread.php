@@ -6,6 +6,7 @@ require_once __DIR__ . '/mailbox_helpers.php';
 security_bootstrap_session();
 include('../config.php');
 mailboxEnsureSchema($conn);
+$attachmentLimits = mailboxAttachmentLimits();
 
 $id = intval($_GET['id'] ?? 0);
 $userId = $_SESSION['user_id'] ?? 0;
@@ -307,18 +308,30 @@ function renderAttachments($attachmentCsv, $basePath, $type = 'contact')
     $html = '<div class="attachments"><div class="font-weight-bold small mb-2">Attachments</div><div class="attachments-list">';
 
     foreach ($files as $i => $file) {
-        $path = $basePath . $file;
+        $path = $basePath . rawurlencode($file);
         $ext = strtolower(pathinfo($file, PATHINFO_EXTENSION));
+        $isMedia = in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp', 'avif', 'mp4', 'webm', 'ogg', 'ogv', 'mov', 'm4v', 'mp3', 'wav', 'm4a', 'aac', 'flac'], true);
+        $safePath = htmlspecialchars($path, ENT_QUOTES, 'UTF-8');
+        $safeFile = htmlspecialchars($file, ENT_QUOTES, 'UTF-8');
         $html .= '<div class="attachment-thumb" data-attachments=\'' . $jsonFiles . '\' data-index="' . $i . '" data-type="' . $type . '">';
 
         if (in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp', 'avif'], true)) {
-            $html .= '<img src="' . $path . '" alt="">';
+            $html .= '<img src="' . $safePath . '" alt="">';
+        } elseif (in_array($ext, ['mp4', 'webm', 'ogv', 'mov', 'm4v'], true)) {
+            $html .= '<video src="' . $safePath . '" controls preload="metadata"></video>';
+        } elseif (in_array($ext, ['mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac'], true)) {
+            $html .= '<audio src="' . $safePath . '" controls preload="metadata"></audio>';
+        } elseif ($ext === 'pdf') {
+            $html .= '<div class="d-flex align-items-center justify-content-center" style="height:84px;"><i class="fas fa-file-pdf fa-2x text-danger"></i></div>';
         } else {
             $html .= '<div class="d-flex align-items-center justify-content-center" style="height:84px;"><i class="fas fa-file fa-2x text-secondary"></i></div>';
         }
 
-        $html .= '<div class="filename">' . htmlspecialchars($file) . '</div>';
-        $html .= '<a href="' . $path . '" download class="btn btn-xs btn-outline-secondary mt-2">Download</a>';
+        if (!$isMedia) {
+            $html .= '<div class="filename">' . $safeFile . '</div>';
+        }
+
+        $html .= '<a href="' . $safePath . '" download class="btn btn-xs btn-outline-secondary mt-2">Download</a>';
         $html .= '</div>';
     }
 
@@ -456,7 +469,7 @@ function renderReply($row, $userId, $userType, array $reactionSummary, int $mess
         <div class="chat-bubble-body"><?= nl2br(htmlspecialchars($row['reply'])) ?></div>
         <?php
         if (!empty($row['attachment'])) {
-            echo renderAttachments($row['attachment'], 'uploads/reply_attachments/', 'reply');
+            echo renderAttachments($row['attachment'], app_url('inbox/uploads/reply_attachments/'), 'reply');
         }
         echo renderReactionBar($reactionSummary, $messageId, (int) ($row['id'] ?? 0));
         ?>
@@ -482,7 +495,7 @@ function renderOriginalMessageBubble($message, $originalReplyClass, $originalAva
       <div class="chat-bubble-body"><?= nl2br(htmlspecialchars($message['message'])) ?></div>
       <?php
       if (!empty($message['attachment'])) {
-          echo renderAttachments($message['attachment'], 'uploads/contact_attachments/', 'contact');
+          echo renderAttachments($message['attachment'], app_url('inbox/uploads/contact_attachments/'), 'contact');
       }
       echo renderReactionBar($reactionSummary, (int) ($message['id'] ?? 0), null);
       ?>
@@ -639,6 +652,9 @@ if ($onlyConversation) {
         <div class="chat-mentions-shell">
           <textarea id="replyText" name="reply" class="form-control chat-reply-textarea" rows="2" placeholder="Write a message, use @ to mention someone..."></textarea>
           <div class="chat-composer-tool-stack">
+            <button type="submit" class="chat-composer-tool-btn chat-composer-send-btn" id="replySendBtn" aria-label="Send message" title="Send">
+              <i class="fas fa-paper-plane"></i>
+            </button>
             <button type="button" class="chat-composer-tool-btn" id="attachBtn" aria-label="Attach files" title="Attach files">
               <i class="fas fa-paperclip"></i>
             </button>
@@ -648,10 +664,14 @@ if ($onlyConversation) {
             <div class="emoji-menu" id="replyEmojiMenu" hidden></div>
           </div>
           <div class="chat-mention-menu" id="replyMentionMenu" hidden></div>
+          <div id="replyFilePreview" class="file-preview" aria-live="polite"></div>
         </div>
 
         <input type="file" name="replyAttachments[]" id="replyAttachments" multiple hidden>
-        <div id="replyFilePreview" class="file-preview"></div>
+        <div class="attachment-limit-hint mt-2" id="replyAttachmentHint">
+          Up to <?= htmlspecialchars((string) $attachmentLimits['max_file_count'], ENT_QUOTES) ?> files, <?= htmlspecialchars((string) $attachmentLimits['max_file_size_label'], ENT_QUOTES) ?> each, <?= htmlspecialchars((string) $attachmentLimits['max_total_size_label'], ENT_QUOTES) ?> total.
+        </div>
+        <div class="attachment-validation-message mt-1" id="replyAttachmentError" role="alert" aria-live="polite" hidden></div>
 
         <input type="hidden" name="id" value="<?= (int) $id ?>">
         <input type="hidden" name="email" value="<?= htmlspecialchars($message['user_email'], ENT_QUOTES) ?>">
@@ -670,6 +690,7 @@ if ($onlyConversation) {
 
 <script>
 (function() {
+    window.KODUSMessengerAttachmentLimits = <?= json_encode($attachmentLimits, JSON_UNESCAPED_SLASHES) ?>;
     const replyForm = document.getElementById('replyForm');
     const attachBtn = document.getElementById('attachBtn');
     const fileInput = document.getElementById('replyAttachments');
@@ -678,6 +699,7 @@ if ($onlyConversation) {
     const emojiTrigger = document.getElementById('replyEmojiTrigger');
     const emojiMenu = document.getElementById('replyEmojiMenu');
     const mentionMenu = document.getElementById('replyMentionMenu');
+    const attachmentError = document.getElementById('replyAttachmentError');
     const shell = document.querySelector('.chat-shell');
     const participantData = (() => {
         if (!shell) {
@@ -702,6 +724,8 @@ if ($onlyConversation) {
     });
     const composerEmojis = ['😀', '😂', '😊', '😍', '😉', '👍', '👏', '🙏', '🎉', '🔥', '❤️', '✨', '📎', '📩', '✅', '🤝', '🙌', '😎', '📌', '💡'];
     let activeMentionIndex = 0;
+    let selectedReplyFiles = [];
+    const replyPreviewUrls = new Map();
 
     if (!replyForm || !attachBtn || !fileInput || !preview || !replyText || !emojiTrigger || !emojiMenu || !mentionMenu) {
         return;
@@ -835,6 +859,117 @@ if ($onlyConversation) {
         fileInput.click();
     });
 
+    function syncReplyFileInput() {
+        const transfer = new DataTransfer();
+        selectedReplyFiles.forEach(function(file) {
+            transfer.items.add(file);
+        });
+        fileInput.files = transfer.files;
+    }
+
+    function clearReplyPreviewUrls() {
+        replyPreviewUrls.forEach(function(url) {
+            URL.revokeObjectURL(url);
+        });
+        replyPreviewUrls.clear();
+    }
+
+    function getReplyPreviewUrl(file) {
+        const key = file.name + ':' + file.size + ':' + file.lastModified;
+        if (!replyPreviewUrls.has(key)) {
+            replyPreviewUrls.set(key, URL.createObjectURL(file));
+        }
+        return replyPreviewUrls.get(key);
+    }
+
+    function isReplyMediaFile(file, ext) {
+        return file.type.startsWith('image/')
+            || file.type.startsWith('video/')
+            || file.type.startsWith('audio/')
+            || ['avif', 'webp', 'jpg', 'jpeg', 'png', 'gif', 'mp4', 'webm', 'ogv', 'mov', 'm4v', 'mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac'].includes(ext);
+    }
+
+    function setReplyPreviewState() {
+        preview.parentElement?.classList.toggle('has-file-preview', selectedReplyFiles.length > 0);
+    }
+
+    function renderReplyFilePreview() {
+        preview.innerHTML = '';
+        const isStacked = selectedReplyFiles.length > 4;
+        const visibleFiles = isStacked ? selectedReplyFiles.slice(0, 4) : selectedReplyFiles;
+        preview.classList.toggle('is-stacked', isStacked);
+        setReplyPreviewState();
+
+        visibleFiles.forEach(function(file, index) {
+            const card = document.createElement('div');
+            card.className = 'file-card';
+            card.style.zIndex = String(visibleFiles.length - index + 1);
+            const ext = (file.name.split('.').pop() || '').toLowerCase();
+
+            if (file.type.startsWith('image/') || ['avif', 'webp', 'jpg', 'jpeg', 'png', 'gif'].includes(ext)) {
+                const img = document.createElement('img');
+                img.src = getReplyPreviewUrl(file);
+                img.alt = '';
+                card.appendChild(img);
+            } else if (file.type.startsWith('video/') || ['mp4', 'webm', 'ogv', 'mov', 'm4v'].includes(ext)) {
+                const video = document.createElement('video');
+                video.src = getReplyPreviewUrl(file);
+                video.controls = true;
+                video.preload = 'metadata';
+                card.appendChild(video);
+            } else if (file.type.startsWith('audio/') || ['mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac'].includes(ext)) {
+                const audio = document.createElement('audio');
+                audio.src = getReplyPreviewUrl(file);
+                audio.controls = true;
+                audio.preload = 'metadata';
+                card.appendChild(audio);
+            } else {
+                const iconWrap = document.createElement('span');
+                iconWrap.className = 'file-card-icon';
+                const icon = document.createElement('i');
+                icon.className = file.type.startsWith('audio/')
+                    ? 'fas fa-file-audio'
+                    : (file.type.startsWith('video/') ? 'fas fa-file-video' : 'fas fa-file');
+                iconWrap.appendChild(icon);
+                card.appendChild(iconWrap);
+            }
+
+            if (!isReplyMediaFile(file, ext)) {
+                const label = document.createElement('span');
+                label.className = 'file-card-name';
+                label.textContent = file.name;
+                card.appendChild(label);
+            }
+
+            const remove = document.createElement('button');
+            remove.type = 'button';
+            remove.className = 'file-card-remove';
+            remove.setAttribute('aria-label', 'Remove ' + file.name);
+            remove.textContent = '×';
+            remove.addEventListener('click', function(event) {
+                event.preventDefault();
+                event.stopPropagation();
+                selectedReplyFiles.splice(index, 1);
+                clearReplyPreviewUrls();
+                syncReplyFileInput();
+                renderReplyFilePreview();
+                window.setAttachmentValidationMessage?.(attachmentError, '');
+                replyText.focus();
+            });
+            card.appendChild(remove);
+
+            preview.appendChild(card);
+        });
+
+        if (isStacked) {
+            const count = document.createElement('div');
+            count.className = 'file-card-count';
+            count.textContent = '+' + (selectedReplyFiles.length - visibleFiles.length);
+            count.title = selectedReplyFiles.length + ' attachments selected';
+            preview.appendChild(count);
+        }
+    }
+
     replyText.addEventListener('input', function() {
         const caret = replyText.selectionStart ?? replyText.value.length;
         const before = replyText.value.slice(0, caret);
@@ -895,35 +1030,39 @@ if ($onlyConversation) {
     });
 
     fileInput.addEventListener('change', function() {
-        preview.innerHTML = '';
-        const files = Array.from(fileInput.files || []);
-        files.forEach(function(file, index) {
-            if (index >= 4) {
-                return;
+        const nextFiles = selectedReplyFiles.concat(Array.from(fileInput.files || []));
+        const validation = window.validateMessengerAttachments
+            ? window.validateMessengerAttachments(nextFiles)
+            : { valid: true, message: '' };
+        if (!validation.valid) {
+            fileInput.value = '';
+            window.setAttachmentValidationMessage?.(attachmentError, validation.message);
+            if (window.Swal) {
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Attachment too large',
+                    text: validation.message
+                });
             }
-
-            const card = document.createElement('div');
-            card.className = 'file-card';
-
-            if (file.type.startsWith('image/')) {
-                const img = document.createElement('img');
-                img.src = URL.createObjectURL(file);
-                card.appendChild(img);
-            } else {
-                const icon = document.createElement('i');
-                icon.className = 'fas fa-file';
-                card.appendChild(icon);
-            }
-
-            preview.appendChild(card);
-        });
-
-        if (files.length > 4) {
-            const more = document.createElement('div');
-            more.className = 'file-card more';
-            more.textContent = '+' + (files.length - 4);
-            preview.appendChild(more);
+            return;
         }
+
+        selectedReplyFiles = nextFiles;
+        window.setAttachmentValidationMessage?.(attachmentError, '');
+        syncReplyFileInput();
+        renderReplyFilePreview();
+        replyText.focus();
+    });
+
+    replyForm.addEventListener('reset', function() {
+        window.setTimeout(function() {
+            selectedReplyFiles = [];
+            clearReplyPreviewUrls();
+            syncReplyFileInput();
+            renderReplyFilePreview();
+            setReplyPreviewState();
+            window.setAttachmentValidationMessage?.(attachmentError, '');
+        }, 0);
     });
 })();
 </script>

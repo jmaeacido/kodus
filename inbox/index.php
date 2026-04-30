@@ -5,6 +5,7 @@ include('../config.php');
 require_once __DIR__ . '/mailbox_helpers.php';
 
 mailboxEnsureSchema($conn);
+$attachmentLimits = mailboxAttachmentLimits();
 
 function mailbox_user_avatar_url(?string $picture, ?string $ssoAvatarUrl, string $baseUrl): string
 {
@@ -1212,11 +1213,17 @@ $composeCsrfToken = security_get_csrf_token();
       cursor: pointer;
     }
 
-    .mailbox-app .attachment-thumb img {
+    .mailbox-app .attachment-thumb img,
+    .mailbox-app .attachment-thumb video {
       width: 100%;
       height: 84px;
       object-fit: cover;
       border-radius: 0.35rem;
+    }
+
+    .mailbox-app .attachment-thumb audio {
+      width: 100%;
+      height: 42px;
     }
 
     .mailbox-app .attachment-thumb .filename {
@@ -1390,6 +1397,18 @@ $composeCsrfToken = security_get_csrf_token();
     .mailbox-app .reply-form-hint {
       color: var(--mailbox-text-muted);
       font-size: 0.82rem;
+    }
+
+    .mailbox-app .attachment-limit-hint {
+      color: var(--mailbox-text-muted);
+      font-size: 0.78rem;
+      line-height: 1.35;
+    }
+
+    .mailbox-app .attachment-validation-message {
+      color: #dc3545;
+      font-size: 0.82rem;
+      line-height: 1.35;
     }
 
     .mailbox-app .chat-mentions-shell {
@@ -1948,6 +1967,11 @@ $composeCsrfToken = security_get_csrf_token();
       padding-right: 3.4rem;
     }
 
+    .compose-modal .compose-message-shell.has-file-preview .form-control {
+      min-height: 224px;
+      padding-bottom: 5rem;
+    }
+
     .compose-modal .compose-tool-stack {
       position: absolute;
       right: 0.7rem;
@@ -1979,6 +2003,19 @@ $composeCsrfToken = security_get_csrf_token();
       background: color-mix(in srgb, var(--mailbox-accent-soft) 78%, transparent);
     }
 
+    .compose-modal .compose-send-btn {
+      background: var(--mailbox-accent-strong);
+      border-color: var(--mailbox-accent-strong);
+      color: #fff;
+    }
+
+    .compose-modal .compose-send-btn:hover,
+    .compose-modal .compose-send-btn:focus {
+      background: color-mix(in srgb, var(--mailbox-accent-strong) 84%, #000 16%);
+      border-color: color-mix(in srgb, var(--mailbox-accent-strong) 84%, #000 16%);
+      color: #fff;
+    }
+
     .compose-modal .compose-message-shell .emoji-menu {
       z-index: 1080;
     }
@@ -1989,37 +2026,153 @@ $composeCsrfToken = security_get_csrf_token();
       font-size: 0.85rem;
     }
 
+    .compose-modal .compose-attachment-meta {
+      display: grid;
+      gap: 0.25rem;
+      margin-top: 0.65rem;
+    }
+
     .compose-modal .compose-file-preview {
+      position: absolute;
+      left: 0.65rem;
+      bottom: 0.65rem;
+      z-index: 3;
       display: flex;
-      flex-wrap: wrap;
-      gap: 0.65rem;
-      margin-top: 0.8rem;
+      flex-direction: row;
+      align-items: flex-start;
+      flex-wrap: nowrap;
+      gap: 0.45rem;
+      margin: 0;
+      max-width: min(360px, calc(100% - 4.7rem));
+      max-height: 62px;
+      overflow: visible;
+      padding: 0.2rem 0.35rem 0.2rem 0.2rem;
+    }
+
+    .compose-modal .compose-file-preview:empty {
+      display: none;
     }
 
     .compose-modal .compose-file-card {
-      width: 72px;
-      height: 72px;
-      border-radius: 1rem;
+      position: relative;
+      width: 58px;
+      height: 58px;
+      min-height: 58px;
+      border-radius: 0.85rem;
       border: 1px solid var(--mailbox-border);
       background: color-mix(in srgb, var(--mailbox-surface) 94%, transparent);
       display: flex;
       align-items: center;
       justify-content: center;
-      overflow: hidden;
+      padding: 0;
+      overflow: visible;
       box-shadow: 0 10px 18px rgba(15, 23, 42, 0.08);
       color: var(--mailbox-text-muted);
+      flex: 0 0 58px;
+      transition: transform 0.16s ease;
     }
 
-    .compose-modal .compose-file-card img {
+    .compose-modal .compose-file-card img,
+    .compose-modal .compose-file-card video,
+    .compose-modal .compose-file-card .compose-file-icon {
       width: 100%;
       height: 100%;
+      border-radius: 0.75rem;
+      flex: 0 0 100%;
       object-fit: cover;
     }
 
-    .compose-modal .compose-file-card.more {
-      background: linear-gradient(135deg, #2563eb, #0f766e);
+    .compose-modal .compose-file-card audio {
+      width: 100%;
+      align-self: center;
+    }
+
+    .compose-modal .compose-file-card .compose-file-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: color-mix(in srgb, var(--mailbox-surface-muted) 90%, transparent);
+      color: var(--mailbox-text-muted);
+    }
+
+    .compose-modal .compose-file-name {
+      position: absolute;
+      left: 0.25rem;
+      right: 0.25rem;
+      bottom: 0.18rem;
+      padding: 0.08rem 0.22rem;
+      border-radius: 0.35rem;
+      background: rgba(15, 23, 42, 0.72);
       color: #fff;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 0.62rem;
+      line-height: 1.1;
+      font-weight: 700;
+      text-align: center;
+      pointer-events: none;
+    }
+
+    .compose-modal .compose-file-preview.is-stacked {
+      width: 154px;
+      max-width: 154px;
+    }
+
+    .compose-modal .compose-file-preview.is-stacked .compose-file-card {
+      margin-left: -34px;
+    }
+
+    .compose-modal .compose-file-preview.is-stacked .compose-file-card:first-child {
+      margin-left: 0;
+    }
+
+    .compose-modal .compose-file-preview.is-stacked .compose-file-card:hover,
+    .compose-modal .compose-file-preview.is-stacked .compose-file-card:focus-within {
+      transform: translateY(-4px);
+      z-index: 12 !important;
+    }
+
+    .compose-modal .compose-file-count {
+      width: 58px;
+      height: 58px;
+      border-radius: 0.85rem;
+      margin-left: -34px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: color-mix(in srgb, var(--mailbox-accent-strong) 82%, #111827 18%);
+      color: #fff;
+      font-size: 0.85rem;
       font-weight: 800;
+      box-shadow: 0 10px 18px rgba(15, 23, 42, 0.16);
+      z-index: 1;
+    }
+
+    .compose-modal .compose-file-remove {
+      position: absolute;
+      top: -0.35rem;
+      right: -0.35rem;
+      width: 1.25rem;
+      height: 1.25rem;
+      border: 0;
+      border-radius: 999px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+      background: #dc3545;
+      color: #fff;
+      font-size: 0.95rem;
+      line-height: 1;
+      box-shadow: 0 4px 10px rgba(15, 23, 42, 0.2);
+    }
+
+    .compose-modal .compose-file-remove:hover,
+    .compose-modal .compose-file-remove:focus {
+      background: #bd2130;
+      color: #fff;
+      outline: none;
     }
 
     .compose-modal .compose-stats {
@@ -3005,12 +3158,33 @@ $composeCsrfToken = security_get_csrf_token();
 
     .mailbox-app .file-preview {
       display: flex;
-      flex-wrap: wrap;
+      flex-direction: row;
+      flex-wrap: nowrap;
       gap: 0.5rem;
       margin-top: 0.75rem;
     }
 
+    .mailbox-app .chat-mentions-shell .file-preview {
+      position: absolute;
+      left: 0.55rem;
+      bottom: 0.45rem;
+      z-index: 3;
+      flex-direction: row;
+      align-items: flex-start;
+      flex-wrap: nowrap;
+      max-height: 50px;
+      max-width: min(260px, calc(100% - 4.2rem));
+      margin: 0;
+      overflow: visible;
+      padding: 0.1rem;
+    }
+
+    .mailbox-app .chat-mentions-shell .file-preview:empty {
+      display: none;
+    }
+
     .mailbox-app .file-card {
+      position: relative;
       width: 42px;
       height: 42px;
       border-radius: 0.6rem;
@@ -3022,10 +3196,128 @@ $composeCsrfToken = security_get_csrf_token();
       background: color-mix(in srgb, var(--mailbox-surface-muted) 92%, transparent);
     }
 
-    .mailbox-app .file-card img {
+    .mailbox-app .chat-mentions-shell .file-card {
+      width: 46px;
+      height: 46px;
+      justify-content: center;
+      padding: 0;
+      overflow: visible;
+      background: color-mix(in srgb, var(--mailbox-surface) 96%, transparent);
+      border-color: var(--mailbox-border);
+      box-shadow: 0 8px 18px rgba(15, 23, 42, 0.12);
+      color: var(--mailbox-text);
+      flex: 0 0 46px;
+      transition: transform 0.16s ease;
+    }
+
+    .mailbox-app .file-card img,
+    .mailbox-app .file-card video {
       width: 100%;
       height: 100%;
       object-fit: cover;
+    }
+
+    .mailbox-app .file-card audio {
+      width: 100%;
+      align-self: center;
+    }
+
+    .mailbox-app .chat-mentions-shell .file-card img,
+    .mailbox-app .chat-mentions-shell .file-card video,
+    .mailbox-app .chat-mentions-shell .file-card .file-card-icon {
+      width: 100%;
+      height: 100%;
+      border-radius: 0.45rem;
+      flex: 0 0 100%;
+      object-fit: cover;
+    }
+
+    .mailbox-app .chat-mentions-shell .file-card .file-card-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: color-mix(in srgb, var(--mailbox-surface-muted) 90%, transparent);
+      color: var(--mailbox-text-muted);
+    }
+
+    .mailbox-app .file-card-name {
+      position: absolute;
+      left: 0.2rem;
+      right: 0.2rem;
+      bottom: 0.16rem;
+      padding: 0.06rem 0.18rem;
+      border-radius: 0.3rem;
+      background: rgba(15, 23, 42, 0.72);
+      color: #fff;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 0.56rem;
+      line-height: 1.1;
+      font-weight: 700;
+      text-align: center;
+      pointer-events: none;
+    }
+
+    .mailbox-app .chat-mentions-shell .file-preview.is-stacked {
+      width: 126px;
+      max-width: 126px;
+    }
+
+    .mailbox-app .chat-mentions-shell .file-preview.is-stacked .file-card {
+      margin-left: -27px;
+    }
+
+    .mailbox-app .chat-mentions-shell .file-preview.is-stacked .file-card:first-child {
+      margin-left: 0;
+    }
+
+    .mailbox-app .chat-mentions-shell .file-preview.is-stacked .file-card:hover,
+    .mailbox-app .chat-mentions-shell .file-preview.is-stacked .file-card:focus-within {
+      transform: translateY(-4px);
+      z-index: 12 !important;
+    }
+
+    .mailbox-app .file-card-count {
+      width: 46px;
+      height: 46px;
+      border-radius: 0.6rem;
+      margin-left: -27px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: color-mix(in srgb, var(--messenger-accent, #007bff) 82%, #111827 18%);
+      color: #fff;
+      font-size: 0.72rem;
+      font-weight: 800;
+      box-shadow: 0 8px 18px rgba(15, 23, 42, 0.16);
+      z-index: 1;
+    }
+
+    .mailbox-app .file-card-remove {
+      position: absolute;
+      top: -0.35rem;
+      right: -0.35rem;
+      width: 1.25rem;
+      height: 1.25rem;
+      border: 0;
+      border-radius: 999px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+      background: #dc3545;
+      color: #fff;
+      font-size: 0.95rem;
+      line-height: 1;
+      box-shadow: 0 4px 10px rgba(15, 23, 42, 0.2);
+    }
+
+    .mailbox-app .file-card-remove:hover,
+    .mailbox-app .file-card-remove:focus {
+      background: #bd2130;
+      color: #fff;
+      outline: none;
     }
 
     .mailbox-app .file-card.more {
@@ -3991,6 +4283,11 @@ $composeCsrfToken = security_get_csrf_token();
       padding-right: 3.25rem;
     }
 
+    .mailbox-app .chat-mentions-shell.has-file-preview .chat-reply-textarea {
+      min-height: 104px;
+      padding-bottom: 4.35rem;
+    }
+
     .mailbox-app .chat-composer-tool-stack {
       position: absolute;
       right: 0.55rem;
@@ -4010,6 +4307,12 @@ $composeCsrfToken = security_get_csrf_token();
       min-height: 42px;
       max-height: 92px;
       padding: 0.62rem 5.1rem 0.62rem 0.75rem;
+    }
+
+    body.kodus-chat-bubble-mode .mailbox-app .chat-mentions-shell.has-file-preview .chat-reply-textarea {
+      min-height: 98px;
+      max-height: 148px;
+      padding-bottom: 4.25rem;
     }
 
     body.kodus-chat-bubble-mode .mailbox-app .chat-composer-tool-stack {
@@ -4042,6 +4345,17 @@ $composeCsrfToken = security_get_csrf_token();
       background: color-mix(in srgb, var(--messenger-accent) 16%, transparent);
       color: var(--messenger-accent);
       outline: none;
+    }
+
+    .mailbox-app .chat-composer-send-btn {
+      background: var(--messenger-accent, #007bff);
+      color: #fff;
+    }
+
+    .mailbox-app .chat-composer-send-btn:hover,
+    .mailbox-app .chat-composer-send-btn:focus {
+      background: color-mix(in srgb, var(--messenger-accent, #007bff) 84%, #000 16%);
+      color: #fff;
     }
 
     .mailbox-app .chat-composer-tool-stack .emoji-menu {
@@ -4135,6 +4449,17 @@ $composeCsrfToken = security_get_csrf_token();
 
       .mailbox-app .reply {
         max-width: 74%;
+      }
+
+      .mailbox-app .chat-mentions-shell .file-preview {
+        left: 0.45rem;
+        max-width: min(210px, calc(100% - 4rem));
+        max-height: 50px;
+      }
+
+      .mailbox-app .chat-mentions-shell .file-card {
+        width: 46px;
+        height: 46px;
       }
 
       .mailbox-app .mobile-only {
@@ -4520,6 +4845,9 @@ $composeCsrfToken = security_get_csrf_token();
               <div class="compose-message-shell">
                 <textarea name="message" id="composeMessage" class="form-control" rows="6" maxlength="5000" placeholder="Write your first message..."></textarea>
                 <div class="compose-tool-stack">
+                  <button type="submit" class="compose-tool-btn compose-send-btn" id="composeInlineSendBtn" aria-label="Send chat" title="Send">
+                    <i class="fas fa-paper-plane"></i>
+                  </button>
                   <button type="button" class="compose-tool-btn" id="composeAttachTrigger" aria-label="Attach files" title="Attach files">
                     <i class="fas fa-paperclip"></i>
                   </button>
@@ -4528,13 +4856,19 @@ $composeCsrfToken = security_get_csrf_token();
                   </button>
                   <div class="emoji-menu" id="composeEmojiMenu" hidden></div>
                 </div>
+                <div class="compose-file-preview" id="composeFilePreview" aria-live="polite"></div>
               </div>
               <div class="compose-stats">
                 <span class="compose-stat-pill"><strong id="composeMessageCount">0</strong>/5000 text</span>
               </div>
               <input type="file" name="attachments[]" id="composeAttachments" multiple hidden>
-              <div class="compose-file-summary" id="composeFileSummary">No files selected</div>
-              <div class="compose-file-preview" id="composeFilePreview"></div>
+              <div class="compose-attachment-meta">
+                <div class="attachment-limit-hint" id="composeAttachmentHint">
+                  Up to <?= htmlspecialchars((string) $attachmentLimits['max_file_count'], ENT_QUOTES) ?> files, <?= htmlspecialchars((string) $attachmentLimits['max_file_size_label'], ENT_QUOTES) ?> each, <?= htmlspecialchars((string) $attachmentLimits['max_total_size_label'], ENT_QUOTES) ?> total.
+                </div>
+                <div class="compose-file-summary" id="composeFileSummary">No files selected</div>
+                <div class="attachment-validation-message" id="composeAttachmentError" role="alert" aria-live="polite" hidden></div>
+              </div>
             </div>
           </div>
 
@@ -4590,6 +4924,7 @@ $composeCsrfToken = security_get_csrf_token();
 <script src="<?php echo app_url('plugins/select2/js/select2.full.min.js'); ?>"></script>
 <script src="../plugins/sweetalert2/sweetalert2.min.js"></script>
 <script>
+window.KODUSMessengerAttachmentLimits = <?= json_encode($attachmentLimits, JSON_UNESCAPED_SLASHES) ?>;
 if (window.frameElement && !document.querySelector('[data-widget="iframe"]')) {
     try {
         localStorage.setItem('AdminLTE:IFrame:Options', JSON.stringify({ autoIframeMode: false }));
@@ -4613,6 +4948,77 @@ const messengerBaseUrl = <?= json_encode(app_url('messenger/index.php'), JSON_UN
 window.currentUserId = String(currentMessengerUserId || '');
 window.activeThreadId = '';
 const currentMailboxFolder = <?= json_encode($currentFolder, JSON_UNESCAPED_SLASHES) ?>;
+
+function getMessengerAttachmentLimits() {
+    const limits = window.KODUSMessengerAttachmentLimits || {};
+    return {
+        maxFileSize: Number(limits.max_file_size || 67108864),
+        maxTotalSize: Number(limits.max_total_size || 83886080),
+        maxFileCount: Number(limits.max_file_count || 50),
+        maxFileSizeLabel: String(limits.max_file_size_label || '64 MB'),
+        maxTotalSizeLabel: String(limits.max_total_size_label || '80 MB')
+    };
+}
+
+function formatAttachmentBytes(bytes) {
+    const size = Number(bytes || 0);
+    if (size >= 1048576) {
+        return (size / 1048576).toFixed(size % 1048576 === 0 ? 0 : 1) + ' MB';
+    }
+    return Math.max(1, Math.ceil(size / 1024)) + ' KB';
+}
+
+function validateMessengerAttachments(files) {
+    const list = Array.from(files || []);
+    const limits = getMessengerAttachmentLimits();
+    const totalSize = list.reduce((sum, file) => sum + Number(file.size || 0), 0);
+    const oversized = list.find(file => Number(file.size || 0) > limits.maxFileSize);
+
+    if (list.length > limits.maxFileCount) {
+        return {
+            valid: false,
+            message: `You can attach up to ${limits.maxFileCount} files at a time.`
+        };
+    }
+
+    if (oversized) {
+        return {
+            valid: false,
+            message: `${oversized.name} is ${formatAttachmentBytes(oversized.size)}. Each file must be ${limits.maxFileSizeLabel} or smaller.`
+        };
+    }
+
+    if (totalSize > limits.maxTotalSize) {
+        return {
+            valid: false,
+            message: `These attachments total ${formatAttachmentBytes(totalSize)}. Keep each send to ${limits.maxTotalSizeLabel} or less.`
+        };
+    }
+
+    return { valid: true, message: '' };
+}
+
+function setAttachmentValidationMessage(element, message) {
+    if (!element) {
+        return;
+    }
+    element.textContent = message || '';
+    element.hidden = !message;
+}
+
+function messengerUploadErrorMessage(error, xhrOrResponse) {
+    const status = Number(xhrOrResponse?.status || error?.status || 0);
+    if (status === 413) {
+        const limits = getMessengerAttachmentLimits();
+        return `Those attachments are too large. Please keep each file to ${limits.maxFileSizeLabel} and the total to ${limits.maxTotalSizeLabel}.`;
+    }
+
+    const message = String(error?.message || xhrOrResponse?.responseJSON?.message || xhrOrResponse?.responseJSON?.error || '').trim();
+    if (!message || /<\s*!doctype|<\s*html|request entity too large|413/i.test(message)) {
+        return 'Unable to send those attachments. Please check the file size and try again.';
+    }
+    return message;
+}
 const canReplyInCurrentFolder = currentMailboxFolder !== 'trash';
 const shouldOpenCompose = <?= $composeOpen ? 'true' : 'false' ?>;
 const isKodusChatBubbleMode = new URLSearchParams(window.location.search).get('bubble') === '1';
@@ -5677,9 +6083,49 @@ function escapeReplyHtml(value) {
         .replace(/'/g, '&#039;');
 }
 
-function appendOptimisticReply(replyText) {
+function isAttachmentMediaFile(file) {
+    const type = typeof file === 'object' && file ? String(file.type || '') : '';
+    const name = typeof file === 'string' ? file : String(file?.name || '');
+    const ext = (name.split('.').pop() || '').toLowerCase();
+    return type.startsWith('image/')
+        || type.startsWith('video/')
+        || type.startsWith('audio/')
+        || ['avif', 'jpg', 'jpeg', 'png', 'gif', 'webp', 'mp4', 'webm', 'ogv', 'mov', 'm4v', 'mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac'].includes(ext);
+}
+
+function renderLocalAttachmentPreviewHtml(file) {
+    const name = typeof file === 'string' ? file : String(file?.name || 'Attachment');
+    const type = typeof file === 'object' && file ? String(file.type || '') : '';
+    const ext = (name.split('.').pop() || '').toLowerCase();
+    const isMedia = isAttachmentMediaFile(file);
+    const url = typeof file === 'object' && file && isMedia ? URL.createObjectURL(file) : '';
+
+    if (type.startsWith('image/') || ['avif', 'jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext)) {
+        return url
+            ? `<img src="${url}" alt="">`
+            : '<div class="d-flex align-items-center justify-content-center" style="height:84px;"><i class="fas fa-file-image fa-2x text-secondary"></i></div>';
+    }
+
+    if (type.startsWith('video/') || ['mp4', 'webm', 'ogv', 'mov', 'm4v'].includes(ext)) {
+        return url
+            ? `<video src="${url}" controls preload="metadata"></video>`
+            : '<div class="d-flex align-items-center justify-content-center" style="height:84px;"><i class="fas fa-file-video fa-2x text-secondary"></i></div>';
+    }
+
+    if (type.startsWith('audio/') || ['mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac'].includes(ext)) {
+        return url
+            ? `<audio src="${url}" controls preload="metadata"></audio>`
+            : '<div class="d-flex align-items-center justify-content-center" style="height:84px;"><i class="fas fa-file-audio fa-2x text-secondary"></i></div>';
+    }
+
+    return `<div class="d-flex align-items-center justify-content-center" style="height:84px;"><i class="fas fa-file fa-2x text-secondary"></i></div>
+            <div class="filename">${escapeReplyHtml(name)}</div>`;
+}
+
+function appendOptimisticReply(replyText, attachments = []) {
     const conversation = $('#conversationWrapper .conversation-scroll');
-    if (!conversation.length || !replyText) {
+    const attachmentItems = Array.isArray(attachments) ? attachments : [];
+    if (!conversation.length || (!replyText && !attachmentItems.length)) {
         return;
     }
 
@@ -5687,6 +6133,17 @@ function appendOptimisticReply(replyText) {
     const safeReply = escapeReplyHtml(replyText).replace(/\n/g, '<br>');
     const userLabel = $('#mainSidebar .user-panel .info > a').first().text().trim() || 'You';
     const avatarSrc = $('#mainSidebar .user-panel .image img').attr('src') || '../dist/img/default.webp';
+    const attachmentHtml = attachmentItems.length
+        ? `<div class="attachments optimistic-attachments">
+             <div class="attachments-list">
+               ${attachmentItems.map(function(file) {
+                   return `<div class="attachment-thumb optimistic-attachment-thumb">
+                     ${renderLocalAttachmentPreviewHtml(file)}
+                   </div>`;
+               }).join('')}
+             </div>
+           </div>`
+        : '';
 
     const optimisticReply = $(`
       <div class="reply mine optimistic-reply" data-optimistic="1">
@@ -5698,18 +6155,15 @@ function appendOptimisticReply(replyText) {
             <span class="text-info optimistic-status">Sending...</span>
           </div>
         </div>
-        <div>${safeReply}</div>
+        ${safeReply ? `<div class="chat-bubble-body">${safeReply}</div>` : ''}
+        ${attachmentHtml}
       </div>
     `);
 
     conversation.append(optimisticReply);
+    conversation.scrollTop(conversation[0].scrollHeight);
 
-    setTimeout(function() {
-        optimisticReply.find('.optimistic-status').fadeOut(200, function() {
-            $(this).remove();
-        });
-    }, 2500);
-
+    return optimisticReply;
 }
 
 function refreshCurrentThread(options = {}) {
@@ -6541,14 +6995,22 @@ $(document).on('submit', '#replyForm', function(e) {
     const formData = new FormData(this);
     const replyText = ($(this).find('#replyText').val() || '').trim();
     const replyMailCsrfToken = $(this).find('input[name="csrf_token"]').val() || window.KODUS_CSRF_TOKEN || '';
-
-    Swal.fire({
-        icon: 'info',
-        title: 'Sending...',
-        html: 'Please wait...',
-        allowOutsideClick: false,
-        didOpen: () => Swal.showLoading()
-    });
+    const outgoingFiles = Array.from($(this).find('input[type="file"]')[0]?.files || []);
+    const attachmentError = this.querySelector('#replyAttachmentError');
+    const validation = validateMessengerAttachments(outgoingFiles);
+    if (!validation.valid) {
+        setAttachmentValidationMessage(attachmentError, validation.message);
+        Swal.fire({
+            icon: 'warning',
+            title: 'Attachment too large',
+            text: validation.message
+        });
+        return;
+    }
+    setAttachmentValidationMessage(attachmentError, '');
+    const optimisticReply = appendOptimisticReply(replyText, outgoingFiles);
+    const submitButton = $(this).find('[type="submit"]');
+    submitButton.prop('disabled', true);
 
     $.ajax({
         url: 'send_reply.php',
@@ -6557,14 +7019,16 @@ $(document).on('submit', '#replyForm', function(e) {
         processData: false,
         contentType: false,
         success: function(resp) {
-            Swal.close();
             if (resp.status === 'success') {
                 stopTypingHeartbeat();
                 form.reset();
                 form.dataset.mentionedUserIds = '';
                 $('#replyFilePreview').empty();
                 $('#mentionedUserIds').val('');
-                appendOptimisticReply(replyText);
+                optimisticReply?.find('.optimistic-status')
+                    .removeClass('text-info text-danger')
+                    .addClass('text-success')
+                    .text('Sent');
 
                 if (resp.reply_id) {
                     $.ajax({
@@ -6582,18 +7046,23 @@ $(document).on('submit', '#replyForm', function(e) {
                 updateMessageList();
 
                 if (lastOpenedId) {
-                    const previousScrollTop = $('#conversationWrapper .conversation-scroll').scrollTop() || 0;
-                    $.get('get_thread.php', { id: lastOpenedId, folder: currentMailboxFolder, bubble: isKodusChatBubbleMode ? 1 : 0 }, function(html) {
-                        closeReactionPickers();
-                        $('#messageDetail').html(html);
-                        $(`#messageList .message-item[data-id="${lastOpenedId}"]`).addClass('active').removeClass('unread');
-                        $(`#messageList .message-item[data-id="${lastOpenedId}"]`).attr('data-unread', '0');
-                        initializeThreadExperience();
-                        normalizeBubbleThreadMenu();
-                        scrollConversationToBottomOnOpen();
-                    });
+                    window.setTimeout(function() {
+                        $.get('get_thread.php', { id: lastOpenedId, folder: currentMailboxFolder, bubble: isKodusChatBubbleMode ? 1 : 0 }, function(html) {
+                            closeReactionPickers();
+                            $('#messageDetail').html(html);
+                            $(`#messageList .message-item[data-id="${lastOpenedId}"]`).addClass('active').removeClass('unread');
+                            $(`#messageList .message-item[data-id="${lastOpenedId}"]`).attr('data-unread', '0');
+                            initializeThreadExperience();
+                            normalizeBubbleThreadMenu();
+                            scrollConversationToBottomOnOpen();
+                        });
+                    }, 350);
                 }
             } else {
+                optimisticReply?.find('.optimistic-status')
+                    .removeClass('text-info text-success')
+                    .addClass('text-danger')
+                    .text('Failed');
                 Swal.fire({
                     icon: 'error',
                     title: 'Error',
@@ -6602,12 +7071,18 @@ $(document).on('submit', '#replyForm', function(e) {
             }
         },
         error: function(xhr) {
-            Swal.close();
+            optimisticReply?.find('.optimistic-status')
+                .removeClass('text-info text-success')
+                .addClass('text-danger')
+                .text('Failed');
             Swal.fire({
                 icon: 'error',
                 title: 'Server Error',
-                text: xhr.responseText
+                text: messengerUploadErrorMessage(null, xhr)
             });
+        },
+        complete: function() {
+            submitButton.prop('disabled', false);
         }
     });
 });
@@ -7133,9 +7608,21 @@ $(document).on('click', '.mailbox-restore-trigger', function() {
         }
 
         let idx = Math.max(0, Math.min(startIndex || 0, attachments.length - 1));
-        const basePath = '<?php echo app_url('messenger/uploads/'); ?>';
+        const basePath = '<?php echo app_url('inbox/uploads/'); ?>';
         const folder = type === 'reply' ? 'reply_attachments/' : 'contact_attachments/';
         const attachmentsBase = basePath + folder;
+        const imageExts = ['avif', 'jpg', 'jpeg', 'png', 'gif', 'webp'];
+        const videoExts = ['mp4', 'webm', 'ogv', 'mov', 'm4v'];
+        const audioExts = ['mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac'];
+
+        function escapeCarouselHtml(value) {
+            return String(value || '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
 
         if (window._swalKeyHandler) {
             window.removeEventListener('keydown', window._swalKeyHandler, true);
@@ -7145,16 +7632,22 @@ $(document).on('click', '.mailbox-restore-trigger', function() {
         function renderPreviewHtml(file, index, total) {
             const ext = (file.split('.').pop() || '').toLowerCase();
             const path = attachmentsBase + encodeURIComponent(file);
-            const isImage = ['avif', 'jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext);
-            const preview = isImage
-                ? `<img src="${path}" alt="${file}" style="max-width:100%;max-height:100%;object-fit:contain;">`
-                : (ext === 'pdf'
-                    ? `<iframe src="${path}" style="width:100%;height:100%;border:none;"></iframe>`
-                    : `<div class="text-center"><i class="fas fa-file fa-3x mb-3"></i><div>${file}</div></div>`);
+            const safeName = escapeCarouselHtml(file);
+            let preview = `<div class="text-center p-4"><i class="fas fa-file fa-3x mb-3 text-secondary"></i><div class="font-weight-bold">${safeName}</div><div class="text-muted small">Preview unavailable</div></div>`;
+
+            if (imageExts.includes(ext)) {
+                preview = `<img src="${path}" alt="${safeName}" style="max-width:100%;max-height:100%;object-fit:contain;">`;
+            } else if (videoExts.includes(ext)) {
+                preview = `<video src="${path}" controls preload="metadata" style="max-width:100%;max-height:100%;"></video>`;
+            } else if (audioExts.includes(ext)) {
+                preview = `<div class="text-center p-4 w-100"><i class="fas fa-file-audio fa-3x mb-3 text-secondary"></i><audio src="${path}" controls preload="metadata" style="width:min(520px,100%);"></audio></div>`;
+            } else if (ext === 'pdf') {
+                preview = `<iframe src="${path}" title="${safeName}" style="width:100%;height:100%;border:none;"></iframe>`;
+            }
 
             return `
-              <div style="width:900px;height:600px;display:flex;flex-direction:column;align-items:center;justify-content:center;">
-                <div style="flex:1;width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:#fff;border-radius:6px;overflow:hidden;">
+              <div style="width:min(900px,calc(100vw - 2rem));height:min(600px,70vh);display:flex;flex-direction:column;align-items:center;justify-content:center;">
+                <div style="flex:1;width:100%;min-height:0;display:flex;align-items:center;justify-content:center;background:var(--mailbox-surface,#fff);border-radius:6px;overflow:hidden;">
                   ${preview}
                 </div>
                 <div style="margin-top:8px;">
@@ -7199,7 +7692,7 @@ $(document).on('click', '.mailbox-restore-trigger', function() {
             html: renderPreviewHtml(attachments[idx], idx, attachments.length),
             showConfirmButton: false,
             showCloseButton: true,
-            width: '51%',
+            width: 'min(960px, calc(100vw - 1rem))',
             heightAuto: false,
             allowOutsideClick: true,
             didOpen: function() {
@@ -7213,7 +7706,11 @@ $(document).on('click', '.mailbox-restore-trigger', function() {
         });
     }
 
-    $(document).on('click', '.attachment-thumb', function() {
+    $(document).on('click', '.attachment-thumb', function(event) {
+        if ($(event.target).closest('video, audio').length) {
+            return;
+        }
+
         const attachments = safeParseAttachments($(this).attr('data-attachments'));
         const idx = parseInt($(this).attr('data-index'), 10) || 0;
         const type = $(this).data('type') || 'contact';
@@ -7255,16 +7752,20 @@ $(window).on('beforeunload pagehide', function() {
     const composeMessage = document.getElementById('composeMessage');
     const composeAttachments = document.getElementById('composeAttachments');
     const composeAttachTrigger = document.getElementById('composeAttachTrigger');
+    const composeMessageShell = document.querySelector('.compose-message-shell');
     const composeFilePreview = document.getElementById('composeFilePreview');
     const composeFileSummary = document.getElementById('composeFileSummary');
+    const composeAttachmentError = document.getElementById('composeAttachmentError');
     const composeRecipientSummary = document.getElementById('composeRecipientSummary');
     const composeSubjectCount = document.getElementById('composeSubjectCount');
     const composeMessageCount = document.getElementById('composeMessageCount');
     const composeResetBtn = document.getElementById('composeResetBtn');
     const composeEmojiTrigger = document.getElementById('composeEmojiTrigger');
     const composeEmojiMenu = document.getElementById('composeEmojiMenu');
-    const composeSubmitBtn = composeForm ? composeForm.querySelector('[type="submit"]') : null;
+    const composeSubmitBtns = composeForm ? Array.from(composeForm.querySelectorAll('[type="submit"]')) : [];
     const commonComposeEmojis = ['😀','😂','😊','😍','😉','👍','👏','🙏','🎉','🔥','❤️','✨','📎','📩','✅','🤝','🙌','😎','📌','💡'];
+    let selectedComposeFiles = [];
+    const composePreviewUrls = new Map();
 
     function openComposeModal() {
         composeModal.modal('show');
@@ -7327,11 +7828,136 @@ $(window).on('beforeunload pagehide', function() {
     }
 
     function clearComposeFiles() {
+        selectedComposeFiles = [];
+        composePreviewUrls.forEach(function(url) {
+            URL.revokeObjectURL(url);
+        });
+        composePreviewUrls.clear();
+        if (composeAttachments) {
+            composeAttachments.value = '';
+        }
         if (composeFilePreview) {
             composeFilePreview.innerHTML = '';
+            composeFilePreview.classList.remove('is-stacked');
         }
+        composeMessageShell?.classList.remove('has-file-preview');
         if (composeFileSummary) {
             composeFileSummary.textContent = 'No files selected yet.';
+        }
+        setAttachmentValidationMessage(composeAttachmentError, '');
+    }
+
+    function syncComposeFileInput() {
+        if (!composeAttachments) {
+            return;
+        }
+        const transfer = new DataTransfer();
+        selectedComposeFiles.forEach(function(file) {
+            transfer.items.add(file);
+        });
+        composeAttachments.files = transfer.files;
+    }
+
+    function getComposePreviewUrl(file) {
+        const key = file.name + ':' + file.size + ':' + file.lastModified;
+        if (!composePreviewUrls.has(key)) {
+            composePreviewUrls.set(key, URL.createObjectURL(file));
+        }
+        return composePreviewUrls.get(key);
+    }
+
+    function renderComposeAttachments() {
+        if (!composeFilePreview || !composeFileSummary) {
+            return;
+        }
+
+        composeFilePreview.innerHTML = '';
+        const files = selectedComposeFiles;
+        composeMessageShell?.classList.toggle('has-file-preview', files.length > 0);
+        if (!files.length) {
+            clearComposeFiles();
+            return;
+        }
+
+        const totalSize = files.reduce((sum, file) => sum + Number(file.size || 0), 0);
+        composeFileSummary.textContent = files.length === 1
+            ? `${isAttachmentMediaFile(files[0]) ? 'Media attachment' : files[0].name} (${formatAttachmentBytes(files[0].size)})`
+            : `${files.length} files selected (${formatAttachmentBytes(totalSize)} total)`;
+
+        const isStacked = files.length > 4;
+        const visibleFiles = isStacked ? files.slice(0, 4) : files;
+        composeFilePreview.classList.toggle('is-stacked', isStacked);
+
+        visibleFiles.forEach(function(file, index) {
+            const card = document.createElement('div');
+            card.className = 'compose-file-card';
+            card.style.zIndex = String(visibleFiles.length - index + 1);
+            const ext = (file.name.split('.').pop() || '').toLowerCase();
+
+            if (file.type.startsWith('image/') || ['avif', 'webp', 'jpg', 'jpeg', 'png', 'gif'].includes(ext)) {
+                const img = document.createElement('img');
+                img.src = getComposePreviewUrl(file);
+                img.alt = '';
+                card.appendChild(img);
+            } else if (file.type.startsWith('video/') || ['mp4', 'webm', 'ogv', 'mov', 'm4v'].includes(ext)) {
+                const video = document.createElement('video');
+                video.src = getComposePreviewUrl(file);
+                video.controls = true;
+                video.preload = 'metadata';
+                card.appendChild(video);
+            } else if (file.type.startsWith('audio/') || ['mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac'].includes(ext)) {
+                const audio = document.createElement('audio');
+                audio.src = getComposePreviewUrl(file);
+                audio.controls = true;
+                audio.preload = 'metadata';
+                card.appendChild(audio);
+            } else {
+                const iconWrap = document.createElement('span');
+                iconWrap.className = 'compose-file-icon';
+                const icon = document.createElement('i');
+                icon.className = file.type.startsWith('audio/')
+                    ? 'fas fa-file-audio'
+                    : (file.type.startsWith('video/') ? 'fas fa-file-video' : 'fas fa-file');
+                iconWrap.appendChild(icon);
+                card.appendChild(iconWrap);
+            }
+
+            if (!isAttachmentMediaFile(file)) {
+                const label = document.createElement('span');
+                label.className = 'compose-file-name';
+                label.textContent = file.name;
+                card.appendChild(label);
+            }
+
+            const remove = document.createElement('button');
+            remove.type = 'button';
+            remove.className = 'compose-file-remove';
+            remove.setAttribute('aria-label', 'Remove ' + file.name);
+            remove.textContent = '×';
+            remove.addEventListener('click', function(event) {
+                event.preventDefault();
+                event.stopPropagation();
+                selectedComposeFiles.splice(index, 1);
+                composePreviewUrls.forEach(function(url) {
+                    URL.revokeObjectURL(url);
+                });
+                composePreviewUrls.clear();
+                syncComposeFileInput();
+                renderComposeAttachments();
+                setAttachmentValidationMessage(composeAttachmentError, '');
+                composeMessage?.focus();
+            });
+            card.appendChild(remove);
+
+            composeFilePreview.appendChild(card);
+        });
+
+        if (isStacked) {
+            const count = document.createElement('div');
+            count.className = 'compose-file-count';
+            count.textContent = '+' + (files.length - visibleFiles.length);
+            count.title = files.length + ' attachments selected';
+            composeFilePreview.appendChild(count);
         }
     }
 
@@ -7340,42 +7966,24 @@ $(window).on('beforeunload pagehide', function() {
             return;
         }
 
-        composeFilePreview.innerHTML = '';
-        const files = Array.prototype.slice.call(composeAttachments.files || []);
-        if (!files.length) {
-            clearComposeFiles();
+        const nextFiles = selectedComposeFiles.concat(Array.prototype.slice.call(composeAttachments.files || []));
+        const validation = validateMessengerAttachments(nextFiles);
+        if (!validation.valid) {
+            composeAttachments.value = '';
+            setAttachmentValidationMessage(composeAttachmentError, validation.message);
+            Swal.fire({
+                icon: 'warning',
+                title: 'Attachment too large',
+                text: validation.message
+            });
             return;
         }
 
-        composeFileSummary.textContent = files.length === 1
-            ? files[0].name
-            : `${files.length} files selected`;
-
-        const maxPreview = 4;
-        files.slice(0, maxPreview).forEach(function(file) {
-            const card = document.createElement('div');
-            card.className = 'compose-file-card';
-            const ext = (file.name.split('.').pop() || '').toLowerCase();
-
-            if (file.type.startsWith('image/') || ['avif', 'webp', 'jpg', 'jpeg', 'png', 'gif'].includes(ext)) {
-                const img = document.createElement('img');
-                img.src = URL.createObjectURL(file);
-                card.appendChild(img);
-            } else {
-                const icon = document.createElement('i');
-                icon.className = 'fas fa-file';
-                card.appendChild(icon);
-            }
-
-            composeFilePreview.appendChild(card);
-        });
-
-        if (files.length > maxPreview) {
-            const moreCard = document.createElement('div');
-            moreCard.className = 'compose-file-card more';
-            moreCard.textContent = `+${files.length - maxPreview}`;
-            composeFilePreview.appendChild(moreCard);
-        }
+        selectedComposeFiles = nextFiles;
+        setAttachmentValidationMessage(composeAttachmentError, '');
+        syncComposeFileInput();
+        renderComposeAttachments();
+        composeMessage?.focus();
     }
 
     function renderComposeRecipientOption(option) {
@@ -7476,7 +8084,7 @@ $(window).on('beforeunload pagehide', function() {
         closeComposeEmojiMenu();
     }
 
-    function appendOptimisticComposeThread(labels, messageText) {
+    function appendOptimisticComposeThread(labels, messageText, attachments = []) {
         const list = document.querySelector('#messageList tbody');
         if (!list) {
             return null;
@@ -7484,7 +8092,10 @@ $(window).on('beforeunload pagehide', function() {
 
         const tempId = `compose-${Date.now()}`;
         const displayName = labels.length ? labels.join(', ') : 'New chat';
-        const preview = messageText ? `You: ${messageText}` : 'You sent an attachment';
+        const attachmentItems = Array.isArray(attachments) ? attachments : [];
+        const preview = messageText
+            ? `You: ${messageText}`
+            : (attachmentItems.length ? `You sent ${attachmentItems.length === 1 ? (isAttachmentMediaFile(attachmentItems[0]) ? 'a media attachment' : attachmentItems[0].name) : attachmentItems.length + ' attachments'}` : 'You sent an attachment');
         const row = document.createElement('tr');
         row.className = 'message-item active optimistic-compose-thread';
         row.dataset.id = tempId;
@@ -7498,7 +8109,7 @@ $(window).on('beforeunload pagehide', function() {
             </span>
           </td>
           <td class="mailbox-name">${escapeReplyHtml(displayName)}</td>
-          <td class="mailbox-subject"><span class="mailbox-snippet">${escapeReplyHtml(preview)}</span> <span class="text-info">Sending...</span></td>
+          <td class="mailbox-subject"><span class="mailbox-snippet">${escapeReplyHtml(preview)}</span> <span class="text-info optimistic-status">Sending...</span></td>
           <td class="mailbox-date">Now</td>
         `;
 
@@ -7509,14 +8120,23 @@ $(window).on('beforeunload pagehide', function() {
     }
 
     function setComposeSubmitting(isSubmitting) {
-        if (!composeSubmitBtn) {
+        if (!composeSubmitBtns.length) {
             return;
         }
 
-        composeSubmitBtn.disabled = !!isSubmitting;
-        composeSubmitBtn.innerHTML = isSubmitting
-            ? '<i class="fas fa-spinner fa-spin mr-1"></i> Sending...'
-            : '<i class="fas fa-paper-plane mr-1"></i> Start chat';
+        composeSubmitBtns.forEach(function(button) {
+            button.disabled = !!isSubmitting;
+            if (button.id === 'composeInlineSendBtn') {
+                button.innerHTML = isSubmitting
+                    ? '<i class="fas fa-spinner fa-spin"></i>'
+                    : '<i class="fas fa-paper-plane"></i>';
+                return;
+            }
+
+            button.innerHTML = isSubmitting
+                ? '<i class="fas fa-spinner fa-spin mr-1"></i> Sending...'
+                : '<i class="fas fa-paper-plane mr-1"></i> Start chat';
+        });
     }
 
     $(document).on('click', '.mailbox-compose-trigger', function(e) {
@@ -7554,6 +8174,13 @@ $(window).on('beforeunload pagehide', function() {
     composeMessage?.addEventListener('keydown', function(e) {
         if (e.key === 'Escape') {
             closeComposeEmojiMenu();
+            return;
+        }
+
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            closeComposeEmojiMenu();
+            composeForm?.requestSubmit();
         }
     });
     document.addEventListener('click', handleComposeEmojiDocumentClick);
@@ -7571,7 +8198,18 @@ $(window).on('beforeunload pagehide', function() {
 
         const selectedLabels = Array.prototype.slice.call(composeRecipient?.selectedOptions || []).map(option => option.text).filter(Boolean);
         const outgoingMessage = String(composeMessage?.value || '').trim().replace(/\s+/g, ' ');
-        const optimisticRow = appendOptimisticComposeThread(selectedLabels, outgoingMessage);
+        const outgoingFiles = selectedComposeFiles.slice();
+        const validation = validateMessengerAttachments(outgoingFiles);
+        if (!validation.valid) {
+            setAttachmentValidationMessage(composeAttachmentError, validation.message);
+            Swal.fire({
+                icon: 'warning',
+                title: 'Attachment too large',
+                text: validation.message
+            });
+            return;
+        }
+        const optimisticRow = appendOptimisticComposeThread(selectedLabels, outgoingMessage, outgoingFiles);
 
         setComposeSubmitting(true);
         closeComposeEmojiMenu();
@@ -7598,16 +8236,25 @@ $(window).on('beforeunload pagehide', function() {
             try {
                 payload = text ? JSON.parse(text) : {};
             } catch (error) {
-                throw new Error(text || ('HTTP ' + response.status));
+                const parseError = new Error(text || ('HTTP ' + response.status));
+                parseError.status = response.status;
+                throw parseError;
             }
 
             if (!response.ok || payload.success === false) {
-                throw new Error(payload.message || payload.error || ('HTTP ' + response.status));
+                const responseError = new Error(payload.message || payload.error || ('HTTP ' + response.status));
+                responseError.status = response.status;
+                throw responseError;
             }
 
             return payload;
         })
         .then(function(payload) {
+            optimisticRow?.querySelector('.optimistic-status')?.classList.remove('text-info', 'text-danger');
+            optimisticRow?.querySelector('.optimistic-status')?.classList.add('text-success');
+            if (optimisticRow?.querySelector('.optimistic-status')) {
+                optimisticRow.querySelector('.optimistic-status').textContent = 'Sent';
+            }
             updateMessageList();
             updateUnreadCount();
             updateMailboxSummary();
@@ -7617,12 +8264,16 @@ $(window).on('beforeunload pagehide', function() {
             }
         })
         .catch(function(error) {
-            optimisticRow?.remove();
+            optimisticRow?.querySelector('.optimistic-status')?.classList.remove('text-info', 'text-success');
+            optimisticRow?.querySelector('.optimistic-status')?.classList.add('text-danger');
+            if (optimisticRow?.querySelector('.optimistic-status')) {
+                optimisticRow.querySelector('.optimistic-status').textContent = 'Failed';
+            }
             updateMailboxSummary();
             Swal.fire({
                 icon: 'error',
                 title: 'Chat failed',
-                text: error.message || 'Unable to send your message right now.'
+                text: messengerUploadErrorMessage(error)
             });
         })
         .finally(function() {

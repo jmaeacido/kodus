@@ -28,6 +28,8 @@ $query = "
            sender_user.picture AS sender_picture,
            sender_user.id AS sender_user_id,
            sender_user.sso_avatar_url AS sender_sso_avatar_url,
+           sender_user.last_activity AS sender_last_activity,
+           sender_user.is_online AS sender_is_online,
            (
                SELECT COALESCE(NULLIF(u.username, ''), COALESCE(NULLIF(cmr.recipient_name, ''), cmr.recipient_email))
                FROM contact_message_recipients cmr
@@ -61,10 +63,27 @@ $query = "
                LIMIT 1
            ) AS primary_recipient_sso_avatar_url,
            (
+               SELECT u.last_activity
+               FROM contact_message_recipients cmr
+               LEFT JOIN users u ON u.id = cmr.user_id
+               WHERE cmr.message_id = cm.id
+               ORDER BY COALESCE(NULLIF(u.username, ''), COALESCE(NULLIF(cmr.recipient_name, ''), cmr.recipient_email))
+               LIMIT 1
+           ) AS primary_recipient_last_activity,
+           (
+               SELECT u.is_online
+               FROM contact_message_recipients cmr
+               LEFT JOIN users u ON u.id = cmr.user_id
+               WHERE cmr.message_id = cm.id
+               ORDER BY COALESCE(NULLIF(u.username, ''), COALESCE(NULLIF(cmr.recipient_name, ''), cmr.recipient_email))
+               LIMIT 1
+           ) AS primary_recipient_is_online,
+           (
                SELECT GROUP_CONCAT(DISTINCT u.username ORDER BY u.username SEPARATOR ', ')
                FROM contact_message_recipients cmr
                INNER JOIN users u ON u.id = cmr.user_id
                WHERE cmr.message_id = cm.id
+                 AND cmr.left_at IS NULL
            ) AS recipient_names,
            (
                SELECT GROUP_CONCAT(
@@ -80,6 +99,7 @@ $query = "
                FROM contact_message_recipients cmr
                LEFT JOIN users u ON u.id = cmr.user_id
                WHERE cmr.message_id = cm.id
+                 AND cmr.left_at IS NULL
            ) AS recipient_directory
     FROM contact_messages cm
     LEFT JOIN users sender_user ON sender_user.email = cm.user_email
@@ -171,7 +191,7 @@ $stmt = $conn->prepare("
     JOIN users u ON r.user_id = u.id
     LEFT JOIN users deleter ON deleter.id = r.deleted_by_user_id
     WHERE r.message_id = ?
-    ORDER BY r.sent_at ASC
+    ORDER BY r.sent_at ASC, r.id ASC
 ");
 $stmt->bind_param('i', $id);
 $stmt->execute();
@@ -185,9 +205,11 @@ $participantMentionItems = [];
 $senderParticipantLabel = trim((string) ($message['user_name'] ?? '')) !== ''
     ? (string) $message['user_name']
     : (string) ($message['user_email'] ?? 'Unknown');
-$participantLabels[] = $senderParticipantLabel;
-$participantMentions[] = $senderParticipantLabel;
-if ((int) ($message['sender_user_id'] ?? 0) > 0 && (int) ($message['sender_user_id'] ?? 0) !== (int) $userId) {
+if (!$isGroupThread) {
+    $participantLabels[] = $senderParticipantLabel;
+    $participantMentions[] = $senderParticipantLabel;
+}
+if (!$isGroupThread && (int) ($message['sender_user_id'] ?? 0) > 0 && (int) ($message['sender_user_id'] ?? 0) !== (int) $userId) {
     $participantMentionItems[] = [
         'id' => (int) $message['sender_user_id'],
         'name' => $senderParticipantLabel,
@@ -209,6 +231,12 @@ foreach ($recipientDirectory as $recipientEntry) {
 }
 
 if ($isGroupThread) {
+    $participantMentionItems[] = [
+        'id' => 0,
+        'name' => 'Everyone',
+        'mention' => 'everyone',
+        'everyone' => true,
+    ];
     $mentionStmt = $conn->prepare("
         SELECT cmr.user_id,
                COALESCE(NULLIF(u.username, ''), COALESCE(NULLIF(cmr.recipient_name, ''), cmr.recipient_email)) AS display_name
@@ -270,7 +298,10 @@ if (trim((string) $chatAvatarUrl) === '') {
 $chatPresenceUserId = $isGroupThread ? 0 : (int) ($originalIsMine ? ($message['primary_recipient_user_id'] ?? 0) : ($message['sender_user_id'] ?? 0));
 $chatPresence = $isGroupThread
     ? ['detail' => 'Group chat', 'class' => 'offline']
-    : ['detail' => 'Active status unavailable', 'class' => 'offline'];
+    : mailboxClassifyPresence(
+        $originalIsMine ? ($message['primary_recipient_last_activity'] ?? null) : ($message['sender_last_activity'] ?? null),
+        (int) ($originalIsMine ? ($message['primary_recipient_is_online'] ?? 0) : ($message['sender_is_online'] ?? 0))
+    );
 $chatStatusCopy = $currentFolder === 'trash'
     ? 'Archived chat'
     : ($isGroupThread
@@ -305,7 +336,7 @@ function renderAttachments($attachmentCsv, $basePath, $type = 'contact')
     }
 
     $jsonFiles = htmlspecialchars(json_encode($files), ENT_QUOTES, 'UTF-8');
-    $html = '<div class="attachments"><div class="font-weight-bold small mb-2">Attachments</div><div class="attachments-list">';
+    $html = '<div class="attachments"><div class="attachments-list">';
 
     foreach ($files as $i => $file) {
         $path = $basePath . rawurlencode($file);
@@ -313,7 +344,7 @@ function renderAttachments($attachmentCsv, $basePath, $type = 'contact')
         $isMedia = in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp', 'avif', 'mp4', 'webm', 'ogg', 'ogv', 'mov', 'm4v', 'mp3', 'wav', 'm4a', 'aac', 'flac'], true);
         $safePath = htmlspecialchars($path, ENT_QUOTES, 'UTF-8');
         $safeFile = htmlspecialchars($file, ENT_QUOTES, 'UTF-8');
-        $html .= '<div class="attachment-thumb" data-attachments=\'' . $jsonFiles . '\' data-index="' . $i . '" data-type="' . $type . '">';
+        $html .= '<div class="attachment-thumb' . ($isMedia ? ' attachment-thumb--media' : '') . '" data-attachments=\'' . $jsonFiles . '\' data-index="' . $i . '" data-type="' . $type . '">';
 
         if (in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp', 'avif'], true)) {
             $html .= '<img src="' . $safePath . '" alt="">';
@@ -331,21 +362,10 @@ function renderAttachments($attachmentCsv, $basePath, $type = 'contact')
             $html .= '<div class="filename">' . $safeFile . '</div>';
         }
 
-        $html .= '<a href="' . $safePath . '" download class="btn btn-xs btn-outline-secondary mt-2">Download</a>';
         $html .= '</div>';
     }
 
     $html .= '</div>';
-
-    if (count($files) > 1) {
-        $html .= '<div class="mt-2">';
-        $html .= '<form method="post" action="download_all.php" target="_blank">';
-        $html .= '<input type="hidden" name="files" value=\'' . json_encode($files) . '\' />';
-        $html .= '<button type="submit" class="btn btn-sm btn-primary"><i class="fas fa-download"></i> Download All</button>';
-        $html .= '</form>';
-        $html .= '</div>';
-    }
-
     $html .= '</div>';
     return $html;
 }
@@ -362,7 +382,6 @@ function messengerFriendlyTime(?string $value): string
 
 function renderReactionBar(array $summary, int $messageId, ?int $replyId): string
 {
-    $pickerEmojis = ["\u{1F44D}", "\u{2764}\u{FE0F}", "\u{1F602}", "\u{1F389}", "\u{1F525}", "\u{1F44F}", "\u{1F64F}", "\u{2705}", "\u{1F440}", "\u{1F4A1}"];
     ob_start();
     ?>
     <div class="chat-reactions" data-message-id="<?= $messageId ?>"<?= $replyId !== null ? ' data-reply-id="' . (int) $replyId . '"' : '' ?>>
@@ -391,11 +410,7 @@ function renderReactionBar(array $summary, int $messageId, ?int $replyId): strin
           <button type="button" class="chat-reaction-trigger" aria-label="Add reaction" aria-expanded="false">
             <i class="far fa-smile"></i>
           </button>
-          <div class="chat-reaction-picker" hidden>
-            <?php foreach ($pickerEmojis as $emoji): ?>
-              <button type="button" class="chat-reaction-add" data-emoji="<?= htmlspecialchars($emoji, ENT_QUOTES) ?>"><?= htmlspecialchars($emoji) ?></button>
-            <?php endforeach; ?>
-          </div>
+          <div class="chat-reaction-picker" data-emoji-picker="reaction" hidden></div>
         </div>
       </div>
     </div>
@@ -403,8 +418,48 @@ function renderReactionBar(array $summary, int $messageId, ?int $replyId): strin
     return ob_get_clean();
 }
 
+function renderChatMessageText(string $text): string
+{
+    $escaped = htmlspecialchars($text, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+    $highlighted = preg_replace(
+        '/(^|[\s(])(@(?:everyone|[\p{L}\p{N}_.-]+))/u',
+        '$1<span class="chat-mention-chip">$2</span>',
+        $escaped
+    );
+
+    return nl2br($highlighted ?? $escaped);
+}
+
+function renderQuotedReplyPreview(array $row): string
+{
+    $author = trim((string) ($row['quote_author'] ?? ''));
+    $excerpt = trim((string) ($row['quote_excerpt'] ?? ''));
+    if ($author === '' && $excerpt === '') {
+        return '';
+    }
+
+    ob_start();
+    ?>
+    <div class="chat-quote-preview">
+      <div class="chat-quote-preview-author"><?= htmlspecialchars($author !== '' ? $author : 'Quoted message') ?></div>
+      <div class="chat-quote-preview-text"><?= htmlspecialchars($excerpt !== '' ? $excerpt : 'Message unavailable') ?></div>
+    </div>
+    <?php
+    return ob_get_clean();
+}
+
 function renderReply($row, $userId, $userType, array $reactionSummary, int $messageId)
 {
+    if (trim((string) ($row['system_event_type'] ?? '')) !== '') {
+        ob_start();
+        ?>
+        <div class="chat-system-event" data-reply-id="<?= (int) $row['id'] ?>">
+          <span><?= htmlspecialchars((string) ($row['reply'] ?? '')) ?></span>
+        </div>
+        <?php
+        return ob_get_clean();
+    }
+
     $isMine = ((int) $row['user_id'] === (int) $userId);
     $class = $isMine ? 'reply mine' : 'reply theirs';
     global $base_url;
@@ -412,6 +467,8 @@ function renderReply($row, $userId, $userType, array $reactionSummary, int $mess
     $isDeleted = !empty($row['deleted_for_everyone_at']);
     $canEdit = $isMine && !$isDeleted;
     $canDelete = ($isMine || $userType === 'admin') && !$isDeleted;
+    $quoteAuthor = trim((string) ($row['username'] ?? ''));
+    $quoteExcerpt = mailbox_quote_excerpt((string) ($row['reply'] ?? ''), !empty($row['attachment']) ? 'Attachment' : 'Message');
     ob_start();
     ?>
     <div
@@ -420,6 +477,10 @@ function renderReply($row, $userId, $userType, array $reactionSummary, int $mess
       data-can-edit="<?= $canEdit ? '1' : '0' ?>"
       data-can-delete="<?= $canDelete ? '1' : '0' ?>"
       data-reply-text="<?= htmlspecialchars((string) $row['reply'], ENT_QUOTES) ?>"
+      data-quote-target-type="reply"
+      data-quote-reply-id="<?= (int) $row['id'] ?>"
+      data-quote-author="<?= htmlspecialchars($quoteAuthor, ENT_QUOTES) ?>"
+      data-quote-excerpt="<?= htmlspecialchars($quoteExcerpt, ENT_QUOTES) ?>"
     >
       <div class="reply-head">
         <img src="<?= htmlspecialchars($avatarUrl) ?>" alt="<?= htmlspecialchars($row['username']) ?>" class="reply-avatar">
@@ -431,8 +492,19 @@ function renderReply($row, $userId, $userType, array $reactionSummary, int $mess
             <span class="badge badge-secondary">Removed</span>
           <?php endif; ?>
         </div>
-        <?php if ($canEdit || $canDelete): ?>
+        <?php if (!$isDeleted || $canEdit || $canDelete): ?>
           <div class="reply-tools ml-auto">
+            <?php if (!$isDeleted): ?>
+              <button
+                type="button"
+                class="btn btn-xs btn-outline-light reply-quote-trigger"
+                aria-label="Quote message"
+                title="Quote"
+              >
+                <i class="fas fa-reply"></i>
+              </button>
+            <?php endif; ?>
+            <?php if ($canEdit || $canDelete): ?>
             <button
               type="button"
               class="btn btn-xs btn-outline-light reply-menu-trigger"
@@ -458,6 +530,7 @@ function renderReply($row, $userId, $userType, array $reactionSummary, int $mess
                 </button>
               <?php endif; ?>
             </div>
+            <?php endif; ?>
           </div>
         <?php endif; ?>
       </div>
@@ -466,7 +539,8 @@ function renderReply($row, $userId, $userType, array $reactionSummary, int $mess
           This message was removed for everyone<?= !empty($row['deleted_by_username']) ? ' by ' . htmlspecialchars((string) $row['deleted_by_username']) : '' ?>.
         </div>
       <?php else: ?>
-        <div class="chat-bubble-body"><?= nl2br(htmlspecialchars($row['reply'])) ?></div>
+        <?= renderQuotedReplyPreview($row) ?>
+        <div class="chat-bubble-body"><?= renderChatMessageText((string) $row['reply']) ?></div>
         <?php
         if (!empty($row['attachment'])) {
             echo renderAttachments($row['attachment'], app_url('inbox/uploads/reply_attachments/'), 'reply');
@@ -481,9 +555,16 @@ function renderReply($row, $userId, $userType, array $reactionSummary, int $mess
 
 function renderOriginalMessageBubble($message, $originalReplyClass, $originalAvatarUrl, $originalDisplayName, array $reactionSummary)
 {
+    $quoteExcerpt = mailbox_quote_excerpt((string) ($message['message'] ?? ''), !empty($message['attachment']) ? 'Attachment' : 'Original message');
     ob_start();
     ?>
-    <div class="<?= htmlspecialchars($originalReplyClass, ENT_QUOTES) ?>">
+    <div
+      class="<?= htmlspecialchars($originalReplyClass, ENT_QUOTES) ?>"
+      data-quote-target-type="message"
+      data-quote-reply-id=""
+      data-quote-author="<?= htmlspecialchars($originalDisplayName, ENT_QUOTES) ?>"
+      data-quote-excerpt="<?= htmlspecialchars($quoteExcerpt, ENT_QUOTES) ?>"
+    >
       <div class="reply-head">
         <img src="<?= htmlspecialchars($originalAvatarUrl) ?>" alt="<?= htmlspecialchars($originalDisplayName) ?>" class="reply-avatar">
         <div class="reply-meta">
@@ -491,8 +572,18 @@ function renderOriginalMessageBubble($message, $originalReplyClass, $originalAva
           <span>Started the conversation</span>
           <span><?= htmlspecialchars(messengerFriendlyTime($message['sent_at'] ?? '')) ?></span>
         </div>
+        <div class="reply-tools ml-auto">
+          <button
+            type="button"
+            class="btn btn-xs btn-outline-light reply-quote-trigger"
+            aria-label="Quote message"
+            title="Quote"
+          >
+            <i class="fas fa-reply"></i>
+          </button>
+        </div>
       </div>
-      <div class="chat-bubble-body"><?= nl2br(htmlspecialchars($message['message'])) ?></div>
+      <div class="chat-bubble-body"><?= renderChatMessageText((string) $message['message']) ?></div>
       <?php
       if (!empty($message['attachment'])) {
           echo renderAttachments($message['attachment'], app_url('inbox/uploads/contact_attachments/'), 'contact');
@@ -533,7 +624,7 @@ if ($onlyConversation) {
     exit;
 }
 ?>
-<div class="chat-shell" data-message-id="<?= (int) $id ?>" data-presence-user-id="<?= (int) $chatPresenceUserId ?>" data-participants="<?= htmlspecialchars(json_encode($participantMentionItems ?: $participantMentions), ENT_QUOTES, 'UTF-8') ?>">
+<div class="chat-shell" data-message-id="<?= (int) $id ?>" data-presence-user-id="<?= (int) $chatPresenceUserId ?>" data-thread-avatar="<?= htmlspecialchars($chatAvatarUrl, ENT_QUOTES, 'UTF-8') ?>" data-participants="<?= htmlspecialchars(json_encode($participantMentionItems ?: $participantMentions), ENT_QUOTES, 'UTF-8') ?>">
   <div class="mailbox-read-info mailbox-read-info--compact chat-thread-header">
     <div class="chat-thread-hero">
       <div class="chat-thread-primary">
@@ -649,7 +740,17 @@ if ($onlyConversation) {
   <?php if ($currentFolder !== 'trash' && (!$isGroupThread || empty($groupMemberState['left_at']))): ?>
     <div class="mt-3">
       <form id="replyForm" enctype="multipart/form-data" class="reply-form-shell chat-composer-shell" data-no-loader="true">
+        <div class="reply-quote-composer" id="replyQuoteComposer" hidden>
+          <div class="reply-quote-composer-copy">
+            <div class="reply-quote-composer-author" id="replyQuoteAuthor"></div>
+            <div class="reply-quote-composer-text" id="replyQuoteText"></div>
+          </div>
+          <button type="button" class="reply-quote-clear" id="replyQuoteClear" aria-label="Remove quoted message" title="Remove quote">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
         <div class="chat-mentions-shell">
+          <div class="composer-mention-preview" id="replyMentionPreview" aria-hidden="true"></div>
           <textarea id="replyText" name="reply" class="form-control chat-reply-textarea" rows="2" placeholder="Write a message, use @ to mention someone..."></textarea>
           <div class="chat-composer-tool-stack">
             <button type="submit" class="chat-composer-tool-btn chat-composer-send-btn" id="replySendBtn" aria-label="Send message" title="Send">
@@ -668,9 +769,6 @@ if ($onlyConversation) {
         </div>
 
         <input type="file" name="replyAttachments[]" id="replyAttachments" multiple hidden>
-        <div class="attachment-limit-hint mt-2" id="replyAttachmentHint">
-          Up to <?= htmlspecialchars((string) $attachmentLimits['max_file_count'], ENT_QUOTES) ?> files, <?= htmlspecialchars((string) $attachmentLimits['max_file_size_label'], ENT_QUOTES) ?> each, <?= htmlspecialchars((string) $attachmentLimits['max_total_size_label'], ENT_QUOTES) ?> total.
-        </div>
         <div class="attachment-validation-message mt-1" id="replyAttachmentError" role="alert" aria-live="polite" hidden></div>
 
         <input type="hidden" name="id" value="<?= (int) $id ?>">
@@ -678,6 +776,8 @@ if ($onlyConversation) {
         <input type="hidden" name="subject" value="<?= htmlspecialchars($message['subject'], ENT_QUOTES) ?>">
         <input type="hidden" name="message" value="<?= htmlspecialchars($message['message'], ENT_QUOTES) ?>">
         <input type="hidden" name="mentioned_user_ids" id="mentionedUserIds" value="">
+        <input type="hidden" name="quote_target_type" id="replyQuoteTargetType" value="">
+        <input type="hidden" name="quote_reply_id" id="replyQuoteReplyId" value="">
         <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(security_get_csrf_token(), ENT_QUOTES) ?>">
       </form>
     </div>
@@ -696,10 +796,16 @@ if ($onlyConversation) {
     const fileInput = document.getElementById('replyAttachments');
     const preview = document.getElementById('replyFilePreview');
     const replyText = document.getElementById('replyText');
+    const replyMentionPreview = document.getElementById('replyMentionPreview');
     const emojiTrigger = document.getElementById('replyEmojiTrigger');
     const emojiMenu = document.getElementById('replyEmojiMenu');
     const mentionMenu = document.getElementById('replyMentionMenu');
     const attachmentError = document.getElementById('replyAttachmentError');
+    const quoteComposer = document.getElementById('replyQuoteComposer');
+    const quoteAuthorNode = document.getElementById('replyQuoteAuthor');
+    const quoteTextNode = document.getElementById('replyQuoteText');
+    const quoteTargetField = document.getElementById('replyQuoteTargetType');
+    const quoteReplyField = document.getElementById('replyQuoteReplyId');
     const shell = document.querySelector('.chat-shell');
     const participantData = (() => {
         if (!shell) {
@@ -717,12 +823,12 @@ if ($onlyConversation) {
         return {
             id: Number(item.id || 0),
             name: String(item.name || item.mention || '').trim(),
-            mention: String(item.mention || item.name || '').replace(/\s+/g, '')
+            mention: String(item.mention || item.name || '').replace(/\s+/g, ''),
+            everyone: !!item.everyone
         };
     }).filter(function(item) {
         return item.name && item.mention;
     });
-    const composerEmojis = ['😀', '😂', '😊', '😍', '😉', '👍', '👏', '🙏', '🎉', '🔥', '❤️', '✨', '📎', '📩', '✅', '🤝', '🙌', '😎', '📌', '💡'];
     let activeMentionIndex = 0;
     let selectedReplyFiles = [];
     const replyPreviewUrls = new Map();
@@ -730,6 +836,34 @@ if ($onlyConversation) {
     if (!replyForm || !attachBtn || !fileInput || !preview || !replyText || !emojiTrigger || !emojiMenu || !mentionMenu) {
         return;
     }
+
+    window.KODUSApplyReplyQuote = function(quote) {
+        const data = quote && typeof quote === 'object' ? quote : null;
+        if (!quoteComposer || !quoteAuthorNode || !quoteTextNode || !quoteTargetField || !quoteReplyField || !data) {
+            return;
+        }
+        quoteTargetField.value = data.targetType || '';
+        quoteReplyField.value = data.replyId || '';
+        quoteAuthorNode.textContent = data.author || 'Quoted message';
+        quoteTextNode.textContent = data.excerpt || 'Message unavailable';
+        quoteComposer.hidden = !quoteTargetField.value;
+    };
+
+    window.KODUSClearReplyQuote = function() {
+        window.KODUSReplyQuoteDraft = null;
+        if (quoteTargetField) quoteTargetField.value = '';
+        if (quoteReplyField) quoteReplyField.value = '';
+        if (quoteAuthorNode) quoteAuthorNode.textContent = '';
+        if (quoteTextNode) quoteTextNode.textContent = '';
+        if (quoteComposer) quoteComposer.hidden = true;
+    };
+
+    document.getElementById('replyQuoteClear')?.addEventListener('click', function(event) {
+        event.preventDefault();
+        event.stopPropagation();
+        window.KODUSClearReplyQuote?.();
+        replyText.focus();
+    });
 
     function insertTextAtCursor(field, text) {
         const start = field.selectionStart ?? field.value.length;
@@ -739,6 +873,28 @@ if ($onlyConversation) {
         const cursor = start + text.length;
         field.setSelectionRange(cursor, cursor);
         field.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+
+    function renderMentionPreviewText(value) {
+        const escaped = String(value || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+        return escaped
+            .replace(/(^|[\s(])(@(?:everyone|[\p{L}\p{N}_.-]+))/gu, '$1<span class="composer-mention-chip">$2</span>')
+            .replace(/\n/g, '<br>');
+    }
+
+    function syncReplyMentionPreview() {
+        if (!replyMentionPreview || !replyText) {
+            return;
+        }
+        const hasText = replyText.value.length > 0;
+        replyText.parentElement?.classList.toggle('has-mention-preview-text', hasText);
+        replyMentionPreview.innerHTML = hasText ? renderMentionPreviewText(replyText.value) : '';
+        replyMentionPreview.scrollTop = replyText.scrollTop;
     }
 
     function closeEmojiMenu() {
@@ -752,6 +908,7 @@ if ($onlyConversation) {
     function closeMentionMenu() {
         mentionMenu.hidden = true;
         mentionMenu.innerHTML = '';
+        mentionMenu.closest('.chat-mentions-shell')?.classList.remove('is-mentioning');
         activeMentionIndex = 0;
     }
 
@@ -823,6 +980,9 @@ if ($onlyConversation) {
             button.setAttribute('role', 'option');
             button.dataset.userId = String(member.id || 0);
             button.dataset.mention = member.mention;
+            if (member.everyone) {
+                button.dataset.everyone = '1';
+            }
             button.textContent = '@' + member.mention;
             if (member.name !== member.mention) {
                 button.title = member.name;
@@ -837,23 +997,18 @@ if ($onlyConversation) {
             });
             mentionMenu.appendChild(button);
         });
+        if (typeof window.closeReactionPickers === 'function') {
+            window.closeReactionPickers();
+        }
+        mentionMenu.closest('.chat-mentions-shell')?.classList.add('is-mentioning');
         mentionMenu.hidden = false;
         setActiveMention(0);
     }
 
-    composerEmojis.forEach(function(emoji) {
-        const button = document.createElement('button');
-        button.type = 'button';
-        button.className = 'emoji-item';
-        button.textContent = emoji;
-        button.addEventListener('click', function(event) {
-            event.preventDefault();
-            insertTextAtCursor(replyText, emoji);
-            closeEmojiMenu();
-        });
-        emojiMenu.appendChild(button);
+    window.KODUSEmojiPicker?.render(emojiMenu, function(emoji) {
+        insertTextAtCursor(replyText, emoji);
+        closeEmojiMenu();
     });
-    window.KODUSEmojiPicker?.enhance(emojiMenu);
 
     attachBtn.addEventListener('click', function() {
         fileInput.click();
@@ -971,6 +1126,7 @@ if ($onlyConversation) {
     }
 
     replyText.addEventListener('input', function() {
+        syncReplyMentionPreview();
         const caret = replyText.selectionStart ?? replyText.value.length;
         const before = replyText.value.slice(0, caret);
         const match = before.match(/(^|\s)@([^\s@]*)$/);
@@ -980,6 +1136,7 @@ if ($onlyConversation) {
         }
         renderMentionMenu(match[2] || '');
     });
+    replyText.addEventListener('scroll', syncReplyMentionPreview, { passive: true });
 
     replyText.addEventListener('keydown', function(event) {
         if (event.key === 'Escape') {
@@ -1062,7 +1219,27 @@ if ($onlyConversation) {
             renderReplyFilePreview();
             setReplyPreviewState();
             window.setAttachmentValidationMessage?.(attachmentError, '');
+            syncReplyMentionPreview();
         }, 0);
     });
+    window.KODUSResetReplyComposer = function() {
+        replyForm.reset();
+        replyForm.dataset.mentionedUserIds = '';
+        const mentionedField = document.getElementById('mentionedUserIds');
+        if (mentionedField) {
+            mentionedField.value = '';
+        }
+        closeEmojiMenu();
+        closeMentionMenu();
+        window.KODUSClearReplyQuote?.();
+        window.setTimeout(function() {
+            syncReplyMentionPreview();
+            replyText.focus();
+        }, 0);
+    };
+    if (window.KODUSReplyQuoteDraft) {
+        window.KODUSApplyReplyQuote(window.KODUSReplyQuoteDraft);
+    }
+    syncReplyMentionPreview();
 })();
 </script>

@@ -223,19 +223,39 @@ if (isset($_SESSION['user_id']) && is_numeric($_SESSION['user_id'])) {
       flex: 1 1 auto;
     }
 
-    .kodus-chat-bubble {
+    .kodus-chat-bubble-stack {
+      --kodus-minimized-size: 3.25rem;
+      --kodus-bubble-edge-gap: 0.75rem;
+      --kodus-bubble-reserved-right: calc(var(--kodus-minimized-size) + var(--kodus-bubble-edge-gap) + 0.85rem);
       position: fixed;
-      right: 0.75rem;
+      right: calc(var(--kodus-bubble-edge-gap) + var(--kodus-bubble-reserved-right));
       bottom: calc(0.75rem + env(safe-area-inset-bottom));
-      width: min(420px, calc(100vw - 0.9rem));
-      height: min(680px, calc(100vh - 4.5rem));
       z-index: 1085;
+      display: flex;
+      flex-direction: row-reverse;
+      align-items: flex-end;
+      gap: 0.65rem;
+      max-width: calc(100vw - var(--kodus-bubble-reserved-right) - 1.5rem);
+      pointer-events: none;
+    }
+
+    .kodus-chat-bubble {
+      position: relative;
+      width: min(420px, calc(100vw - var(--kodus-bubble-reserved-right, 4.85rem) - 1.5rem));
+      height: min(680px, calc(100vh - 4.5rem));
       background: #fff;
       border: 1px solid rgba(15, 23, 42, 0.14);
       border-radius: 14px;
       box-shadow: 0 24px 70px rgba(15, 23, 42, 0.28);
       overflow: hidden;
       display: none;
+      pointer-events: auto;
+    }
+
+    body.dark-mode .kodus-chat-bubble,
+    body[data-theme="dark"] .kodus-chat-bubble {
+      background: #242526;
+      border-color: rgba(255, 255, 255, 0.12);
     }
 
     .kodus-chat-bubble.is-visible {
@@ -244,7 +264,18 @@ if (isset($_SESSION['user_id']) && is_numeric($_SESSION['user_id'])) {
     }
 
     .kodus-chat-bubble.is-minimized {
-      height: 2.55rem;
+      position: fixed;
+      right: var(--kodus-bubble-edge-gap, 0.75rem);
+      bottom: calc(0.75rem + env(safe-area-inset-bottom) + (var(--minimized-index, 0) * 3.85rem));
+      width: var(--kodus-minimized-size, 3.25rem);
+      height: var(--kodus-minimized-size, 3.25rem);
+      min-width: var(--kodus-minimized-size, 3.25rem);
+      min-height: var(--kodus-minimized-size, 3.25rem);
+      border-radius: 50%;
+      overflow: visible;
+      background: transparent;
+      border: 0;
+      box-shadow: none;
     }
 
     .kodus-chat-bubble__bar {
@@ -258,6 +289,53 @@ if (isset($_SESSION['user_id']) && is_numeric($_SESSION['user_id'])) {
       padding: 0;
       background: transparent;
       color: #fff;
+    }
+
+    .kodus-chat-bubble__identity {
+      display: none;
+      border: 0;
+      background: transparent;
+      padding: 0;
+    }
+
+    .kodus-chat-bubble__avatar-wrap {
+      position: relative;
+      width: 2rem;
+      height: 2rem;
+      flex: 0 0 auto;
+    }
+
+    .kodus-chat-bubble__avatar {
+      display: block;
+      width: 100%;
+      height: 100%;
+      border-radius: 999px;
+      object-fit: cover;
+      background: #e5e7eb;
+      border: 2px solid #fff;
+    }
+
+    .kodus-chat-bubble__presence {
+      position: absolute;
+      right: 0;
+      bottom: 0;
+      width: 0.58rem;
+      height: 0.58rem;
+      border-radius: 999px;
+      background: #31a24c;
+      border: 2px solid #fff;
+    }
+
+    .kodus-chat-bubble__presence.is-offline {
+      background: #9ca3af;
+    }
+
+    .kodus-chat-bubble__presence.is-idle {
+      background: #f59e0b;
+    }
+
+    .kodus-chat-bubble__presence.is-online {
+      background: #31a24c;
     }
 
     .kodus-chat-bubble__title {
@@ -291,6 +369,78 @@ if (isset($_SESSION['user_id']) && is_numeric($_SESSION['user_id'])) {
     }
 
     .kodus-chat-bubble.is-minimized iframe {
+      display: none;
+    }
+
+    .kodus-chat-bubble.is-minimized .kodus-chat-bubble__bar {
+      inset: 0;
+      width: var(--kodus-minimized-size, 3.25rem);
+      height: var(--kodus-minimized-size, 3.25rem);
+      padding: 0;
+      justify-content: center;
+      color: inherit;
+      overflow: visible;
+    }
+
+    .kodus-chat-bubble.is-minimized .kodus-chat-bubble__identity {
+      display: flex;
+      width: var(--kodus-minimized-size, 3.25rem);
+      height: var(--kodus-minimized-size, 3.25rem);
+      min-width: var(--kodus-minimized-size, 3.25rem);
+      min-height: var(--kodus-minimized-size, 3.25rem);
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      border-radius: 50%;
+      overflow: visible;
+    }
+
+    .kodus-chat-bubble.is-minimized .kodus-chat-bubble__avatar-wrap {
+      width: var(--kodus-minimized-size, 3.25rem);
+      height: var(--kodus-minimized-size, 3.25rem);
+      min-width: var(--kodus-minimized-size, 3.25rem);
+      min-height: var(--kodus-minimized-size, 3.25rem);
+      border-radius: 50%;
+      filter: drop-shadow(0 12px 22px rgba(15, 23, 42, 0.24));
+      overflow: visible;
+    }
+
+    .kodus-chat-bubble.is-minimized .kodus-chat-bubble__avatar {
+      border-radius: 50%;
+      border: 0;
+      box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.08);
+    }
+
+    .kodus-chat-bubble.is-minimized .kodus-chat-bubble__presence {
+      right: -0.04rem;
+      bottom: -0.04rem;
+      width: 0.72rem;
+      height: 0.72rem;
+      z-index: 2;
+    }
+
+    .kodus-chat-bubble.is-minimized .kodus-chat-bubble__actions {
+      position: absolute;
+      top: -0.4rem;
+      right: -0.35rem;
+      display: none;
+      opacity: 0;
+      transition: opacity 0.15s ease;
+    }
+
+    .kodus-chat-bubble.is-minimized:hover .kodus-chat-bubble__actions,
+    .kodus-chat-bubble.is-minimized:focus-within .kodus-chat-bubble__actions {
+      opacity: 1;
+    }
+
+    .kodus-chat-bubble.is-minimized .kodus-chat-bubble__actions button {
+      width: 1.25rem;
+      height: 1.25rem;
+      font-size: 0.68rem;
+      background: rgba(15, 23, 42, 0.82);
+    }
+
+    .kodus-chat-bubble.is-minimized .kodus-chat-bubble__actions button:first-child {
       display: none;
     }
 
@@ -773,15 +923,23 @@ if (isset($_SESSION['user_id']) && is_numeric($_SESSION['user_id'])) {
   <!-- /.navbar -->
   <div id="appAlertStack" class="app-alert-stack" aria-live="polite" aria-atomic="true"></div>
   <div id="mailAlertStack" class="mail-alert-stack" aria-live="polite" aria-atomic="true"></div>
-  <div id="kodusChatBubble" class="kodus-chat-bubble" data-message-id="">
-    <div class="kodus-chat-bubble__bar">
-      <div class="kodus-chat-bubble__title" id="kodusChatBubbleTitle">Messenger</div>
-      <div class="kodus-chat-bubble__actions">
-        <button type="button" id="kodusChatBubbleMinimize" aria-label="Minimize chat" title="Minimize"><i class="fas fa-minus"></i></button>
-        <button type="button" id="kodusChatBubbleClose" aria-label="Close chat" title="Close"><i class="fas fa-times"></i></button>
+  <div id="kodusChatBubbleStack" class="kodus-chat-bubble-stack" aria-live="polite">
+    <div id="kodusChatBubble" class="kodus-chat-bubble" data-message-id="">
+      <div class="kodus-chat-bubble__bar">
+        <button type="button" class="kodus-chat-bubble__identity" title="Messenger" aria-label="Restore chat">
+          <span class="kodus-chat-bubble__avatar-wrap">
+            <img class="kodus-chat-bubble__avatar" src="<?= $app_root; ?>dist/img/default.webp" alt="">
+            <span class="kodus-chat-bubble__presence is-offline" aria-hidden="true"></span>
+          </span>
+        </button>
+        <div class="kodus-chat-bubble__title">Messenger</div>
+        <div class="kodus-chat-bubble__actions">
+          <button type="button" class="kodusChatBubbleMinimize" aria-label="Minimize chat" title="Minimize"><i class="fas fa-minus"></i></button>
+          <button type="button" class="kodusChatBubbleClose" aria-label="Close chat" title="Close"><i class="fas fa-times"></i></button>
+        </div>
       </div>
+      <iframe class="kodusChatBubbleFrame" title="Messenger conversation" loading="lazy"></iframe>
     </div>
-    <iframe id="kodusChatBubbleFrame" title="Messenger conversation" loading="lazy"></iframe>
   </div>
 
   <!-- Main Sidebar Container -->
@@ -1306,6 +1464,36 @@ let timer = window.setTimeout(dismissToast, 5000);
   }, { once: true });
 }
 
+function isUsableKodusBubbleAvatar(src) {
+  const value = String(src || '').trim();
+  if (value === '' || /\/default\.webp(?:[?#].*)?$/i.test(value)) {
+    return false;
+  }
+  try {
+    const avatarUrl = new URL(value, window.location.origin);
+    return avatarUrl.href !== window.location.href;
+  } catch (error) {
+    return false;
+  }
+}
+
+function resolveKodusBubbleAvatar(primary, fallback) {
+  if (isUsableKodusBubbleAvatar(primary)) {
+    return String(primary).trim();
+  }
+  if (isUsableKodusBubbleAvatar(fallback)) {
+    return String(fallback).trim();
+  }
+  return '<?= $app_root; ?>dist/img/default.webp';
+}
+
+function getKodusBubbleAvatarFromImage(img) {
+  if (!img) {
+    return '';
+  }
+  return img.getAttribute('src') || img.currentSrc || img.src || '';
+}
+
 function openKodusChatBubbleFromUrl(url, title, event) {
   let parsedUrl = null;
   try {
@@ -1324,42 +1512,147 @@ function openKodusChatBubbleFromUrl(url, title, event) {
     event.stopPropagation();
   }
 
-  const bubble = document.getElementById('kodusChatBubble');
-  const frame = document.getElementById('kodusChatBubbleFrame');
-  const titleNode = document.getElementById('kodusChatBubbleTitle');
+  const bubble = ensureKodusChatBubble(messageId);
+  const frame = bubble?.querySelector('.kodusChatBubbleFrame');
+  const titleNode = bubble?.querySelector('.kodus-chat-bubble__title');
+  const identityNode = bubble?.querySelector('.kodus-chat-bubble__identity');
+  const avatarNode = bubble?.querySelector('.kodus-chat-bubble__avatar');
+  const presenceClass = getKodusBubblePresenceClass(bubble);
   if (!bubble || !frame) {
     window.location.href = parsedUrl.href;
     return true;
   }
+  const clickedAvatar = getKodusBubbleAvatarFromImage(event?.target?.closest('a, .mail-alert-toast, .app-alert-toast')?.querySelector('img'));
+  const existingAvatar = avatarNode?.getAttribute('src') || '';
+  const avatar = resolveKodusBubbleAvatar(clickedAvatar, existingAvatar);
 
   parsedUrl.searchParams.set('msg', String(messageId));
   parsedUrl.searchParams.set('bubble', '1');
-  if (bubble.getAttribute('data-message-id') !== String(messageId)) {
-    frame.src = parsedUrl.href;
-  }
+  frame.src = parsedUrl.href;
 
   bubble.setAttribute('data-message-id', String(messageId));
+  bubble.dataset.openedAt = String(Date.now());
   bubble.classList.add('is-visible');
   bubble.classList.remove('is-minimized');
   if (titleNode) {
     titleNode.textContent = String(title || 'Messenger');
   }
-  saveKodusChatBubbleState({
+  if (identityNode) {
+    identityNode.title = String(title || 'Messenger');
+    identityNode.setAttribute('aria-label', 'Restore ' + String(title || 'Messenger'));
+  }
+  if (avatarNode) {
+    avatarNode.src = avatar;
+  }
+  frame.onload = function() {
+    syncKodusBubbleFromFrame(bubble);
+  };
+  upsertKodusChatBubbleState({
     messageId: messageId,
     minimized: false,
     title: String(title || 'Messenger'),
-    url: parsedUrl.href
+    url: parsedUrl.href,
+    avatar: avatar,
+    presenceUserId: Number(bubble.dataset.presenceUserId || 0),
+    presenceClass: presenceClass,
+    openedAt: Number(bubble.dataset.openedAt || Date.now())
   });
+  enforceKodusChatBubbleOverflow();
 
   return true;
 }
 
+function syncKodusBubbleFromFrame(bubble) {
+  const frame = bubble?.querySelector('.kodusChatBubbleFrame');
+  if (!bubble || !frame || !frame.contentDocument) {
+    return;
+  }
+  try {
+    const doc = frame.contentDocument;
+    const shell = doc.querySelector('.chat-shell');
+    const title = doc.querySelector('.mailbox-read-subject')?.textContent?.trim() || '';
+    const avatar = doc.querySelector('.chat-thread-avatar')?.src || '';
+    const threadDot = doc.querySelector('.chat-thread-status-dot');
+    const presenceUserId = Number(shell?.getAttribute('data-presence-user-id') || 0);
+    if (presenceUserId > 0) {
+      bubble.dataset.presenceUserId = String(presenceUserId);
+    }
+    if (title) {
+      const titleNode = bubble.querySelector('.kodus-chat-bubble__title');
+      const identityNode = bubble.querySelector('.kodus-chat-bubble__identity');
+      if (titleNode) titleNode.textContent = title;
+      if (identityNode) {
+        identityNode.title = title;
+        identityNode.setAttribute('aria-label', 'Restore ' + title);
+      }
+    }
+    const avatarNode = bubble.querySelector('.kodus-chat-bubble__avatar');
+    if (avatarNode) {
+      avatarNode.src = resolveKodusBubbleAvatar(avatar, avatarNode.src);
+    }
+    const bubbleDot = bubble.querySelector('.kodus-chat-bubble__presence');
+    if (bubbleDot && threadDot) {
+      const isOnline = threadDot.classList.contains('is-online');
+      const isIdle = threadDot.classList.contains('is-idle');
+      setKodusBubblePresenceClass(bubbleDot, isOnline ? 'online' : (isIdle ? 'idle' : 'offline'));
+    }
+    updateKodusChatBubbleStateFromNode(bubble);
+  } catch (error) {
+    kodusDebugLog('Chat bubble frame sync failed.', error);
+  }
+}
+
 const KODUS_CHAT_BUBBLE_STATE_KEY = 'kodus.chatBubble.state';
+const KODUS_CHAT_BUBBLE_MAX_EXPANDED = 2;
+
+function getKodusChatBubbleStack() {
+  return document.getElementById('kodusChatBubbleStack');
+}
+
+function createKodusChatBubble() {
+  const template = document.getElementById('kodusChatBubble');
+  if (!template) {
+    return null;
+  }
+  const bubble = template.cloneNode(true);
+  bubble.removeAttribute('id');
+  bubble.setAttribute('data-message-id', '');
+  bubble.classList.remove('is-visible', 'is-minimized');
+  bubble.removeAttribute('data-opened-at');
+  bubble.removeAttribute('data-presence-user-id');
+  setKodusBubblePresenceClass(bubble.querySelector('.kodus-chat-bubble__presence'), 'offline');
+  bubble.querySelector('.kodusChatBubbleFrame')?.removeAttribute('src');
+  return bubble;
+}
+
+function ensureKodusChatBubble(messageId) {
+  const stack = getKodusChatBubbleStack();
+  if (!stack) {
+    return null;
+  }
+
+  const existing = stack.querySelector(`.kodus-chat-bubble[data-message-id="${messageId}"]`);
+  if (existing) {
+    return existing;
+  }
+
+  const blank = stack.querySelector('.kodus-chat-bubble[data-message-id=""]');
+  const bubble = blank || createKodusChatBubble();
+  if (!bubble) {
+    return null;
+  }
+  bubble.setAttribute('data-message-id', String(messageId));
+  if (!bubble.parentElement) {
+    stack.appendChild(bubble);
+  }
+  return bubble;
+}
 
 function saveKodusChatBubbleState(state) {
   try {
-    if (state && Number(state.messageId || 0) > 0) {
-      localStorage.setItem(KODUS_CHAT_BUBBLE_STATE_KEY, JSON.stringify(state));
+    const states = Array.isArray(state) ? state : (state ? [state] : []);
+    if (states.length) {
+      localStorage.setItem(KODUS_CHAT_BUBBLE_STATE_KEY, JSON.stringify(states));
     } else {
       localStorage.removeItem(KODUS_CHAT_BUBBLE_STATE_KEY);
     }
@@ -1370,10 +1663,135 @@ function saveKodusChatBubbleState(state) {
 
 function getKodusChatBubbleState() {
   try {
-    return JSON.parse(localStorage.getItem(KODUS_CHAT_BUBBLE_STATE_KEY) || 'null');
+    const raw = JSON.parse(localStorage.getItem(KODUS_CHAT_BUBBLE_STATE_KEY) || '[]');
+    return Array.isArray(raw) ? raw : (raw ? [raw] : []);
   } catch (error) {
-    return null;
+    return [];
   }
+}
+
+function upsertKodusChatBubbleState(nextState) {
+  const states = getKodusChatBubbleState().filter(state => Number(state.messageId || 0) !== Number(nextState.messageId || 0));
+  states.push(nextState);
+  saveKodusChatBubbleState(states.slice(-6));
+}
+
+function removeKodusChatBubbleState(messageId) {
+  saveKodusChatBubbleState(getKodusChatBubbleState().filter(state => Number(state.messageId || 0) !== Number(messageId || 0)));
+}
+
+function updateKodusChatBubbleStateFromNode(bubble) {
+  const messageId = Number(bubble?.getAttribute('data-message-id') || 0);
+  if (!messageId) {
+    return;
+  }
+  upsertKodusChatBubbleState({
+    messageId: messageId,
+    minimized: bubble.classList.contains('is-minimized'),
+    title: bubble.querySelector('.kodus-chat-bubble__title')?.textContent || 'Messenger',
+    url: bubble.querySelector('.kodusChatBubbleFrame')?.src || '',
+    avatar: resolveKodusBubbleAvatar(getKodusBubbleAvatarFromImage(bubble.querySelector('.kodus-chat-bubble__avatar')), ''),
+    presenceUserId: Number(bubble.dataset.presenceUserId || 0),
+    presenceClass: getKodusBubblePresenceClass(bubble),
+    openedAt: Number(bubble.dataset.openedAt || Date.now())
+  });
+}
+
+function enforceKodusChatBubbleOverflow() {
+  const stack = getKodusChatBubbleStack();
+  if (!stack) {
+    return;
+  }
+  const visible = Array.from(stack.querySelectorAll('.kodus-chat-bubble.is-visible'));
+  const expanded = visible
+    .filter(bubble => !bubble.classList.contains('is-minimized'))
+    .sort((a, b) => Number(b.dataset.openedAt || 0) - Number(a.dataset.openedAt || 0));
+  const maxByWidth = window.innerWidth < 920 ? 1 : KODUS_CHAT_BUBBLE_MAX_EXPANDED;
+  expanded.slice(maxByWidth).forEach(function(bubble) {
+    bubble.classList.add('is-minimized');
+    updateKodusChatBubbleStateFromNode(bubble);
+  });
+  visible
+    .filter(bubble => bubble.classList.contains('is-minimized'))
+    .sort((a, b) => Number(b.dataset.openedAt || 0) - Number(a.dataset.openedAt || 0))
+    .forEach(function(bubble, index) {
+      bubble.style.setProperty('--minimized-index', String(index));
+    });
+}
+
+function applyKodusBubblePresence(userId, status) {
+  const normalized = String(Number(userId || 0));
+  if (normalized === '0') {
+    return;
+  }
+  const className = normalizeKodusBubblePresenceClass(status);
+  document.querySelectorAll(`.kodus-chat-bubble[data-presence-user-id="${normalized}"]`).forEach(function(bubble) {
+    setKodusBubblePresenceClass(bubble.querySelector('.kodus-chat-bubble__presence'), className);
+    updateKodusChatBubbleStateFromNode(bubble);
+  });
+}
+
+function normalizeKodusBubblePresenceClass(status) {
+  return String(status || '').toLowerCase() === 'idle'
+    ? 'idle'
+    : (status === true || String(status || '').toLowerCase() === 'online' ? 'online' : 'offline');
+}
+
+function setKodusBubblePresenceClass(dot, status) {
+  if (!dot) {
+    return;
+  }
+  const className = normalizeKodusBubblePresenceClass(status);
+  dot.classList.toggle('is-offline', className === 'offline');
+  dot.classList.toggle('is-idle', className === 'idle');
+  dot.classList.toggle('is-online', className === 'online');
+}
+
+function getKodusBubblePresenceClass(bubble) {
+  const dot = bubble?.querySelector('.kodus-chat-bubble__presence');
+  if (dot?.classList.contains('is-online')) {
+    return 'online';
+  }
+  if (dot?.classList.contains('is-idle')) {
+    return 'idle';
+  }
+  return 'offline';
+}
+
+function applyKodusBubbleThreadState(data) {
+  const messageId = Number(data?.message_id || 0);
+  if (!messageId) {
+    return;
+  }
+
+  const bubble = getKodusChatBubbleStack()?.querySelector(`.kodus-chat-bubble[data-message-id="${messageId}"]`);
+  if (!bubble) {
+    return;
+  }
+
+  const title = String(data.title || '').trim();
+  if (title) {
+    const titleNode = bubble.querySelector('.kodus-chat-bubble__title');
+    const identityNode = bubble.querySelector('.kodus-chat-bubble__identity');
+    if (titleNode) titleNode.textContent = title;
+    if (identityNode) {
+      identityNode.title = title;
+      identityNode.setAttribute('aria-label', 'Restore ' + title);
+    }
+  }
+
+  const avatarNode = bubble.querySelector('.kodus-chat-bubble__avatar');
+  if (avatarNode) {
+    avatarNode.src = resolveKodusBubbleAvatar(data.avatar, avatarNode.getAttribute('src') || '');
+  }
+
+  const presenceUserId = Number(data.presence_user_id || 0);
+  setKodusBubblePresenceClass(bubble.querySelector('.kodus-chat-bubble__presence'), data.presence_class || 'offline');
+  if (presenceUserId > 0) {
+    bubble.dataset.presenceUserId = String(presenceUserId);
+    applyKodusBubblePresence(presenceUserId, data.presence_class || 'offline');
+  }
+  updateKodusChatBubbleStateFromNode(bubble);
 }
 
 function restoreKodusChatBubbleState() {
@@ -1381,26 +1799,41 @@ function restoreKodusChatBubbleState() {
     return;
   }
 
-  const state = getKodusChatBubbleState();
-  if (!state || Number(state.messageId || 0) <= 0) {
+  const states = getKodusChatBubbleState().filter(state => Number(state.messageId || 0) > 0);
+  if (!states.length) {
     return;
   }
 
-  const bubble = document.getElementById('kodusChatBubble');
-  const frame = document.getElementById('kodusChatBubbleFrame');
-  const titleNode = document.getElementById('kodusChatBubbleTitle');
-  if (!bubble || !frame) {
-    return;
-  }
-
-  const url = state.url || '<?= $app_root; ?>messenger/index.php?msg=' + encodeURIComponent(state.messageId) + '&bubble=1';
-  bubble.setAttribute('data-message-id', String(state.messageId));
-  bubble.classList.add('is-visible');
-  bubble.classList.toggle('is-minimized', !!state.minimized);
-  frame.src = url;
-  if (titleNode) {
-    titleNode.textContent = String(state.title || 'Messenger');
-  }
+  states.forEach(function(state) {
+    const bubble = ensureKodusChatBubble(Number(state.messageId || 0));
+    const frame = bubble?.querySelector('.kodusChatBubbleFrame');
+    if (!bubble || !frame) {
+      return;
+    }
+    const url = state.url || '<?= $app_root; ?>messenger/index.php?msg=' + encodeURIComponent(state.messageId) + '&bubble=1';
+    bubble.dataset.openedAt = String(Number(state.openedAt || Date.now()));
+    if (Number(state.presenceUserId || 0) > 0) {
+      bubble.dataset.presenceUserId = String(Number(state.presenceUserId || 0));
+    }
+    setKodusBubblePresenceClass(bubble.querySelector('.kodus-chat-bubble__presence'), state.presenceClass || 'offline');
+    bubble.classList.add('is-visible');
+    bubble.classList.toggle('is-minimized', !!state.minimized);
+    frame.onload = function() {
+      syncKodusBubbleFromFrame(bubble);
+    };
+    frame.src = url;
+    const title = String(state.title || 'Messenger');
+    const titleNode = bubble.querySelector('.kodus-chat-bubble__title');
+    const identityNode = bubble.querySelector('.kodus-chat-bubble__identity');
+    const avatarNode = bubble.querySelector('.kodus-chat-bubble__avatar');
+    if (titleNode) titleNode.textContent = title;
+    if (identityNode) {
+      identityNode.title = title;
+      identityNode.setAttribute('aria-label', 'Restore ' + title);
+    }
+    if (avatarNode) avatarNode.src = resolveKodusBubbleAvatar(state.avatar, avatarNode.getAttribute('src') || '');
+  });
+  enforceKodusChatBubbleOverflow();
 }
 
 function getMailActivityKey(item) {
@@ -1764,7 +2197,7 @@ function refreshAppNotifications() {
       const unseenItems = topbarAppNotificationInitialized
         ? items.filter(item => {
             const id = Number(item.id || 0);
-            return id > 0 && !topbarSeenAppNotificationIds.includes(id);
+            return id > 0 && item.is_unread && !topbarSeenAppNotificationIds.includes(id);
           })
         : [];
 
@@ -1814,6 +2247,17 @@ function refreshAppNotifications() {
 }
 
 window.refreshAppNotifications = refreshAppNotifications;
+window.addEventListener('resize', enforceKodusChatBubbleOverflow, { passive: true });
+window.addEventListener('message', function(event) {
+  if (event.origin !== window.location.origin || !event.data) {
+    return;
+  }
+  if (event.data.type === 'kodus.presence.changed') {
+    applyKodusBubblePresence(event.data.user_id, event.data.presence_class || (event.data.online ? 'online' : 'offline'));
+  } else if (event.data.type === 'kodus.chatBubble.threadState') {
+    applyKodusBubbleThreadState(event.data);
+  }
+});
 
 document.addEventListener('click', function (event) {
   const chatLink = event.target.closest('#topbarChatList a[href*="messenger/"], #topbarNotificationList a[href*="messenger/"], .mail-alert-toast[href*="messenger/"], .app-alert-toast[href*="messenger/"]');
@@ -1821,28 +2265,38 @@ document.addEventListener('click', function (event) {
     return;
   }
 
-  const bubbleMinimize = event.target.closest('#kodusChatBubbleMinimize');
-  if (bubbleMinimize) {
+  const bubbleIdentity = event.target.closest('.kodus-chat-bubble__identity');
+  if (bubbleIdentity) {
     event.preventDefault();
-    const bubble = document.getElementById('kodusChatBubble');
-    bubble?.classList.toggle('is-minimized');
-    const messageId = Number(bubble?.getAttribute('data-message-id') || 0);
-    if (messageId > 0) {
-      const state = getKodusChatBubbleState() || {};
-      state.messageId = messageId;
-      state.minimized = !!bubble?.classList.contains('is-minimized');
-      state.title = document.getElementById('kodusChatBubbleTitle')?.textContent || state.title || 'Messenger';
-      state.url = document.getElementById('kodusChatBubbleFrame')?.src || state.url || '';
-      saveKodusChatBubbleState(state);
+    const bubble = bubbleIdentity.closest('.kodus-chat-bubble');
+    bubble?.classList.remove('is-minimized');
+    if (bubble) {
+      bubble.dataset.openedAt = String(Date.now());
+      updateKodusChatBubbleStateFromNode(bubble);
+      enforceKodusChatBubbleOverflow();
     }
     return;
   }
 
-  const bubbleClose = event.target.closest('#kodusChatBubbleClose');
+  const bubbleMinimize = event.target.closest('.kodusChatBubbleMinimize');
+  if (bubbleMinimize) {
+    event.preventDefault();
+    const bubble = bubbleMinimize.closest('.kodus-chat-bubble');
+    bubble?.classList.toggle('is-minimized');
+    if (bubble) {
+      bubble.dataset.openedAt = String(Date.now());
+      updateKodusChatBubbleStateFromNode(bubble);
+      enforceKodusChatBubbleOverflow();
+    }
+    return;
+  }
+
+  const bubbleClose = event.target.closest('.kodusChatBubbleClose');
   if (bubbleClose) {
     event.preventDefault();
-    const bubble = document.getElementById('kodusChatBubble');
-    const frame = document.getElementById('kodusChatBubbleFrame');
+    const bubble = bubbleClose.closest('.kodus-chat-bubble');
+    const frame = bubble?.querySelector('.kodusChatBubbleFrame');
+    const messageId = Number(bubble?.getAttribute('data-message-id') || 0);
     if (bubble) {
       bubble.classList.remove('is-visible', 'is-minimized');
       bubble.setAttribute('data-message-id', '');
@@ -1850,7 +2304,7 @@ document.addEventListener('click', function (event) {
     if (frame) {
       frame.removeAttribute('src');
     }
-    saveKodusChatBubbleState(null);
+    removeKodusChatBubbleState(messageId);
     return;
   }
 
@@ -1885,6 +2339,29 @@ if (window.KODUSLiveRefresh && typeof window.KODUSLiveRefresh.watchSocket === 'f
       refreshAppNotifications();
     }
   });
+  window.KODUSLiveRefresh.watchSocket({
+    key: 'topbar-presence',
+    channel: 'kodus.presence',
+    events: ['presence.changed'],
+    onMessage: function(payload) {
+      const data = payload && payload.data ? payload.data : {};
+      applyKodusBubblePresence(data.user_id, data.status || (data.online ? 'online' : 'offline'));
+    }
+  });
+  if (typeof window.KODUSLiveRefresh.connectSocket === 'function' && typeof CURRENT_SESSION_USER_ID !== 'undefined' && CURRENT_SESSION_USER_ID) {
+    window.KODUSLiveRefresh.connectSocket().then(function(socket) {
+      if (socket && !socket.__kodusTopbarPresenceBound) {
+        socket.__kodusTopbarPresenceBound = true;
+        const announcePresence = function() {
+          socket.emit('presence.join', { user_id: CURRENT_SESSION_USER_ID });
+        };
+        socket.on('connect', announcePresence);
+        if (socket.connected) {
+          announcePresence();
+        }
+      }
+    });
+  }
 }
 
 function escapeHtml(value) {

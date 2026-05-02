@@ -25,6 +25,8 @@ if ($userType === 'admin') {
                sender_user.picture AS sender_picture,
                sender_user.id AS sender_user_id,
                sender_user.sso_avatar_url AS sender_sso_avatar_url,
+               sender_user.last_activity AS sender_last_activity,
+               sender_user.is_online AS sender_is_online,
                current_member.muted_at AS current_member_muted_at,
                current_member.left_at AS current_member_left_at,
                TRIM(BOTH ', ' FROM CONCAT_WS(', ',
@@ -58,7 +60,23 @@ if ($userType === 'admin') {
                    WHERE cmr.message_id = cm.id
                    ORDER BY u.username
                    LIMIT 1
-               ) AS recipient_sso_avatar_url
+               ) AS recipient_sso_avatar_url,
+               (
+                   SELECT u.last_activity
+                   FROM contact_message_recipients cmr
+                   INNER JOIN users u ON u.id = cmr.user_id
+                   WHERE cmr.message_id = cm.id
+                   ORDER BY u.username
+                   LIMIT 1
+               ) AS recipient_last_activity,
+               (
+                   SELECT u.is_online
+                   FROM contact_message_recipients cmr
+                   INNER JOIN users u ON u.id = cmr.user_id
+                   WHERE cmr.message_id = cm.id
+                   ORDER BY u.username
+                   LIMIT 1
+               ) AS recipient_is_online
         FROM contact_messages cm
         LEFT JOIN (
             SELECT message_id, MAX(sent_at) AS latest_reply_at
@@ -95,6 +113,8 @@ if ($userType === 'admin') {
                sender_user.picture AS sender_picture,
                sender_user.id AS sender_user_id,
                sender_user.sso_avatar_url AS sender_sso_avatar_url,
+               sender_user.last_activity AS sender_last_activity,
+               sender_user.is_online AS sender_is_online,
                current_member.muted_at AS current_member_muted_at,
                current_member.left_at AS current_member_left_at,
                TRIM(BOTH ', ' FROM CONCAT_WS(', ',
@@ -128,7 +148,23 @@ if ($userType === 'admin') {
                    WHERE cmr.message_id = cm.id
                    ORDER BY u.username
                    LIMIT 1
-               ) AS recipient_sso_avatar_url
+               ) AS recipient_sso_avatar_url,
+               (
+                   SELECT u.last_activity
+                   FROM contact_message_recipients cmr
+                   INNER JOIN users u ON u.id = cmr.user_id
+                   WHERE cmr.message_id = cm.id
+                   ORDER BY u.username
+                   LIMIT 1
+               ) AS recipient_last_activity,
+               (
+                   SELECT u.is_online
+                   FROM contact_message_recipients cmr
+                   INNER JOIN users u ON u.id = cmr.user_id
+                   WHERE cmr.message_id = cm.id
+                   ORDER BY u.username
+                   LIMIT 1
+               ) AS recipient_is_online
         FROM contact_messages cm
         LEFT JOIN (
             SELECT message_id, MAX(sent_at) AS latest_reply_at
@@ -205,7 +241,10 @@ if ($messages === []): ?>
                     $presenceUserId = $isGroupThread ? 0 : (int) ($isSenderView ? ($row['recipient_user_id'] ?? 0) : ($row['sender_user_id'] ?? 0));
                     $presence = $isGroupThread
                         ? ['detail' => 'Group chat', 'class' => 'offline']
-                        : ['detail' => 'Active status unavailable', 'class' => 'offline'];
+                        : mailboxClassifyPresence(
+                            $isSenderView ? ($row['recipient_last_activity'] ?? null) : ($row['sender_last_activity'] ?? null),
+                            (int) ($isSenderView ? ($row['recipient_is_online'] ?? 0) : ($row['sender_is_online'] ?? 0))
+                        );
                     $subject = htmlspecialchars($row['subject'] ?? '(No Subject)');
                     $latestPreview = $latestPreviews[$messageId] ?? [
                         'text' => mailboxPreviewText($row['message'] ?? '', $row['attachment'] ?? ''),

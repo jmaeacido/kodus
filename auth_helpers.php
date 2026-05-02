@@ -3,6 +3,7 @@
 require_once __DIR__ . '/security.php';
 require_once __DIR__ . '/theme_helpers.php';
 require_once __DIR__ . '/role_change_helpers.php';
+require_once __DIR__ . '/socket_helpers.php';
 
 function auth_public_pages(): array
 {
@@ -493,6 +494,17 @@ function auth_mark_user_online(mysqli $conn): void
     $stmt->bind_param('si', $now, $userId);
     $stmt->execute();
     $stmt->close();
+
+    $lastBroadcast = (int) ($_SESSION['presence_broadcast_at'] ?? 0);
+    if (time() - $lastBroadcast >= 25) {
+        $_SESSION['presence_broadcast_at'] = time();
+        kodus_socket_broadcast('kodus.presence', 'presence.changed', [
+            'user_id' => $userId,
+            'online' => true,
+            'status' => 'online',
+            'last_active_at' => $now,
+        ]);
+    }
 }
 
 function auth_apply_security_headers(): void

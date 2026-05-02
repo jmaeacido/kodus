@@ -30,6 +30,8 @@ $reply = trim($_POST['reply'] ?? '');
 $subject = $_POST['subject'] ?? '(No Subject)';
 $originalMessage = $_POST['message'] ?? '(No Message)';
 $postedMentionIds = array_values(array_unique(array_filter(array_map('intval', preg_split('/[,\s]+/', (string) ($_POST['mentioned_user_ids'] ?? ''), -1, PREG_SPLIT_NO_EMPTY)))));
+$quoteTargetType = trim((string) ($_POST['quote_target_type'] ?? ''));
+$quoteReplyId = isset($_POST['quote_reply_id']) && $_POST['quote_reply_id'] !== '' ? (int) $_POST['quote_reply_id'] : null;
 $attachmentLimits = mailboxAttachmentLimits();
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -69,7 +71,7 @@ if ($senderId <= 0 || !$senderEmail) {
 }
 
 $messageAccessSql = "
-    SELECT id, user_email, user_name, subject, message, conversation_type
+    SELECT id, user_email, user_name, subject, message, attachment, conversation_type
     FROM contact_messages
     WHERE id = ?
 ";
@@ -161,6 +163,53 @@ if (!$isGroupThread && $senderType === 'admin') {
 
 $subject = (string) ($thread['subject'] ?? $subject);
 $originalMessage = (string) ($thread['message'] ?? $originalMessage);
+$quoteTargetType = in_array($quoteTargetType, ['message', 'reply'], true) ? $quoteTargetType : '';
+$quoteAuthor = null;
+$quoteExcerpt = null;
+
+if ($quoteTargetType === 'message') {
+    $quoteReplyId = null;
+    $quoteAuthor = trim((string) ($thread['user_name'] ?? ''));
+    if ($quoteAuthor === '') {
+        $quoteAuthor = trim((string) ($thread['user_email'] ?? 'Original message'));
+    }
+    $quoteExcerpt = mailbox_quote_excerpt((string) ($thread['message'] ?? ''), !empty($thread['attachment']) ? 'Attachment' : 'Original message');
+} elseif ($quoteTargetType === 'reply' && $quoteReplyId !== null && $quoteReplyId > 0) {
+    $quoteStmt = $conn->prepare("
+        SELECT r.reply, r.attachment, r.deleted_for_everyone_at,
+               COALESCE(NULLIF(u.username, ''), CONCAT('User #', r.user_id)) AS quote_author
+        FROM contact_replies r
+        INNER JOIN users u ON u.id = r.user_id
+        WHERE r.id = ? AND r.message_id = ?
+        LIMIT 1
+    ");
+    if ($quoteStmt) {
+        $quoteStmt->bind_param('ii', $quoteReplyId, $id);
+        $quoteStmt->execute();
+        $quoteRow = db_stmt_fetch_one_assoc($quoteStmt);
+        $quoteStmt->close();
+        if ($quoteRow && empty($quoteRow['deleted_for_everyone_at'])) {
+            $quoteAuthor = trim((string) ($quoteRow['quote_author'] ?? ''));
+            $quoteExcerpt = mailbox_quote_excerpt((string) ($quoteRow['reply'] ?? ''), !empty($quoteRow['attachment']) ? 'Attachment' : 'Message');
+        } else {
+            $quoteTargetType = '';
+            $quoteReplyId = null;
+        }
+    } else {
+        $quoteTargetType = '';
+        $quoteReplyId = null;
+    }
+} else {
+    $quoteTargetType = '';
+    $quoteReplyId = null;
+}
+
+if ($quoteTargetType === '' || $quoteAuthor === null || $quoteExcerpt === null) {
+    $quoteTargetType = null;
+    $quoteReplyId = null;
+    $quoteAuthor = null;
+    $quoteExcerpt = null;
+}
 
 // ---------------------------
 // Handle File Upload (Project Root / inbox/uploads/reply_attachments/)
@@ -210,13 +259,13 @@ if ($reply === '' && !$hasAttachments) {
 // Insert reply into database
 // ---------------------------
 $attachmentsDB = !empty($filenamesForDB) ? implode(',', $filenamesForDB) : null;
-$stmt = $conn->prepare("INSERT INTO contact_replies (message_id, user_id, reply, sent_at, updated_at, attachment) VALUES (?,?,?,NOW(),NOW(),?)");
+$stmt = $conn->prepare("INSERT INTO contact_replies (message_id, user_id, reply, sent_at, updated_at, attachment, quote_target_type, quote_reply_id, quote_author, quote_excerpt) VALUES (?,?,?,NOW(),NOW(),?,?,?,?,?)");
 if (!$stmt) {
     $buf = ob_get_clean();
     echo json_encode(['status'=>'error','message'=>'DB prepare failed (insert reply).','debug'=>$buf]);
     exit;
 }
-$stmt->bind_param("iiss", $id, $senderId, $reply, $attachmentsDB);
+$stmt->bind_param("iisssiss", $id, $senderId, $reply, $attachmentsDB, $quoteTargetType, $quoteReplyId, $quoteAuthor, $quoteExcerpt);
 $stmt->execute();
 $replyId = (int) $stmt->insert_id;
 $stmt->close();
@@ -311,6 +360,7 @@ $recipientIds = array_values(array_unique(array_filter($recipientIds, static fun
 
 $mentionedUserIds = [];
 if ($isGroupThread && $reply !== '') {
+    $mentionsEveryone = preg_match('/(^|[\s(])@everyone\b/i', $reply) === 1;
     $mentionLookupStmt = $conn->prepare("
         SELECT cmr.user_id,
                COALESCE(NULLIF(u.username, ''), COALESCE(NULLIF(cmr.recipient_name, ''), cmr.recipient_email)) AS display_name
@@ -327,6 +377,11 @@ if ($isGroupThread && $reply !== '') {
         $mentionLookupStmt->execute();
         foreach (db_stmt_fetch_all_assoc($mentionLookupStmt) as $mentionRow) {
             $mentionUserId = (int) ($mentionRow['user_id'] ?? 0);
+            if ($mentionsEveryone) {
+                $mentionedUserIds[] = $mentionUserId;
+                continue;
+            }
+
             if (!empty($postedMentionIds) && !in_array($mentionUserId, $postedMentionIds, true)) {
                 continue;
             }

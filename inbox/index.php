@@ -38,6 +38,8 @@ if ($userType === 'admin') {
                sender_user.picture AS sender_picture,
                sender_user.id AS sender_user_id,
                sender_user.sso_avatar_url AS sender_sso_avatar_url,
+               sender_user.last_activity AS sender_last_activity,
+               sender_user.is_online AS sender_is_online,
                current_member.muted_at AS current_member_muted_at,
                current_member.left_at AS current_member_left_at,
                (
@@ -69,7 +71,23 @@ if ($userType === 'admin') {
                    WHERE cmr.message_id = cm.id
                    ORDER BY u.username
                    LIMIT 1
-               ) AS recipient_sso_avatar_url
+               ) AS recipient_sso_avatar_url,
+               (
+                   SELECT u.last_activity
+                   FROM contact_message_recipients cmr
+                   INNER JOIN users u ON u.id = cmr.user_id
+                   WHERE cmr.message_id = cm.id
+                   ORDER BY u.username
+                   LIMIT 1
+               ) AS recipient_last_activity,
+               (
+                   SELECT u.is_online
+                   FROM contact_message_recipients cmr
+                   INNER JOIN users u ON u.id = cmr.user_id
+                   WHERE cmr.message_id = cm.id
+                   ORDER BY u.username
+                   LIMIT 1
+               ) AS recipient_is_online
         FROM contact_messages cm
         LEFT JOIN (
             SELECT message_id, MAX(sent_at) AS latest_reply_at
@@ -107,6 +125,8 @@ if ($userType === 'admin') {
                sender_user.picture AS sender_picture,
                sender_user.id AS sender_user_id,
                sender_user.sso_avatar_url AS sender_sso_avatar_url,
+               sender_user.last_activity AS sender_last_activity,
+               sender_user.is_online AS sender_is_online,
                current_member.muted_at AS current_member_muted_at,
                current_member.left_at AS current_member_left_at,
                (
@@ -138,7 +158,23 @@ if ($userType === 'admin') {
                    WHERE cmr.message_id = cm.id
                    ORDER BY u.username
                    LIMIT 1
-               ) AS recipient_sso_avatar_url
+               ) AS recipient_sso_avatar_url,
+               (
+                   SELECT u.last_activity
+                   FROM contact_message_recipients cmr
+                   INNER JOIN users u ON u.id = cmr.user_id
+                   WHERE cmr.message_id = cm.id
+                   ORDER BY u.username
+                   LIMIT 1
+               ) AS recipient_last_activity,
+               (
+                   SELECT u.is_online
+                   FROM contact_message_recipients cmr
+                   INNER JOIN users u ON u.id = cmr.user_id
+                   WHERE cmr.message_id = cm.id
+                   ORDER BY u.username
+                   LIMIT 1
+               ) AS recipient_is_online
         FROM contact_messages cm
         LEFT JOIN (
             SELECT message_id, MAX(sent_at) AS latest_reply_at
@@ -236,10 +272,11 @@ $trashCountStmt->close();
 
 $composeOpen = isset($_GET['compose']) && $_GET['compose'] !== '0';
 $composeRecipients = [];
-$recipientResult = $conn->query("SELECT id, username, email, picture, sso_avatar_url FROM users ORDER BY username");
+$recipientResult = $conn->query("SELECT id, username, email, picture, sso_avatar_url, last_activity, is_online FROM users ORDER BY username");
 if ($recipientResult) {
     while ($recipientRow = $recipientResult->fetch_assoc()) {
         $recipientRow['avatar_url'] = mailbox_user_avatar_url($recipientRow['picture'] ?? '', $recipientRow['sso_avatar_url'] ?? '', $base_url);
+        $recipientRow['presence'] = mailboxClassifyPresence($recipientRow['last_activity'] ?? null, (int) ($recipientRow['is_online'] ?? 0));
         $composeRecipients[] = $recipientRow;
     }
 }
@@ -355,9 +392,9 @@ $composeCsrfToken = security_get_csrf_token();
 
     body.dark-mode .mailbox-app .attachment-thumb,
     body[data-theme="dark"] .mailbox-app .attachment-thumb {
-      background: #2a3645;
+      background: transparent;
       color: #f3f4f6;
-      border-color: rgba(255, 255, 255, 0.1);
+      border-color: transparent;
     }
 
     body.dark-mode .mailbox-app .attachment-thumb .btn,
@@ -1015,6 +1052,25 @@ $composeCsrfToken = security_get_csrf_token();
       display: none !important;
     }
 
+    .mailbox-app .chat-system-event {
+      clear: both;
+      display: flex;
+      justify-content: center;
+      margin: 0.35rem 0 0.85rem;
+      color: var(--mailbox-text-muted);
+      font-size: 0.76rem;
+      line-height: 1.35;
+    }
+
+    .mailbox-app .chat-system-event span {
+      max-width: min(100%, 26rem);
+      padding: 0.18rem 0.55rem;
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--mailbox-surface) 72%, transparent);
+      border: 1px solid color-mix(in srgb, var(--mailbox-border) 65%, transparent);
+      text-align: center;
+    }
+
     .mailbox-app .chat-typing-dots {
       display: inline-flex;
       align-items: center;
@@ -1074,6 +1130,32 @@ $composeCsrfToken = security_get_csrf_token();
       font-size: 0.95rem;
     }
 
+    .mailbox-app .chat-mention-chip {
+      display: inline-flex;
+      align-items: center;
+      max-width: 100%;
+      padding: 0.08rem 0.4rem;
+      border-radius: 999px;
+      background: #fff3cd;
+      color: #5c3b00;
+      box-shadow: inset 0 0 0 1px rgba(133, 100, 4, 0.28);
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .mailbox-app .reply.mine .chat-mention-chip {
+      background: #fef08a;
+      color: #422006;
+      box-shadow: inset 0 0 0 1px rgba(113, 63, 18, 0.32);
+    }
+
+    body.dark-mode .mailbox-app .chat-mention-chip,
+    body[data-theme="dark"] .mailbox-app .chat-mention-chip {
+      background: #fde68a;
+      color: #451a03;
+      box-shadow: inset 0 0 0 1px rgba(251, 191, 36, 0.45);
+    }
+
     .mailbox-app .reply.mine {
       margin-left: auto;
       background: linear-gradient(180deg, rgba(13, 110, 253, 0.22) 0%, rgba(13, 110, 253, 0.12) 100%);
@@ -1115,7 +1197,8 @@ $composeCsrfToken = security_get_csrf_token();
       margin-left: auto;
     }
 
-    .mailbox-app .reply-menu-trigger {
+    .mailbox-app .reply-menu-trigger,
+    .mailbox-app .reply-quote-trigger {
       width: 28px;
       height: 28px;
       border-radius: 999px;
@@ -1131,11 +1214,42 @@ $composeCsrfToken = security_get_csrf_token();
     }
 
     .mailbox-app .reply-menu-trigger:hover,
-    .mailbox-app .reply-menu-trigger:focus {
+    .mailbox-app .reply-menu-trigger:focus,
+    .mailbox-app .reply-quote-trigger:hover,
+    .mailbox-app .reply-quote-trigger:focus {
       background: rgba(255, 255, 255, 0.08);
       color: #fff;
       border-color: transparent;
       box-shadow: none;
+    }
+
+    .mailbox-app .chat-quote-preview {
+      max-width: 100%;
+      margin-bottom: 0.55rem;
+      padding: 0.5rem 0.65rem;
+      border-left: 3px solid color-mix(in srgb, var(--messenger-accent, #2374e1) 76%, transparent);
+      border-radius: 0.55rem;
+      background: color-mix(in srgb, var(--mailbox-surface, #fff) 70%, transparent);
+      color: var(--mailbox-text, #212529);
+    }
+
+    .mailbox-app .chat-quote-preview-author,
+    .mailbox-app .reply-quote-composer-author {
+      font-size: 0.76rem;
+      font-weight: 800;
+      line-height: 1.25;
+      color: var(--messenger-accent, #2374e1);
+    }
+
+    .mailbox-app .chat-quote-preview-text,
+    .mailbox-app .reply-quote-composer-text {
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      color: var(--messenger-muted, #6c757d);
+      font-size: 0.84rem;
+      line-height: 1.35;
     }
 
     .mailbox-app .reply-menu-dropdown {
@@ -1204,21 +1318,26 @@ $composeCsrfToken = security_get_csrf_token();
     }
 
     .mailbox-app .attachment-thumb {
-      width: 132px;
-      padding: 0.5rem;
-      border-radius: 0.5rem;
-      background: rgba(255, 255, 255, 0.92);
+      width: auto;
+      max-width: min(280px, 100%);
+      padding: 0;
+      border-radius: 0.45rem;
+      background: transparent;
       color: #343a40;
-      border: 1px solid rgba(0, 0, 0, 0.08);
+      border: 0;
       cursor: pointer;
+      overflow: hidden;
     }
 
     .mailbox-app .attachment-thumb img,
     .mailbox-app .attachment-thumb video {
-      width: 100%;
-      height: 84px;
-      object-fit: cover;
-      border-radius: 0.35rem;
+      display: block;
+      max-width: min(280px, 100%);
+      max-height: 220px;
+      width: auto;
+      height: auto;
+      object-fit: contain;
+      border-radius: 0.45rem;
     }
 
     .mailbox-app .attachment-thumb audio {
@@ -1228,8 +1347,12 @@ $composeCsrfToken = security_get_csrf_token();
 
     .mailbox-app .attachment-thumb .filename {
       font-size: 0.75rem;
-      margin-top: 0.45rem;
+      margin-top: 0.25rem;
+      padding: 0.45rem 0.6rem;
       word-break: break-word;
+      border: 1px solid var(--mailbox-border);
+      border-radius: 0.45rem;
+      background: var(--mailbox-surface-muted);
     }
 
     .mailbox-app .reply-form-shell {
@@ -1247,6 +1370,48 @@ $composeCsrfToken = security_get_csrf_token();
       border-radius: 1rem;
     }
 
+    .mailbox-app .reply-quote-composer {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 0.65rem;
+      margin-bottom: 0.65rem;
+      padding: 0.65rem 0.75rem;
+      border-radius: 0.75rem;
+      border: 1px solid var(--mailbox-border);
+      border-left: 3px solid var(--messenger-accent, #2374e1);
+      background: color-mix(in srgb, var(--messenger-chip, rgba(15, 23, 42, 0.06)) 88%, transparent);
+    }
+
+    .mailbox-app .reply-quote-composer[hidden] {
+      display: none;
+    }
+
+    .mailbox-app .reply-quote-composer-copy {
+      min-width: 0;
+      flex: 1 1 auto;
+    }
+
+    .mailbox-app .reply-quote-clear {
+      width: 1.65rem;
+      height: 1.65rem;
+      border: 0;
+      border-radius: 999px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--messenger-muted, #6c757d);
+      background: transparent;
+      flex: 0 0 auto;
+    }
+
+    .mailbox-app .reply-quote-clear:hover,
+    .mailbox-app .reply-quote-clear:focus {
+      color: var(--messenger-text, #212529);
+      background: var(--messenger-chip, rgba(15, 23, 42, 0.06));
+      outline: none;
+    }
+
     .mailbox-app .reply-compose-tools {
       display: flex;
       justify-content: flex-end;
@@ -1260,7 +1425,7 @@ $composeCsrfToken = security_get_csrf_token();
     .mailbox-app .emoji-menu,
     .compose-modal .emoji-menu {
       position: fixed;
-      width: min(268px, calc(100vw - 1.5rem));
+      width: min(328px, calc(100vw - 1.5rem));
       padding: 0.65rem;
       border-radius: 0.95rem;
       background: color-mix(in srgb, var(--messenger-panel-strong) 88%, rgba(15, 23, 42, 0.86) 12%);
@@ -1331,12 +1496,25 @@ $composeCsrfToken = security_get_csrf_token();
     .compose-modal .emoji-panel-cat {
       width: 1.55rem;
       height: 1.55rem;
+      border: 0;
       border-radius: 999px;
       display: inline-flex;
       align-items: center;
       justify-content: center;
       background: color-mix(in srgb, var(--messenger-chip) 82%, transparent);
       font-size: 0.82rem;
+      cursor: pointer;
+      color: inherit;
+      pointer-events: auto;
+      padding: 0;
+    }
+
+    .mailbox-app .emoji-panel-cat:hover,
+    .mailbox-app .emoji-panel-cat:focus,
+    .compose-modal .emoji-panel-cat:hover,
+    .compose-modal .emoji-panel-cat:focus {
+      background: color-mix(in srgb, var(--messenger-accent) 22%, transparent);
+      outline: none;
     }
 
     .mailbox-app .emoji-panel-search,
@@ -1361,8 +1539,26 @@ $composeCsrfToken = security_get_csrf_token();
     .mailbox-app .emoji-grid,
     .compose-modal .emoji-grid {
       display: grid;
-      grid-template-columns: repeat(6, minmax(0, 1fr));
+      grid-template-columns: repeat(8, minmax(0, 1fr));
       gap: 0.28rem;
+      max-height: min(18rem, 42vh);
+      overflow-y: auto;
+      padding-right: 0.15rem;
+    }
+
+    .mailbox-app .emoji-panel-section,
+    .compose-modal .emoji-panel-section {
+      display: contents;
+    }
+
+    .mailbox-app .emoji-panel-label,
+    .compose-modal .emoji-panel-label {
+      grid-column: 1 / -1;
+      margin-top: 0.35rem;
+      color: var(--messenger-muted);
+      font-size: 0.68rem;
+      font-weight: 800;
+      text-transform: uppercase;
     }
 
     .mailbox-app .reply-actions {
@@ -1413,6 +1609,58 @@ $composeCsrfToken = security_get_csrf_token();
 
     .mailbox-app .chat-mentions-shell {
       position: relative;
+    }
+
+    .mailbox-app .chat-mentions-shell.is-mentioning {
+      z-index: 2200;
+    }
+
+    .mailbox-app .composer-mention-preview,
+    .compose-modal .composer-mention-preview {
+      position: absolute;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+      overflow: hidden;
+      white-space: pre-wrap;
+      word-break: break-word;
+      color: var(--mailbox-text);
+      font: inherit;
+      line-height: 1.5;
+    }
+
+    .mailbox-app .composer-mention-preview {
+      min-height: 104px;
+      padding: 0.375rem 4.75rem 0.375rem 0.75rem;
+      border: 1px solid transparent;
+      border-radius: 1rem;
+    }
+
+    .compose-modal .composer-mention-preview {
+      min-height: 160px;
+      padding: 0.75rem 4.75rem 0.75rem 0.85rem;
+      border: 1px solid transparent;
+      border-radius: 1rem;
+    }
+
+    .mailbox-app .has-mention-preview-text .chat-reply-textarea,
+    .compose-modal .has-mention-preview-text #composeMessage {
+      color: transparent !important;
+      caret-color: var(--mailbox-text, #212529);
+      background: transparent !important;
+      position: relative;
+      z-index: 1;
+    }
+
+    .mailbox-app .composer-mention-chip,
+    .compose-modal .composer-mention-chip {
+      display: inline;
+      padding: 0.08rem 0.35rem;
+      border-radius: 999px;
+      background: #fef08a;
+      color: #422006;
+      box-shadow: inset 0 0 0 1px rgba(113, 63, 18, 0.32);
+      font-weight: 800;
     }
 
     .mailbox-app .chat-reply-textarea {
@@ -1557,6 +1805,8 @@ $composeCsrfToken = security_get_csrf_token();
       justify-content: center;
       min-width: 30px;
       cursor: pointer;
+      position: relative;
+      z-index: 1;
     }
 
     .chat-reaction-picker {
@@ -1564,18 +1814,65 @@ $composeCsrfToken = security_get_csrf_token();
       left: 0;
       top: 0;
       right: auto;
-      width: 214px;
+      width: min(328px, calc(100vw - 1rem));
       padding: 0.6rem;
       border-radius: 0.85rem;
       background: var(--mailbox-surface-elevated);
       border: 1px solid var(--mailbox-border);
       box-shadow: 0 12px 28px color-mix(in srgb, var(--messenger-text) 14%, transparent);
-      display: grid;
-      grid-template-columns: repeat(5, minmax(0, 1fr));
-      gap: 0.35rem;
-      z-index: 1100;
+      display: block;
+      z-index: 2140;
       color: var(--mailbox-text);
       pointer-events: auto;
+    }
+
+    .chat-reaction-picker .emoji-panel-head,
+    .chat-reaction-picker .emoji-panel-cats {
+      display: flex;
+      align-items: center;
+      gap: 0.25rem;
+      justify-content: space-between;
+    }
+
+    .chat-reaction-picker .emoji-panel-cat {
+      width: 1.55rem;
+      height: 1.55rem;
+      border: 0;
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--messenger-chip, rgba(15, 23, 42, 0.06)) 82%, transparent);
+      color: inherit;
+      cursor: pointer;
+      padding: 0;
+    }
+
+    .chat-reaction-picker .emoji-panel-search {
+      width: 100%;
+      height: 2rem;
+      border-radius: 0.7rem;
+      border: 1px solid var(--mailbox-border);
+      background: color-mix(in srgb, var(--messenger-chip, rgba(15, 23, 42, 0.06)) 84%, transparent);
+      color: var(--mailbox-text);
+      font-size: 0.82rem;
+      padding: 0.35rem 0.65rem;
+      margin: 0.55rem 0;
+    }
+
+    .chat-reaction-picker .emoji-grid {
+      display: grid;
+      grid-template-columns: repeat(8, minmax(0, 1fr));
+      gap: 0.28rem;
+      max-height: min(18rem, 42vh);
+      overflow-y: auto;
+    }
+
+    .chat-reaction-picker .emoji-panel-label {
+      grid-column: 1 / -1;
+      margin-top: 0.35rem;
+      color: var(--mailbox-text);
+      opacity: 0.72;
+      font-size: 0.68rem;
+      font-weight: 800;
+      text-transform: uppercase;
     }
 
     .chat-reaction-picker[hidden] {
@@ -1595,6 +1892,8 @@ $composeCsrfToken = security_get_csrf_token();
       font-size: 0.95rem;
       font-weight: 700;
       line-height: 1;
+      position: relative;
+      z-index: 1;
     }
 
     .chat-reaction-picker .chat-reaction-add:hover,
@@ -2516,6 +2815,98 @@ $composeCsrfToken = security_get_csrf_token();
       color: var(--mailbox-text);
     }
 
+    body.messenger-page .swal2-popup .attachment-preview-stage {
+      position: relative;
+      width: min(90vw, 1100px);
+      height: min(75vh, 700px);
+      max-width: calc(100vw - 1.5rem);
+      max-height: calc(100vh - 5rem);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    body.messenger-page .swal2-popup.attachment-preview-popup {
+      background: transparent;
+      border: 0;
+      box-shadow: none;
+      padding: 0;
+    }
+
+    body.messenger-page .swal2-popup.attachment-preview-popup .swal2-html-container {
+      margin: 0;
+      padding: 0;
+      overflow: visible;
+    }
+
+    body.messenger-page .swal2-popup.attachment-preview-popup .swal2-close {
+      color: #fff;
+      text-shadow: 0 1px 8px rgba(0, 0, 0, 0.5);
+    }
+
+    body.messenger-page .swal2-popup .attachment-preview-media {
+      width: 100%;
+      height: 100%;
+      max-width: 100%;
+      max-height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: transparent;
+      border: 0;
+      box-shadow: none;
+    }
+
+    body.messenger-page .swal2-popup .attachment-preview-media > img,
+    body.messenger-page .swal2-popup .attachment-preview-media > video,
+    body.messenger-page .swal2-popup .attachment-preview-media > iframe {
+      width: auto;
+      height: auto;
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+      background: transparent;
+      border: 0;
+      box-shadow: none;
+    }
+
+    body.messenger-page .swal2-popup .attachment-preview-media > iframe {
+      width: 100%;
+      height: 100%;
+    }
+
+    body.messenger-page .swal2-popup .attachment-preview-nav {
+      position: absolute;
+      top: 50%;
+      width: 2.35rem;
+      height: 2.35rem;
+      transform: translateY(-50%);
+      border: 1px solid var(--mailbox-border);
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--mailbox-surface-elevated) 86%, transparent);
+      color: var(--mailbox-text);
+      box-shadow: 0 8px 24px color-mix(in srgb, var(--mailbox-text) 16%, transparent);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.5rem;
+      line-height: 1;
+      padding: 0;
+      z-index: 2;
+    }
+
+    body.messenger-page .swal2-popup .attachment-preview-nav--prev {
+      left: 0.35rem;
+    }
+
+    body.messenger-page .swal2-popup .attachment-preview-nav--next {
+      right: 0.35rem;
+    }
+
+    body.messenger-page .swal2-popup .attachment-preview-nav[hidden] {
+      display: none;
+    }
+
     .mailbox-app {
       min-height: 100vh;
       background: var(--messenger-bg);
@@ -3084,10 +3475,10 @@ $composeCsrfToken = security_get_csrf_token();
     }
 
     .mailbox-app .attachment-thumb {
-      background: var(--messenger-panel);
-      border-color: var(--messenger-divider);
+      background: transparent;
+      border-color: transparent;
       color: var(--messenger-text);
-      border-radius: 0.9rem;
+      border-radius: 0.45rem;
     }
 
     .mailbox-app .chat-composer-shell {
@@ -3623,10 +4014,11 @@ $composeCsrfToken = security_get_csrf_token();
       }
 
       .mailbox-app .reply-tools {
-        display: none;
+        display: flex;
       }
 
-      .mailbox-app .reply-menu-trigger {
+      .mailbox-app .reply-menu-trigger,
+      .mailbox-app .reply-quote-trigger {
         width: 32px;
         height: 32px;
       }
@@ -3674,7 +4066,8 @@ $composeCsrfToken = security_get_csrf_token();
       }
 
       .mailbox-app .attachment-thumb {
-        width: calc(50% - 0.25rem);
+        width: auto;
+        max-width: min(280px, 100%);
       }
     }
 
@@ -3746,7 +4139,8 @@ $composeCsrfToken = security_get_csrf_token();
       }
 
       .mailbox-app .attachment-thumb {
-        width: 100%;
+        width: auto;
+        max-width: 100%;
       }
     }
 
@@ -4271,6 +4665,12 @@ $composeCsrfToken = security_get_csrf_token();
       z-index: 2;
     }
 
+    body.kodus-chat-bubble-mode .mailbox-app .reply-quote-composer {
+      margin-bottom: 0.45rem;
+      padding: 0.5rem 0.6rem;
+      border-radius: 0.65rem;
+    }
+
     .mailbox-app .chat-mentions-shell {
       position: relative;
     }
@@ -4280,7 +4680,7 @@ $composeCsrfToken = security_get_csrf_token();
       max-height: 120px;
       resize: none;
       border-radius: 1rem;
-      padding-right: 3.25rem;
+      padding-right: 7.65rem;
     }
 
     .mailbox-app .chat-mentions-shell.has-file-preview .chat-reply-textarea {
@@ -4290,12 +4690,17 @@ $composeCsrfToken = security_get_csrf_token();
 
     .mailbox-app .chat-composer-tool-stack {
       position: absolute;
-      right: 0.55rem;
-      bottom: 0.4rem;
+      right: 0.6rem;
+      bottom: 0.52rem;
       z-index: 4;
       display: inline-flex;
-      flex-direction: column;
-      gap: 0.35rem;
+      align-items: center;
+      flex-direction: row;
+      gap: 0.18rem;
+      padding: 0.12rem;
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--mailbox-surface) 88%, transparent);
+      box-shadow: 0 4px 14px color-mix(in srgb, var(--messenger-text) 8%, transparent);
     }
 
     body.kodus-chat-bubble-mode .mailbox-app .chat-composer-shell {
@@ -4315,11 +4720,69 @@ $composeCsrfToken = security_get_csrf_token();
       padding-bottom: 4.25rem;
     }
 
+    .mailbox-app .chat-reply-textarea,
+    .compose-modal #composeMessage,
+    .mailbox-app .composer-mention-preview,
+    .compose-modal .composer-mention-preview {
+      box-sizing: border-box;
+      font-family: inherit;
+      font-size: 0.95rem;
+      line-height: 1.5;
+      letter-spacing: 0;
+      transform: none;
+      zoom: 1;
+    }
+
+    .mailbox-app .composer-mention-preview {
+      min-height: 46px;
+      max-height: 120px;
+      padding: 0.78rem 7.65rem 0.78rem 0.95rem;
+    }
+
+    .mailbox-app .chat-mentions-shell.has-file-preview .composer-mention-preview {
+      min-height: 104px;
+      padding-bottom: 4.35rem;
+    }
+
+    body.kodus-chat-bubble-mode .mailbox-app .composer-mention-preview {
+      min-height: 42px;
+      max-height: 92px;
+      padding: 0.62rem 5.1rem 0.62rem 0.75rem;
+    }
+
+    body.kodus-chat-bubble-mode .mailbox-app .chat-mentions-shell.has-file-preview .composer-mention-preview {
+      min-height: 98px;
+      max-height: 148px;
+      padding-bottom: 4.25rem;
+    }
+
+    .compose-modal #composeMessage,
+    .compose-modal .composer-mention-preview {
+      min-height: 154px;
+      padding: 0.75rem 3.4rem 0.75rem 0.85rem;
+    }
+
+    .compose-modal .compose-message-shell.has-file-preview #composeMessage,
+    .compose-modal .compose-message-shell.has-file-preview .composer-mention-preview {
+      min-height: 224px;
+      padding-bottom: 5rem;
+    }
+
+    .mailbox-app .composer-mention-chip,
+    .compose-modal .composer-mention-chip {
+      padding: 0;
+      font-weight: inherit;
+      box-shadow: none;
+    }
+
     body.kodus-chat-bubble-mode .mailbox-app .chat-composer-tool-stack {
       right: 0.65rem;
       bottom: 0.72rem;
       flex-direction: row;
       gap: 0.15rem;
+      padding: 0;
+      background: transparent;
+      box-shadow: none;
     }
 
     body.kodus-chat-bubble-mode .mailbox-app .chat-composer-tool-btn {
@@ -4340,6 +4803,14 @@ $composeCsrfToken = security_get_csrf_token();
       transition: background-color 0.18s ease, color 0.18s ease;
     }
 
+    .mailbox-app #attachBtn {
+      order: 1;
+    }
+
+    .mailbox-app #replyEmojiTrigger {
+      order: 2;
+    }
+
     .mailbox-app .chat-composer-tool-btn:hover,
     .mailbox-app .chat-composer-tool-btn:focus {
       background: color-mix(in srgb, var(--messenger-accent) 16%, transparent);
@@ -4348,6 +4819,9 @@ $composeCsrfToken = security_get_csrf_token();
     }
 
     .mailbox-app .chat-composer-send-btn {
+      order: 3;
+      width: 2.15rem;
+      height: 2.15rem;
       background: var(--messenger-accent, #007bff);
       color: #fff;
     }
@@ -4619,9 +5093,12 @@ $composeCsrfToken = security_get_csrf_token();
                                   ? $base_url . 'inbox/uploads/group_photos/' . rawurlencode((string) $row['group_photo'])
                                   : avatar_resolve_url($displayPicture, $displaySsoAvatar, $base_url, dirname(__DIR__));
                               $presenceUserId = $isGroupThread ? 0 : (int) ($isSenderView ? ($row['recipient_user_id'] ?? 0) : ($row['sender_user_id'] ?? 0));
-                            $presence = $isGroupThread
-                                ? ['detail' => 'Group chat', 'class' => 'offline']
-                                : ['detail' => 'Active status unavailable', 'class' => 'offline'];
+                              $presence = $isGroupThread
+                                  ? ['detail' => 'Group chat', 'class' => 'offline']
+                                  : mailboxClassifyPresence(
+                                      $isSenderView ? ($row['recipient_last_activity'] ?? null) : ($row['sender_last_activity'] ?? null),
+                                      (int) ($isSenderView ? ($row['recipient_is_online'] ?? 0) : ($row['sender_is_online'] ?? 0))
+                                  );
                               $subjectRaw = trim((string) ($row['subject'] ?? ''));
                               $subject = htmlspecialchars($subjectRaw !== '' ? $subjectRaw : 'Quick chat');
                               $latestPreview = $latestPreviews[$messageId] ?? [
@@ -4768,6 +5245,7 @@ $composeCsrfToken = security_get_csrf_token();
                   data-kind="user"
                   data-name="<?php echo htmlspecialchars($composeRecipient['username']); ?>"
                   data-email="<?php echo htmlspecialchars($composeRecipient['email']); ?>"
+                  data-presence="<?php echo htmlspecialchars($composeRecipient['presence']['detail'] ?? 'Offline'); ?>"
                 >
                   <?php echo htmlspecialchars($composeRecipient['username']); ?>
                 </option>
@@ -4830,6 +5308,7 @@ $composeCsrfToken = security_get_csrf_token();
                         data-kind="user"
                         data-name="<?php echo htmlspecialchars($composeRecipient['username']); ?>"
                         data-email="<?php echo htmlspecialchars($composeRecipient['email']); ?>"
+                        data-presence="<?php echo htmlspecialchars($composeRecipient['presence']['detail'] ?? 'Offline'); ?>"
                       >
                         <?php echo htmlspecialchars($composeRecipient['username']); ?>
                       </option>
@@ -4843,6 +5322,7 @@ $composeCsrfToken = security_get_csrf_token();
             <div class="compose-body">
               <label for="composeMessage" class="mb-2">Opening message</label>
               <div class="compose-message-shell">
+                <div class="composer-mention-preview" id="composeMentionPreview" aria-hidden="true"></div>
                 <textarea name="message" id="composeMessage" class="form-control" rows="6" maxlength="5000" placeholder="Write your first message..."></textarea>
                 <div class="compose-tool-stack">
                   <button type="submit" class="compose-tool-btn compose-send-btn" id="composeInlineSendBtn" aria-label="Send chat" title="Send">
@@ -4863,9 +5343,6 @@ $composeCsrfToken = security_get_csrf_token();
               </div>
               <input type="file" name="attachments[]" id="composeAttachments" multiple hidden>
               <div class="compose-attachment-meta">
-                <div class="attachment-limit-hint" id="composeAttachmentHint">
-                  Up to <?= htmlspecialchars((string) $attachmentLimits['max_file_count'], ENT_QUOTES) ?> files, <?= htmlspecialchars((string) $attachmentLimits['max_file_size_label'], ENT_QUOTES) ?> each, <?= htmlspecialchars((string) $attachmentLimits['max_total_size_label'], ENT_QUOTES) ?> total.
-                </div>
                 <div class="compose-file-summary" id="composeFileSummary">No files selected</div>
                 <div class="attachment-validation-message" id="composeAttachmentError" role="alert" aria-live="polite" hidden></div>
               </div>
@@ -5028,32 +5505,7 @@ if (isKodusChatBubbleMode) {
 }
 
 function formatMessengerPresenceText(isOnline, lastActiveAt) {
-    if (isOnline) {
-        return 'Active now';
-    }
-
-    const lastActiveTime = Date.parse(String(lastActiveAt || ''));
-    if (!Number.isFinite(lastActiveTime)) {
-        return 'Active status unavailable';
-    }
-
-    const seconds = Math.max(0, Math.floor((Date.now() - lastActiveTime) / 1000));
-    if (seconds < 60) {
-        return 'Active now';
-    }
-
-    const minutes = Math.floor(seconds / 60);
-    if (minutes < 60) {
-        return `Active ${minutes} minute${minutes === 1 ? '' : 's'} ago`;
-    }
-
-    const hours = Math.floor(minutes / 60);
-    if (hours < 24) {
-        return `Active ${hours} hour${hours === 1 ? '' : 's'} ago`;
-    }
-
-    const days = Math.floor(hours / 24);
-    return `Active ${days} day${days === 1 ? '' : 's'} ago`;
+    return classifyMessengerPresence(lastActiveAt, isOnline).detail;
 }
 
 function applyMessengerPresence(userId, isOnline, lastActiveAt) {
@@ -5062,12 +5514,23 @@ function applyMessengerPresence(userId, isOnline, lastActiveAt) {
         return;
     }
 
+    const effectiveLastActiveAt = lastActiveAt || (isOnline ? new Date().toISOString() : '');
     messengerPresenceOnlineUsers[normalizedUserId] = {
         online: !!isOnline,
-        lastActiveAt: lastActiveAt || new Date().toISOString()
+        lastActiveAt: effectiveLastActiveAt
     };
-    const className = isOnline ? 'online' : 'offline';
-    const detail = formatMessengerPresenceText(!!isOnline, lastActiveAt);
+    const presence = classifyMessengerPresence(effectiveLastActiveAt, isOnline);
+    const className = presence.className;
+    const detail = presence.detail;
+    if (window.parent && window.parent !== window) {
+        window.parent.postMessage({
+            type: 'kodus.presence.changed',
+            user_id: Number(normalizedUserId),
+            online: !!isOnline,
+            last_active_at: effectiveLastActiveAt,
+            presence_class: className
+        }, window.location.origin);
+    }
 
     document.querySelectorAll(`[data-presence-user-id="${normalizedUserId}"]`).forEach(function(node) {
         const dot = node.querySelector('.mailbox-presence-dot, .chat-thread-status-dot');
@@ -5093,6 +5556,62 @@ function applyMessengerPresence(userId, isOnline, lastActiveAt) {
     });
 }
 
+function formatMessengerRelativeActivity(timestamp) {
+    const seconds = Math.max(0, Math.floor((Date.now() - timestamp) / 1000));
+    if (seconds < 60) {
+        return 'just now';
+    }
+
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) {
+        return `${minutes} min${minutes === 1 ? '' : 's'} ago`;
+    }
+
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) {
+        return `${hours} hour${hours === 1 ? '' : 's'} ago`;
+    }
+
+    const days = Math.floor(hours / 24);
+    return `${days} day${days === 1 ? '' : 's'} ago`;
+}
+
+function classifyMessengerPresence(lastActiveAt, isOnline) {
+    const lastActiveTime = Date.parse(String(lastActiveAt || ''));
+    if (!Number.isFinite(lastActiveTime)) {
+        return { className: 'offline', detail: lastActiveAt ? 'Activity unavailable' : 'No activity recorded' };
+    }
+
+    const seconds = Math.max(0, Math.floor((Date.now() - lastActiveTime) / 1000));
+    if (isOnline && seconds <= 300) {
+        return { className: 'online', detail: 'Active just now' };
+    }
+
+    const detail = 'Last active ' + formatMessengerRelativeActivity(lastActiveTime);
+    return { className: seconds <= 1800 ? 'idle' : 'offline', detail };
+}
+
+function notifyParentKodusBubbleThreadState() {
+    if (!isKodusChatBubbleMode || !window.parent || window.parent === window) {
+        return;
+    }
+
+    const shell = document.querySelector('.chat-shell');
+    if (!shell) {
+        return;
+    }
+
+    const dot = document.querySelector('.chat-thread-status-dot');
+    window.parent.postMessage({
+        type: 'kodus.chatBubble.threadState',
+        message_id: Number(shell.dataset.messageId || 0),
+        title: document.querySelector('.mailbox-read-subject')?.textContent?.trim() || '',
+        avatar: shell.dataset.threadAvatar || document.querySelector('.chat-thread-avatar')?.getAttribute('src') || '',
+        presence_user_id: Number(shell.dataset.presenceUserId || 0),
+        presence_class: dot?.classList.contains('is-online') ? 'online' : (dot?.classList.contains('is-idle') ? 'idle' : 'offline')
+    }, window.location.origin);
+}
+
 function syncVisibleMessengerPresence() {
     Object.keys(messengerPresenceOnlineUsers).forEach(function(userId) {
         const presence = messengerPresenceOnlineUsers[userId] || {};
@@ -5112,26 +5631,81 @@ function normalizeBubbleThreadMenu() {
     });
 }
 
-function enhanceEmojiMenu(menu) {
-    if (!menu || menu.dataset.enhanced === '1') {
+const KODUS_EMOJI_CATEGORIES = [
+    { name: 'Smileys', icon: '😀', items: [['😀','grinning smile happy'],['😃','smile happy'],['😄','laugh happy'],['😁','grin'],['😆','laugh'],['😅','sweat smile'],['😂','joy tears'],['🤣','rofl laugh'],['😊','blush smile'],['😇','angel'],['🙂','slight smile'],['🙃','upside down'],['😉','wink'],['😍','heart eyes love'],['😘','kiss'],['😗','kiss'],['😙','kiss smile'],['😚','kiss closed'],['😋','yum'],['😛','tongue'],['😜','wink tongue'],['🤪','zany'],['😝','tongue'],['🤑','money'],['🤗','hug'],['🤭','oops'],['🤫','shush'],['🤔','thinking'],['🤐','zipper'],['🤨','raised eyebrow'],['😐','neutral'],['😑','expressionless'],['😶','no mouth'],['😏','smirk'],['😒','unamused'],['🙄','eyes'],['😬','grimace'],['🤥','lying'],['😌','relieved'],['😔','sad'],['😪','sleepy'],['🤤','drool'],['😴','sleep'],['😷','mask'],['🤒','sick'],['🤕','hurt'],['🤢','nausea'],['🤮','vomit'],['🤧','sneeze'],['🥵','hot'],['🥶','cold'],['🥴','woozy'],['😵','dizzy'],['🤯','mind blown'],['🥳','party'],['😎','cool'],['🤓','nerd'],['🧐','monocle'],['😕','confused'],['😟','worried'],['🙁','frown'],['☹️','frown'],['😮','wow'],['😯','hushed'],['😲','astonished'],['😳','flushed'],['🥺','pleading'],['😦','frown open'],['😧','anguish'],['😨','fear'],['😰','cold sweat'],['😥','sad sweat'],['😢','cry'],['😭','sob'],['😱','scream'],['😖','confounded'],['😣','persevere'],['😞','disappointed'],['😓','sweat'],['😩','weary'],['😫','tired'],['😤','triumph'],['😡','angry'],['😠','mad'],['🤬','curse'],['😈','devil'],['💀','skull'],['💩','poop'],['🤡','clown'],['👻','ghost'],['👽','alien'],['🤖','robot'],['😺','cat smile'],['😹','cat joy'],['😻','cat love'],['🙈','see no evil'],['🙉','hear no evil'],['🙊','speak no evil'],['💋','kiss mark'],['💌','love letter'],['💘','cupid'],['💝','gift heart'],['💖','sparkling heart'],['💗','growing heart'],['💓','beating heart'],['💞','revolving hearts'],['💕','two hearts'],['💟','heart decoration'],['❣️','heart exclamation'],['💔','broken heart'],['❤️','heart love'],['🧡','orange heart'],['💛','yellow heart'],['💚','green heart'],['💙','blue heart'],['💜','purple heart'],['🤎','brown heart'],['🖤','black heart'],['🤍','white heart']] },
+    { name: 'People', icon: '👋', items: [['👋','wave hello'],['🤚','raised hand'],['🖐️','hand'],['✋','hand stop'],['🖖','vulcan'],['👌','ok hand'],['🤌','pinched fingers'],['🤏','pinch'],['✌️','peace'],['🤞','fingers crossed'],['🤟','love you'],['🤘','rock'],['🤙','call me'],['👈','left'],['👉','right'],['👆','up'],['👇','down'],['☝️','point up'],['👍','thumbs up like'],['👎','thumbs down'],['✊','fist'],['👊','punch'],['🤛','left fist'],['🤜','right fist'],['👏','clap'],['🙌','raised hands'],['👐','open hands'],['🤲','palms'],['🤝','handshake'],['🙏','pray thanks'],['✍️','writing'],['💅','nails'],['💪','muscle strong'],['🦾','robot arm'],['🦿','leg'],['🦵','leg'],['👂','ear'],['👃','nose'],['🧠','brain'],['🫀','heart organ'],['🫁','lungs'],['🦷','tooth'],['👀','eyes'],['👁️','eye'],['👅','tongue'],['👄','mouth'],['👶','baby'],['🧒','child'],['👦','boy'],['👧','girl'],['🧑','person'],['👨','man'],['👩','woman'],['🧓','older person'],['👴','old man'],['👵','old woman'],['🙍','frown person'],['🙎','pout person'],['🙅','no gesture'],['🙆','ok gesture'],['💁','info person'],['🙋','raise hand'],['🧏','deaf person'],['🙇','bow'],['🤦','facepalm'],['🤷','shrug'],['👨‍💻','man technologist'],['👩‍💻','woman technologist'],['👮','police'],['👷','worker'],['💂','guard'],['🕵️','detective'],['👩‍⚕️','health worker'],['👨‍🏫','teacher'],['👩‍🍳','cook'],['👨‍🎨','artist'],['👩‍🚀','astronaut'],['🧑‍⚖️','judge'],['🎅','santa'],['🧙','mage'],['🧚','fairy'],['🧛','vampire'],['🧜','merperson'],['🧝','elf'],['🧟','zombie'],['💆','massage'],['💇','haircut'],['🚶','walk'],['🏃','run'],['💃','dance'],['🕺','dance man'],['🧘','yoga'],['🛀','bath'],['🛌','sleep bed'],['👭','women holding hands'],['👫','people holding hands'],['👬','men holding hands'],['💏','kiss couple'],['💑','couple heart'],['👪','family']] },
+    { name: 'Animals', icon: '🐶', items: [['🐶','dog'],['🐱','cat'],['🐭','mouse'],['🐹','hamster'],['🐰','rabbit'],['🦊','fox'],['🐻','bear'],['🐼','panda'],['🐨','koala'],['🐯','tiger'],['🦁','lion'],['🐮','cow'],['🐷','pig'],['🐸','frog'],['🐵','monkey'],['🐔','chicken'],['🐧','penguin'],['🐦','bird'],['🐤','chick'],['🦆','duck'],['🦅','eagle'],['🦉','owl'],['🦇','bat'],['🐺','wolf'],['🐗','boar'],['🐴','horse'],['🦄','unicorn'],['🐝','bee'],['🪱','worm'],['🐛','bug'],['🦋','butterfly'],['🐌','snail'],['🐞','lady beetle'],['🐜','ant'],['🪰','fly'],['🪲','beetle'],['🪳','cockroach'],['🦟','mosquito'],['🦗','cricket'],['🕷️','spider'],['🦂','scorpion'],['🐢','turtle'],['🐍','snake'],['🦎','lizard'],['🦖','t rex'],['🦕','dinosaur'],['🐙','octopus'],['🦑','squid'],['🦐','shrimp'],['🦞','lobster'],['🦀','crab'],['🐡','blowfish'],['🐠','fish'],['🐟','fish'],['🐬','dolphin'],['🐳','whale'],['🦈','shark'],['🐊','crocodile'],['🐅','tiger'],['🐆','leopard'],['🦓','zebra'],['🦍','gorilla'],['🦧','orangutan'],['🐘','elephant'],['🦛','hippo'],['🦏','rhino'],['🐪','camel'],['🦒','giraffe'],['🦘','kangaroo'],['🦬','bison'],['🐃','buffalo'],['🐄','cow'],['🐎','horse'],['🐖','pig'],['🐏','ram'],['🐑','sheep'],['🦙','llama'],['🐐','goat'],['🦌','deer'],['🐕','dog'],['🐈','cat'],['🪶','feather'],['🐓','rooster'],['🦃','turkey'],['🦤','dodo'],['🦢','swan'],['🦩','flamingo'],['🦚','peacock'],['🦜','parrot'],['🌵','cactus'],['🎄','tree'],['🌲','evergreen'],['🌳','tree'],['🌴','palm'],['🪵','wood'],['🌱','seedling'],['🌿','herb'],['☘️','shamrock'],['🍀','clover'],['🎍','bamboo'],['🪴','plant'],['🌷','tulip'],['🌹','rose'],['🌻','sunflower'],['🌼','blossom'],['🌸','cherry blossom'],['💐','bouquet']] },
+    { name: 'Food', icon: '🍔', items: [['🍏','apple'],['🍎','apple red'],['🍐','pear'],['🍊','orange'],['🍋','lemon'],['🍌','banana'],['🍉','watermelon'],['🍇','grapes'],['🍓','strawberry'],['🫐','blueberries'],['🍈','melon'],['🍒','cherries'],['🍑','peach'],['🥭','mango'],['🍍','pineapple'],['🥥','coconut'],['🥝','kiwi'],['🍅','tomato'],['🍆','eggplant'],['🥑','avocado'],['🥦','broccoli'],['🥬','greens'],['🥒','cucumber'],['🌶️','pepper'],['🫑','bell pepper'],['🌽','corn'],['🥕','carrot'],['🫒','olive'],['🧄','garlic'],['🧅','onion'],['🥔','potato'],['🍠','sweet potato'],['🥐','croissant'],['🥯','bagel'],['🍞','bread'],['🥖','baguette'],['🥨','pretzel'],['🧀','cheese'],['🥚','egg'],['🍳','cooking'],['🧈','butter'],['🥞','pancakes'],['🧇','waffle'],['🥓','bacon'],['🥩','steak'],['🍗','chicken'],['🍖','meat'],['🌭','hot dog'],['🍔','burger'],['🍟','fries'],['🍕','pizza'],['🥪','sandwich'],['🥙','stuffed flatbread'],['🧆','falafel'],['🌮','taco'],['🌯','burrito'],['🫔','tamale'],['🥗','salad'],['🥘','paella'],['🫕','fondue'],['🥫','canned food'],['🍝','pasta'],['🍜','ramen'],['🍲','stew'],['🍛','curry'],['🍣','sushi'],['🍱','bento'],['🥟','dumpling'],['🦪','oyster'],['🍤','shrimp'],['🍙','rice ball'],['🍚','rice'],['🍘','cracker'],['🍥','fish cake'],['🥠','fortune cookie'],['🥮','moon cake'],['🍢','oden'],['🍡','dango'],['🍧','shaved ice'],['🍨','ice cream'],['🍦','soft serve'],['🥧','pie'],['🧁','cupcake'],['🍰','cake'],['🎂','birthday'],['🍮','custard'],['🍭','lollipop'],['🍬','candy'],['🍫','chocolate'],['🍿','popcorn'],['🍩','donut'],['🍪','cookie'],['🌰','chestnut'],['🥜','peanuts'],['🍯','honey'],['🥛','milk'],['🍼','baby bottle'],['☕','coffee'],['🫖','teapot'],['🍵','tea'],['🧃','juice'],['🥤','drink'],['🧋','bubble tea'],['🍶','sake'],['🍺','beer'],['🍻','cheers'],['🥂','toast'],['🍷','wine'],['🥃','tumbler'],['🍸','cocktail'],['🍹','tropical drink'],['🧉','mate'],['🍾','champagne'],['🧊','ice']] },
+    { name: 'Activities', icon: '⚽', items: [['⚽','soccer'],['🏀','basketball'],['🏈','football'],['⚾','baseball'],['🥎','softball'],['🎾','tennis'],['🏐','volleyball'],['🏉','rugby'],['🥏','frisbee'],['🎱','pool'],['🪀','yo yo'],['🏓','ping pong'],['🏸','badminton'],['🏒','hockey'],['🏑','field hockey'],['🥍','lacrosse'],['🏏','cricket'],['🪃','boomerang'],['🥅','goal'],['⛳','golf'],['🪁','kite'],['🏹','archery'],['🎣','fishing'],['🤿','diving'],['🥊','boxing'],['🥋','martial arts'],['🎽','running shirt'],['🛹','skateboard'],['🛼','roller skate'],['🛷','sled'],['⛸️','ice skate'],['🥌','curling'],['🎿','ski'],['⛷️','skier'],['🏂','snowboard'],['🏋️','lifting'],['🤼','wrestling'],['🤸','cartwheel'],['⛹️','basketball person'],['🤺','fencing'],['🤾','handball'],['🏌️','golf person'],['🏇','horse racing'],['🧘','meditation'],['🏄','surfing'],['🏊','swimming'],['🤽','water polo'],['🚣','rowing'],['🧗','climbing'],['🚵','mountain bike'],['🚴','bike'],['🏆','trophy'],['🥇','gold medal'],['🥈','silver medal'],['🥉','bronze medal'],['🏅','medal'],['🎖️','military medal'],['🏵️','rosette'],['🎗️','ribbon'],['🎫','ticket'],['🎟️','tickets'],['🎪','circus'],['🤹','juggling'],['🎭','theater'],['🩰','ballet'],['🎨','art'],['🎬','movie'],['🎤','microphone'],['🎧','headphones'],['🎼','music'],['🎹','piano'],['🥁','drum'],['🪘','drum'],['🎷','saxophone'],['🎺','trumpet'],['🪗','accordion'],['🎸','guitar'],['🪕','banjo'],['🎻','violin'],['🎲','dice'],['♟️','chess'],['🎯','target'],['🎳','bowling'],['🎮','game'],['🎰','slot'],['🧩','puzzle']] },
+    { name: 'Travel', icon: '✈️', items: [['🚗','car'],['🚕','taxi'],['🚙','suv'],['🚌','bus'],['🚎','trolley'],['🏎️','race car'],['🚓','police car'],['🚑','ambulance'],['🚒','fire truck'],['🚐','van'],['🛻','pickup'],['🚚','truck'],['🚛','truck'],['🚜','tractor'],['🦯','cane'],['🦽','wheelchair'],['🛴','scooter'],['🚲','bike'],['🛵','motor scooter'],['🏍️','motorcycle'],['🛺','auto rickshaw'],['🚨','siren'],['🚔','police'],['🚍','bus'],['🚘','car front'],['🚖','taxi'],['🚡','tram'],['🚠','cableway'],['🚟','railway'],['🚃','rail car'],['🚋','tram'],['🚞','mountain railway'],['🚝','monorail'],['🚄','train'],['🚅','bullet train'],['🚈','light rail'],['🚂','locomotive'],['🚆','train'],['🚇','metro'],['🚊','tram'],['🚉','station'],['✈️','airplane'],['🛫','departure'],['🛬','arrival'],['🛩️','small plane'],['💺','seat'],['🛰️','satellite'],['🚀','rocket'],['🛸','ufo'],['🚁','helicopter'],['🛶','canoe'],['⛵','sailboat'],['🚤','speedboat'],['🛥️','motor boat'],['🛳️','ship'],['⛴️','ferry'],['🚢','ship'],['⚓','anchor'],['🪝','hook'],['⛽','fuel'],['🚧','construction'],['🚦','traffic light'],['🚥','traffic light'],['🚏','bus stop'],['🗺️','map'],['🗿','moai'],['🗽','statue liberty'],['🗼','tokyo tower'],['🏰','castle'],['🏯','castle japan'],['🏟️','stadium'],['🎡','ferris wheel'],['🎢','roller coaster'],['🎠','carousel'],['⛲','fountain'],['⛱️','umbrella beach'],['🏖️','beach'],['🏝️','island'],['🏜️','desert'],['🌋','volcano'],['⛰️','mountain'],['🏔️','snow mountain'],['🗻','fuji'],['🏕️','camping'],['⛺','tent'],['🛖','hut'],['🏠','house'],['🏡','home'],['🏢','office'],['🏣','post office'],['🏥','hospital'],['🏦','bank'],['🏨','hotel'],['🏪','store'],['🏫','school'],['🏬','department store'],['🏭','factory'],['🏛️','classical building'],['⛪','church'],['🕌','mosque'],['🕍','synagogue'],['🛕','temple'],['🕋','kaaba'],['⛩️','shrine'],['🌅','sunrise'],['🌄','sunrise mountains'],['🌠','shooting star'],['🎇','sparkler'],['🎆','fireworks'],['🌇','sunset'],['🌃','night'],['🌌','milky way'],['🌁','fog'],['🌉','bridge'],['♨️','hot springs']] },
+    { name: 'Objects', icon: '💡', items: [['⌚','watch'],['📱','phone'],['📲','phone arrow'],['💻','laptop'],['⌨️','keyboard'],['🖥️','desktop'],['🖨️','printer'],['🖱️','mouse'],['🖲️','trackball'],['🕹️','joystick'],['🗜️','clamp'],['💽','minidisc'],['💾','floppy'],['💿','disc'],['📀','dvd'],['📼','vhs'],['📷','camera'],['📸','camera flash'],['📹','video camera'],['🎥','movie camera'],['📽️','projector'],['🎞️','film'],['📞','phone'],['☎️','telephone'],['📟','pager'],['📠','fax'],['📺','tv'],['📻','radio'],['🎙️','studio mic'],['🎚️','slider'],['🎛️','control knobs'],['🧭','compass'],['⏱️','stopwatch'],['⏲️','timer'],['⏰','alarm'],['🕰️','clock'],['⌛','hourglass'],['⏳','hourglass'],['📡','satellite dish'],['🔋','battery'],['🔌','plug'],['💡','light bulb'],['🔦','flashlight'],['🕯️','candle'],['🪔','lamp'],['🧯','extinguisher'],['🛢️','oil'],['💸','money'],['💵','dollar'],['💴','yen'],['💶','euro'],['💷','pound'],['🪙','coin'],['💰','money bag'],['💳','credit card'],['💎','gem'],['⚖️','scale'],['🪜','ladder'],['🧰','toolbox'],['🔧','wrench'],['🔨','hammer'],['⚒️','hammer pick'],['🛠️','tools'],['⛏️','pick'],['🪓','axe'],['🪚','saw'],['🔩','nut bolt'],['⚙️','gear'],['🪤','trap'],['🧱','brick'],['⛓️','chains'],['🧲','magnet'],['🔫','water pistol'],['💣','bomb'],['🧨','firecracker'],['🪓','axe'],['🔪','knife'],['🗡️','dagger'],['⚔️','swords'],['🛡️','shield'],['🚬','cigarette'],['⚰️','coffin'],['⚱️','urn'],['🏺','amphora'],['🔮','crystal ball'],['📿','beads'],['🧿','nazar'],['💈','barber'],['⚗️','alembic'],['🔭','telescope'],['🔬','microscope'],['🕳️','hole'],['🩹','bandage'],['🩺','stethoscope'],['💊','pill'],['💉','syringe'],['🩸','blood'],['🧬','dna'],['🦠','microbe'],['🧫','petri dish'],['🧪','test tube'],['🌡️','thermometer'],['🧹','broom'],['🧺','basket'],['🧻','paper'],['🚽','toilet'],['🚰','water'],['🚿','shower'],['🛁','bathtub'],['🪒','razor'],['🧽','sponge'],['🧴','lotion'],['🛎️','bell'],['🔑','key'],['🗝️','old key'],['🚪','door'],['🪑','chair'],['🛋️','couch'],['🛏️','bed'],['🧸','teddy'],['🖼️','picture'],['🛍️','shopping bags'],['🛒','cart'],['🎁','gift'],['🎈','balloon'],['🎏','carp streamer'],['🎀','ribbon'],['🪄','magic wand'],['🪅','pinata'],['🎊','confetti'],['🎉','party popper'],['📩','mail'],['📨','incoming mail'],['📧','email'],['💌','love letter'],['📥','inbox'],['📤','outbox'],['📦','package'],['🏷️','label'],['📌','pin'],['📍','pin'],['📎','paperclip'],['🖇️','paperclips'],['📏','ruler'],['📐','triangle ruler'],['✂️','scissors'],['🗃️','card box'],['🗄️','file cabinet'],['🗑️','trash'],['🔒','lock'],['🔓','unlock'],['🔏','locked pen'],['🔐','locked key'],['🖊️','pen'],['🖋️','fountain pen'],['✒️','nib'],['📝','memo'],['📁','folder'],['📂','open folder'],['🗂️','dividers'],['📅','calendar'],['📆','tear calendar'],['🗒️','notepad'],['🗓️','calendar'],['📇','card index'],['📈','chart up'],['📉','chart down'],['📊','bar chart'],['📋','clipboard'],['📚','books'],['📖','book'],['🔖','bookmark'],['🧷','safety pin']] },
+    { name: 'Symbols', icon: '✅', items: [['✅','check'],['☑️','checked box'],['✔️','check mark'],['❌','cross'],['❎','cross mark'],['➕','plus'],['➖','minus'],['➗','divide'],['✖️','multiply'],['♾️','infinity'],['‼️','double exclamation'],['⁉️','exclamation question'],['❓','question'],['❔','question white'],['❕','exclamation white'],['❗','exclamation'],['〰️','wavy dash'],['💱','currency exchange'],['💲','dollar'],['⚕️','medical'],['♻️','recycle'],['⚜️','fleur de lis'],['🔱','trident'],['📛','name badge'],['🔰','beginner'],['⭕','circle'],['🟢','green circle'],['🟡','yellow circle'],['🟠','orange circle'],['🔴','red circle'],['🟣','purple circle'],['🔵','blue circle'],['⚫','black circle'],['⚪','white circle'],['🟤','brown circle'],['⬛','black square'],['⬜','white square'],['◼️','black medium square'],['◻️','white medium square'],['◾','black small square'],['◽','white small square'],['▪️','black tiny square'],['▫️','white tiny square'],['🔶','orange diamond'],['🔷','blue diamond'],['🔸','small orange diamond'],['🔹','small blue diamond'],['🔺','red triangle up'],['🔻','red triangle down'],['💠','diamond dot'],['🔘','radio'],['🔳','white square button'],['🔲','black square button'],['🏁','checkered flag'],['🚩','triangular flag'],['🎌','crossed flags'],['🏳️','white flag'],['🏴','black flag'],['🏳️‍🌈','rainbow flag'],['🏳️‍⚧️','trans flag'],['🔔','bell'],['🔕','bell off'],['📣','megaphone'],['📢','loudspeaker'],['💬','speech'],['💭','thought'],['🗯️','anger bubble'],['♈','aries'],['♉','taurus'],['♊','gemini'],['♋','cancer'],['♌','leo'],['♍','virgo'],['♎','libra'],['♏','scorpio'],['♐','sagittarius'],['♑','capricorn'],['♒','aquarius'],['♓','pisces'],['⛎','ophiuchus'],['🔀','shuffle'],['🔁','repeat'],['🔂','repeat one'],['▶️','play'],['⏩','fast forward'],['⏭️','next'],['⏯️','play pause'],['◀️','reverse'],['⏪','rewind'],['⏮️','previous'],['🔼','up'],['⏫','fast up'],['🔽','down'],['⏬','fast down'],['⏸️','pause'],['⏹️','stop'],['⏺️','record'],['⏏️','eject'],['🎦','cinema'],['🔅','low brightness'],['🔆','brightness'],['📶','signal'],['📳','vibration'],['📴','mobile off'],['♀️','female'],['♂️','male'],['⚧️','transgender'],['✳️','asterisk'],['✴️','star'],['❇️','sparkle'],['©️','copyright'],['®️','registered'],['™️','trademark'],['#️⃣','hash'],['*️⃣','asterisk key'],['0️⃣','zero'],['1️⃣','one'],['2️⃣','two'],['3️⃣','three'],['4️⃣','four'],['5️⃣','five'],['6️⃣','six'],['7️⃣','seven'],['8️⃣','eight'],['9️⃣','nine'],['🔟','ten']] },
+    { name: 'Flags', icon: '🏳️', items: [['🇺🇸','flag united states usa'],['🇵🇭','flag philippines'],['🇨🇦','flag canada'],['🇲🇽','flag mexico'],['🇧🇷','flag brazil'],['🇦🇷','flag argentina'],['🇬🇧','flag united kingdom uk'],['🇮🇪','flag ireland'],['🇫🇷','flag france'],['🇩🇪','flag germany'],['🇮🇹','flag italy'],['🇪🇸','flag spain'],['🇵🇹','flag portugal'],['🇳🇱','flag netherlands'],['🇧🇪','flag belgium'],['🇨🇭','flag switzerland'],['🇦🇹','flag austria'],['🇸🇪','flag sweden'],['🇳🇴','flag norway'],['🇩🇰','flag denmark'],['🇫🇮','flag finland'],['🇵🇱','flag poland'],['🇺🇦','flag ukraine'],['🇬🇷','flag greece'],['🇹🇷','flag turkey'],['🇮🇱','flag israel'],['🇸🇦','flag saudi arabia'],['🇦🇪','flag uae'],['🇮🇳','flag india'],['🇵🇰','flag pakistan'],['🇧🇩','flag bangladesh'],['🇨🇳','flag china'],['🇯🇵','flag japan'],['🇰🇷','flag korea'],['🇹🇭','flag thailand'],['🇻🇳','flag vietnam'],['🇮🇩','flag indonesia'],['🇲🇾','flag malaysia'],['🇸🇬','flag singapore'],['🇦🇺','flag australia'],['🇳🇿','flag new zealand'],['🇿🇦','flag south africa'],['🇳🇬','flag nigeria'],['🇰🇪','flag kenya'],['🇪🇬','flag egypt']] }
+];
+
+function flattenKodusEmojis() {
+    return KODUS_EMOJI_CATEGORIES.flatMap(category => category.items.map(item => ({
+        emoji: item[0],
+        keywords: item[1],
+        category: category.name
+    })));
+}
+
+function renderEmojiMenu(menu, onSelect, options = {}) {
+    if (!menu) {
         return;
     }
 
-    const buttons = Array.from(menu.querySelectorAll('.emoji-item'));
+    const buttonClass = options.reaction ? 'chat-reaction-add emoji-item' : 'emoji-item';
     const grid = document.createElement('div');
     grid.className = 'emoji-grid';
-    buttons.forEach(button => grid.appendChild(button));
+    KODUS_EMOJI_CATEGORIES.forEach(function(category) {
+        const label = document.createElement('div');
+        label.className = 'emoji-panel-label';
+        label.textContent = category.name;
+        grid.appendChild(label);
+        category.items.forEach(function(item) {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = buttonClass;
+            button.textContent = item[0];
+            button.dataset.emoji = item[0];
+            button.dataset.keywords = `${category.name} ${item[1]}`.toLowerCase();
+            if (typeof onSelect === 'function') {
+                button.addEventListener('click', function(event) {
+                    event.preventDefault();
+                    onSelect(item[0], event);
+                });
+            }
+            grid.appendChild(button);
+        });
+    });
 
     const head = document.createElement('div');
     head.className = 'emoji-panel-head';
-    head.innerHTML = `
-      <span>Emoji</span>
-      <span class="emoji-panel-cats" aria-hidden="true">
-        <span class="emoji-panel-cat">☺</span>
-        <span class="emoji-panel-cat">★</span>
-        <span class="emoji-panel-cat">✓</span>
-      </span>
-    `;
+    const headLabel = document.createElement('span');
+    headLabel.textContent = 'Emoji';
+    const cats = document.createElement('span');
+    cats.className = 'emoji-panel-cats';
+    KODUS_EMOJI_CATEGORIES.forEach(function(category) {
+        const catButton = document.createElement('button');
+        catButton.type = 'button';
+        catButton.className = 'emoji-panel-cat';
+        catButton.textContent = category.icon;
+        catButton.title = category.name;
+        catButton.setAttribute('aria-label', category.name);
+        catButton.addEventListener('click', function(event) {
+            event.preventDefault();
+            const label = Array.from(grid.querySelectorAll('.emoji-panel-label')).find(function(node) {
+                return node.textContent === category.name;
+            });
+            if (label) {
+                label.scrollIntoView({ block: 'start' });
+            }
+        });
+        cats.appendChild(catButton);
+    });
+    head.append(headLabel, cats);
 
     const search = document.createElement('input');
     search.type = 'search';
@@ -5141,12 +5715,42 @@ function enhanceEmojiMenu(menu) {
     search.addEventListener('input', function() {
         const query = this.value.trim().toLowerCase();
         grid.querySelectorAll('.emoji-item').forEach(function(button) {
-            button.hidden = query !== '' && !button.textContent.toLowerCase().includes(query);
+            button.hidden = query !== '' && !button.textContent.toLowerCase().includes(query) && !(button.dataset.keywords || '').includes(query);
+        });
+        grid.querySelectorAll('.emoji-panel-label').forEach(function(label) {
+            const nextVisible = Array.from(grid.querySelectorAll('.emoji-item')).some(function(button) {
+                return !button.hidden && button.dataset.keywords?.includes(label.textContent.toLowerCase());
+            });
+            label.hidden = query !== '' && !nextVisible;
         });
     });
 
     menu.replaceChildren(head, search, grid);
     menu.dataset.enhanced = '1';
+}
+
+function enhanceEmojiMenu(menu) {
+    if (!menu || menu.dataset.enhanced === '1') {
+        return;
+    }
+
+    if (menu.classList.contains('chat-reaction-picker') || menu.dataset.emojiPicker === 'reaction') {
+        renderEmojiMenu(menu, null, { reaction: true });
+        return;
+    }
+
+    const existingButtons = Array.from(menu.querySelectorAll('.emoji-item'));
+    if (!existingButtons.length) {
+        renderEmojiMenu(menu, null);
+        return;
+    }
+
+    renderEmojiMenu(menu, function(emoji, event) {
+        const original = existingButtons.find(button => button.textContent === emoji);
+        if (original) {
+            original.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+        }
+    });
 }
 
 function positionEmojiMenu(trigger, menu) {
@@ -5192,7 +5796,7 @@ function positionEmojiMenu(trigger, menu) {
             bottom: triggerRect.bottom - modalRect.top
         }
         : triggerRect;
-    const menuWidth = Math.min(menuRect.width || 268, bounds.right - bounds.left);
+    const menuWidth = Math.min(menuRect.width || 328, bounds.right - bounds.left);
     const menuHeight = Math.min(menuRect.height || 238, bounds.bottom - bounds.top);
 
     let left = localTrigger.right - menuWidth;
@@ -5266,7 +5870,9 @@ window.KODUSEmojiPicker = {
     close: closeEmojiPicker,
     toggle: toggleEmojiPicker,
     position: positionEmojiMenu,
-    enhance: enhanceEmojiMenu
+    enhance: enhanceEmojiMenu,
+    render: renderEmojiMenu,
+    all: flattenKodusEmojis
 };
 
 function syncMessengerViewport() {
@@ -5475,6 +6081,7 @@ function openMessage(id) {
 
     stopTypingHeartbeat();
     clearTypingIndicator();
+    clearReplyQuoteDraft();
     lastOpenedId = id;
     window.KODUSActiveMessengerThreadId = Number(id) || null;
     window.activeThreadId = String(id || '');
@@ -5492,6 +6099,7 @@ function openMessage(id) {
         initializeThreadExperience();
         normalizeBubbleThreadMenu();
         syncVisibleMessengerPresence();
+        notifyParentKodusBubbleThreadState();
         scrollConversationToBottomOnOpen();
         firstLoadDone = true;
     });
@@ -5858,8 +6466,6 @@ function renderReactionSummary($container, summary) {
     const summaryItems = Array.isArray(summary) ? summary : [];
     const messageId = String($container.data('message-id') || '');
     const replyId = $container.attr('data-reply-id');
-    const pickerEmojis = ['👍', '❤️', '😂', '🎉', '🔥', '👏', '🙏', '✅', '👀', '💡'];
-    const pickerEmojiChoices = ['👍', '❤️', '😂', '🎉', '🔥', '👏', '🙏', '✅', '👀', '💡'];
     const summaryHtml = summaryItems.map(function(item) {
         const emoji = String(item.emoji || '');
         const count = Number(item.count || 0);
@@ -5867,9 +6473,6 @@ function renderReactionSummary($container, summary) {
         const reactors = Array.isArray(item.reactors) ? item.reactors.filter(Boolean) : [];
         const details = `${emoji} ${reactors.length ? reactors.join(', ') : 'No reactions yet'}`;
         return `<button type="button" class="chat-reaction-chip${active}" data-emoji="${escapeReplyHtml(emoji)}" data-reaction-details="${escapeReplyHtml(details)}" aria-label="${escapeReplyHtml(details)}"><span class="chat-reaction-emoji">${escapeReplyHtml(emoji)}</span><span class="chat-reaction-count">${count}</span></button>`;
-    }).join('');
-    const pickerHtml = pickerEmojiChoices.map(function(emoji) {
-        return `<button type="button" class="chat-reaction-add" data-emoji="${emoji}">${emoji}</button>`;
     }).join('');
 
     $container.attr('data-message-id', messageId);
@@ -5883,7 +6486,7 @@ function renderReactionSummary($container, summary) {
           <button type="button" class="chat-reaction-trigger" aria-label="Add reaction" aria-expanded="false">
             <i class="far fa-smile"></i>
           </button>
-          <div class="chat-reaction-picker" hidden>${pickerHtml}</div>
+          <div class="chat-reaction-picker" data-emoji-picker="reaction" hidden></div>
         </div>
       </div>
 	    `);
@@ -5919,6 +6522,8 @@ function closeReactionPickers(exceptTrigger = null) {
     });
 }
 
+window.closeReactionPickers = closeReactionPickers;
+
 function findReactionTarget(state) {
     if (!state || !state.messageId) {
         return null;
@@ -5949,8 +6554,8 @@ function positionReactionPicker(state) {
     const messageBubble = target.closest('.reply') || target;
     const picker = state.picker;
     const anchorRect = messageBubble.getBoundingClientRect();
-    const pickerWidth = Math.min(214, Math.max(180, window.innerWidth - 16));
-    const pickerHeight = picker.offsetHeight || 170;
+    const pickerWidth = Math.min(328, Math.max(220, window.innerWidth - 16));
+    const pickerHeight = picker.offsetHeight || 320;
     const gap = 8;
     const minLeft = gap;
     const maxLeft = Math.max(minLeft, window.innerWidth - pickerWidth - gap);
@@ -5974,6 +6579,7 @@ function positionReactionPicker(state) {
     picker.style.left = `${left}px`;
     picker.style.top = `${top}px`;
     picker.style.width = `${pickerWidth}px`;
+    picker.style.zIndex = '2140';
     logReactionPickerDebug('position', { messageId: state.messageId, replyId: state.replyId, left, top, anchorRect });
 }
 
@@ -6023,6 +6629,7 @@ function openReactionPicker(trigger) {
 
     const replyId = String(reactions.getAttribute('data-reply-id') || '');
     closeReactionPickers(trigger);
+    window.KODUSEmojiPicker?.enhance(picker);
     document.body.appendChild(picker);
     picker.hidden = false;
     trigger.setAttribute('aria-expanded', 'true');
@@ -6040,14 +6647,15 @@ function applyThreadSearch(query) {
         const $body = $(this);
         const plainText = $body.text();
         const escapedText = $('<div>').text(plainText).html();
+        const mentionHighlightedText = escapedText.replace(/(^|[\s(])(@(?:everyone|[\p{L}\p{N}_.-]+))/gu, '$1<span class="chat-mention-chip">$2</span>');
 
         if (!trimmed) {
-            $body.html(escapedText.replace(/\n/g, '<br>'));
+            $body.html(mentionHighlightedText.replace(/\n/g, '<br>'));
             return;
         }
 
         const pattern = new RegExp(`(${escapeRegExp(trimmed)})`, 'ig');
-        const highlighted = escapedText.replace(pattern, '<mark class="chat-search-hit">$1</mark>');
+        const highlighted = mentionHighlightedText.replace(pattern, '<mark class="chat-search-hit">$1</mark>');
         const count = (plainText.match(new RegExp(escapeRegExp(trimmed), 'ig')) || []).length;
         matches += count;
         $body.html(highlighted.replace(/\n/g, '<br>'));
@@ -6063,6 +6671,7 @@ function applyThreadSearch(query) {
 }
 
 function initializeThreadExperience() {
+    restoreReplyQuoteDraft();
     const searchValue = ($('#threadSearchInput').val() || '').trim();
     if (searchValue) {
         applyThreadSearch(searchValue);
@@ -6081,6 +6690,56 @@ function escapeReplyHtml(value) {
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#039;');
+}
+
+window.KODUSReplyQuoteDraft = null;
+
+function getActiveReplyQuoteDraft() {
+    const targetType = String($('#replyQuoteTargetType').val() || '').trim();
+    if (!targetType) {
+        return null;
+    }
+
+    return {
+        targetType: targetType,
+        replyId: String($('#replyQuoteReplyId').val() || ''),
+        author: $('#replyQuoteAuthor').text().trim() || 'Quoted message',
+        excerpt: $('#replyQuoteText').text().trim() || 'Message unavailable'
+    };
+}
+
+function applyReplyQuoteDraft(quote) {
+    if (!quote || !$('#replyForm').length) {
+        return;
+    }
+
+    window.KODUSReplyQuoteDraft = quote;
+    if (typeof window.KODUSApplyReplyQuote === 'function') {
+        window.KODUSApplyReplyQuote(quote);
+    } else {
+        $('#replyQuoteTargetType').val(quote.targetType || '');
+        $('#replyQuoteReplyId').val(quote.replyId || '');
+        $('#replyQuoteAuthor').text(quote.author || 'Quoted message');
+        $('#replyQuoteText').text(quote.excerpt || 'Message unavailable');
+        $('#replyQuoteComposer').prop('hidden', !quote.targetType);
+    }
+}
+
+function clearReplyQuoteDraft() {
+    window.KODUSReplyQuoteDraft = null;
+    if (typeof window.KODUSClearReplyQuote === 'function') {
+        window.KODUSClearReplyQuote();
+    } else {
+        $('#replyQuoteTargetType, #replyQuoteReplyId').val('');
+        $('#replyQuoteAuthor, #replyQuoteText').text('');
+        $('#replyQuoteComposer').prop('hidden', true);
+    }
+}
+
+function restoreReplyQuoteDraft() {
+    if (window.KODUSReplyQuoteDraft) {
+        applyReplyQuoteDraft(window.KODUSReplyQuoteDraft);
+    }
 }
 
 function isAttachmentMediaFile(file) {
@@ -6122,7 +6781,7 @@ function renderLocalAttachmentPreviewHtml(file) {
             <div class="filename">${escapeReplyHtml(name)}</div>`;
 }
 
-function appendOptimisticReply(replyText, attachments = []) {
+function appendOptimisticReply(replyText, attachments = [], quote = null) {
     const conversation = $('#conversationWrapper .conversation-scroll');
     const attachmentItems = Array.isArray(attachments) ? attachments : [];
     if (!conversation.length || (!replyText && !attachmentItems.length)) {
@@ -6131,8 +6790,15 @@ function appendOptimisticReply(replyText, attachments = []) {
 
     const timeLabel = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
     const safeReply = escapeReplyHtml(replyText).replace(/\n/g, '<br>');
+    const safeReplyWithMentions = safeReply.replace(/(^|[\s(])(@(?:everyone|[\p{L}\p{N}_.-]+))/gu, '$1<span class="chat-mention-chip">$2</span>');
     const userLabel = $('#mainSidebar .user-panel .info > a').first().text().trim() || 'You';
     const avatarSrc = $('#mainSidebar .user-panel .image img').attr('src') || '../dist/img/default.webp';
+    const quoteHtml = quote
+        ? `<div class="chat-quote-preview">
+             <div class="chat-quote-preview-author">${escapeReplyHtml(quote.author || 'Quoted message')}</div>
+             <div class="chat-quote-preview-text">${escapeReplyHtml(quote.excerpt || 'Message unavailable')}</div>
+           </div>`
+        : '';
     const attachmentHtml = attachmentItems.length
         ? `<div class="attachments optimistic-attachments">
              <div class="attachments-list">
@@ -6155,7 +6821,8 @@ function appendOptimisticReply(replyText, attachments = []) {
             <span class="text-info optimistic-status">Sending...</span>
           </div>
         </div>
-        ${safeReply ? `<div class="chat-bubble-body">${safeReply}</div>` : ''}
+        ${quoteHtml}
+        ${safeReply ? `<div class="chat-bubble-body">${safeReplyWithMentions}</div>` : ''}
         ${attachmentHtml}
       </div>
     `);
@@ -6483,6 +7150,9 @@ function groupStatusBadgeClass(status) {
     if (normalized === 'muted') {
         return 'badge-warning';
     }
+    if (normalized.startsWith('last active')) {
+        return 'badge-warning';
+    }
     return 'badge-success';
 }
 
@@ -6791,6 +7461,34 @@ function openReplyActions(replyId, existingReply, canEdit, canDelete) {
     });
 }
 
+$(document).on('click', '.reply-quote-trigger', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    const reply = $(this).closest('.reply');
+    const quote = {
+        targetType: String(reply.attr('data-quote-target-type') || ''),
+        replyId: String(reply.attr('data-quote-reply-id') || ''),
+        author: String(reply.attr('data-quote-author') || 'Quoted message'),
+        excerpt: String(reply.attr('data-quote-excerpt') || 'Message unavailable')
+    };
+
+    if (!quote.targetType || !$('#replyForm').length) {
+        return;
+    }
+
+    closeReplyMenus();
+    applyReplyQuoteDraft(quote);
+    const composer = document.getElementById('replyForm');
+    composer?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    $('#replyText').trigger('focus');
+});
+
+$(document).on('click', '.reply-quote-clear', function(e) {
+    e.preventDefault();
+    clearReplyQuoteDraft();
+    $('#replyText').trigger('focus');
+});
+
 $(document).on('click', '.reply-menu-trigger', function(e) {
     e.preventDefault();
     e.stopPropagation();
@@ -6996,6 +7694,7 @@ $(document).on('submit', '#replyForm', function(e) {
     const replyText = ($(this).find('#replyText').val() || '').trim();
     const replyMailCsrfToken = $(this).find('input[name="csrf_token"]').val() || window.KODUS_CSRF_TOKEN || '';
     const outgoingFiles = Array.from($(this).find('input[type="file"]')[0]?.files || []);
+    const quoteDraft = getActiveReplyQuoteDraft();
     const attachmentError = this.querySelector('#replyAttachmentError');
     const validation = validateMessengerAttachments(outgoingFiles);
     if (!validation.valid) {
@@ -7008,7 +7707,7 @@ $(document).on('submit', '#replyForm', function(e) {
         return;
     }
     setAttachmentValidationMessage(attachmentError, '');
-    const optimisticReply = appendOptimisticReply(replyText, outgoingFiles);
+    const optimisticReply = appendOptimisticReply(replyText, outgoingFiles, quoteDraft);
     const submitButton = $(this).find('[type="submit"]');
     submitButton.prop('disabled', true);
 
@@ -7021,10 +7720,17 @@ $(document).on('submit', '#replyForm', function(e) {
         success: function(resp) {
             if (resp.status === 'success') {
                 stopTypingHeartbeat();
-                form.reset();
-                form.dataset.mentionedUserIds = '';
-                $('#replyFilePreview').empty();
-                $('#mentionedUserIds').val('');
+                if (typeof window.KODUSResetReplyComposer === 'function') {
+                    window.KODUSResetReplyComposer();
+                } else {
+                    form.reset();
+                    form.dataset.mentionedUserIds = '';
+                    $('#replyFilePreview').empty();
+                    $('#mentionedUserIds').val('');
+                    clearReplyQuoteDraft();
+                    $('#replyText').trigger('input').focus();
+                }
+                closeReactionPickers();
                 optimisticReply?.find('.optimistic-status')
                     .removeClass('text-info text-danger')
                     .addClass('text-success')
@@ -7055,6 +7761,7 @@ $(document).on('submit', '#replyForm', function(e) {
                             initializeThreadExperience();
                             normalizeBubbleThreadMenu();
                             scrollConversationToBottomOnOpen();
+                            $('#replyText').trigger('input').focus();
                         });
                     }, 350);
                 }
@@ -7633,12 +8340,14 @@ $(document).on('click', '.mailbox-restore-trigger', function() {
             const ext = (file.split('.').pop() || '').toLowerCase();
             const path = attachmentsBase + encodeURIComponent(file);
             const safeName = escapeCarouselHtml(file);
+            const hasPrevious = index > 0;
+            const hasNext = index < total - 1;
             let preview = `<div class="text-center p-4"><i class="fas fa-file fa-3x mb-3 text-secondary"></i><div class="font-weight-bold">${safeName}</div><div class="text-muted small">Preview unavailable</div></div>`;
 
             if (imageExts.includes(ext)) {
-                preview = `<img src="${path}" alt="${safeName}" style="max-width:100%;max-height:100%;object-fit:contain;">`;
+                preview = `<img src="${path}" alt="${safeName}">`;
             } else if (videoExts.includes(ext)) {
-                preview = `<video src="${path}" controls preload="metadata" style="max-width:100%;max-height:100%;"></video>`;
+                preview = `<video src="${path}" controls preload="metadata"></video>`;
             } else if (audioExts.includes(ext)) {
                 preview = `<div class="text-center p-4 w-100"><i class="fas fa-file-audio fa-3x mb-3 text-secondary"></i><audio src="${path}" controls preload="metadata" style="width:min(520px,100%);"></audio></div>`;
             } else if (ext === 'pdf') {
@@ -7646,18 +8355,10 @@ $(document).on('click', '.mailbox-restore-trigger', function() {
             }
 
             return `
-              <div style="width:min(900px,calc(100vw - 2rem));height:min(600px,70vh);display:flex;flex-direction:column;align-items:center;justify-content:center;">
-                <div style="flex:1;width:100%;min-height:0;display:flex;align-items:center;justify-content:center;background:var(--mailbox-surface,#fff);border-radius:6px;overflow:hidden;">
-                  ${preview}
-                </div>
-                <div style="margin-top:8px;">
-                  <a href="${path}" download class="btn btn-success btn-sm"><i class="fas fa-download"></i> Download</a>
-                </div>
-                <div style="display:flex;align-items:center;justify-content:center;gap:10px;margin-top:8px;">
-                  <button id="swalPrev" class="swal2-confirm swal2-styled" style="min-width:80px;">Prev</button>
-                  <div style="font-size:0.95rem;color:#666;">${index + 1} of ${total}</div>
-                  <button id="swalNext" class="swal2-confirm swal2-styled" style="min-width:80px;">Next</button>
-                </div>
+              <div class="attachment-preview-stage">
+                <button id="swalPrev" type="button" class="attachment-preview-nav attachment-preview-nav--prev" aria-label="Previous attachment"${hasPrevious ? '' : ' hidden disabled'}>&lt;</button>
+                <div class="attachment-preview-media">${preview}</div>
+                <button id="swalNext" type="button" class="attachment-preview-nav attachment-preview-nav--next" aria-label="Next attachment"${hasNext ? '' : ' hidden disabled'}>&gt;</button>
               </div>
             `;
         }
@@ -7665,22 +8366,32 @@ $(document).on('click', '.mailbox-restore-trigger', function() {
         function bindButtons() {
             const prev = document.getElementById('swalPrev');
             const next = document.getElementById('swalNext');
+            const download = document.getElementById('swalDownloadAttachment');
+            const currentFile = attachments[idx] || '';
+            const currentPath = attachmentsBase + encodeURIComponent(currentFile);
 
             if (prev) prev.onclick = () => updateContent(idx - 1);
             if (next) next.onclick = () => updateContent(idx + 1);
+            if (download) {
+                download.href = currentPath;
+                download.setAttribute('download', currentFile);
+            }
         }
 
         function updateContent(newIndex) {
-            idx = (newIndex + attachments.length) % attachments.length;
+            if (newIndex < 0 || newIndex >= attachments.length) {
+                return;
+            }
+            idx = newIndex;
             Swal.update({ html: renderPreviewHtml(attachments[idx], idx, attachments.length) });
             bindButtons();
         }
 
         window._swalKeyHandler = function(e) {
-            if (e.key === 'ArrowLeft') {
+            if (e.key === 'ArrowLeft' && idx > 0) {
                 e.preventDefault();
                 updateContent(idx - 1);
-            } else if (e.key === 'ArrowRight') {
+            } else if (e.key === 'ArrowRight' && idx < attachments.length - 1) {
                 e.preventDefault();
                 updateContent(idx + 1);
             } else if (e.key === 'Escape' && Swal.isVisible()) {
@@ -7692,10 +8403,25 @@ $(document).on('click', '.mailbox-restore-trigger', function() {
             html: renderPreviewHtml(attachments[idx], idx, attachments.length),
             showConfirmButton: false,
             showCloseButton: true,
-            width: 'min(960px, calc(100vw - 1rem))',
+            width: 'min(90vw, 1100px)',
             heightAuto: false,
+            customClass: {
+                popup: 'attachment-preview-popup'
+            },
             allowOutsideClick: true,
             didOpen: function() {
+                const closeButton = Swal.getCloseButton();
+                if (closeButton && !document.getElementById('swalDownloadAttachment')) {
+                    const downloadButton = document.createElement('a');
+                    downloadButton.id = 'swalDownloadAttachment';
+                    downloadButton.className = 'swal2-close';
+                    downloadButton.style.right = '2.6em';
+                    downloadButton.style.textDecoration = 'none';
+                    downloadButton.setAttribute('aria-label', 'Download attachment');
+                    downloadButton.setAttribute('title', 'Download');
+                    downloadButton.innerHTML = '<i class="fas fa-download" aria-hidden="true"></i>';
+                    closeButton.parentElement?.appendChild(downloadButton);
+                }
                 bindButtons();
                 window.addEventListener('keydown', window._swalKeyHandler, true);
             },
@@ -7762,8 +8488,8 @@ $(window).on('beforeunload pagehide', function() {
     const composeResetBtn = document.getElementById('composeResetBtn');
     const composeEmojiTrigger = document.getElementById('composeEmojiTrigger');
     const composeEmojiMenu = document.getElementById('composeEmojiMenu');
+    const composeMentionPreview = document.getElementById('composeMentionPreview');
     const composeSubmitBtns = composeForm ? Array.from(composeForm.querySelectorAll('[type="submit"]')) : [];
-    const commonComposeEmojis = ['😀','😂','😊','😍','😉','👍','👏','🙏','🎉','🔥','❤️','✨','📎','📩','✅','🤝','🙌','😎','📌','💡'];
     let selectedComposeFiles = [];
     const composePreviewUrls = new Map();
 
@@ -7808,23 +8534,30 @@ $(window).on('beforeunload pagehide', function() {
         field.dispatchEvent(new Event('input', { bubbles: true }));
     }
 
+    function renderComposerMentionPreview(value) {
+        return escapeReplyHtml(value)
+            .replace(/(^|[\s(])(@(?:everyone|[\p{L}\p{N}_.-]+))/gu, '$1<span class="composer-mention-chip">$2</span>')
+            .replace(/\n/g, '<br>');
+    }
+
+    function syncComposeMentionPreview() {
+        if (!composeMentionPreview || !composeMessage) {
+            return;
+        }
+        const hasText = composeMessage.value.length > 0;
+        composeMessageShell?.classList.toggle('has-mention-preview-text', hasText);
+        composeMentionPreview.innerHTML = hasText ? renderComposerMentionPreview(composeMessage.value) : '';
+        composeMentionPreview.scrollTop = composeMessage.scrollTop;
+    }
+
     function buildComposeEmojiMenu() {
         if (!composeEmojiMenu || !composeMessage || composeEmojiMenu.childElementCount > 0) {
             return;
         }
-        commonComposeEmojis.forEach(function(emoji) {
-            const button = document.createElement('button');
-            button.type = 'button';
-            button.className = 'emoji-item';
-            button.textContent = emoji;
-            button.addEventListener('click', function(e) {
-                e.preventDefault();
-                insertComposeTextAtCursor(composeMessage, emoji);
-                closeComposeEmojiMenu();
-            });
-            composeEmojiMenu.appendChild(button);
+        window.KODUSEmojiPicker?.render(composeEmojiMenu, function(emoji) {
+            insertComposeTextAtCursor(composeMessage, emoji);
+            closeComposeEmojiMenu();
         });
-        window.KODUSEmojiPicker?.enhance(composeEmojiMenu);
     }
 
     function clearComposeFiles() {
@@ -7994,7 +8727,7 @@ $(window).on('beforeunload pagehide', function() {
         const data = option.element ? option.element.dataset : {};
         const avatar = data.avatar || '<?php echo app_url('dist/img/default.webp'); ?>';
         const name = data.name || option.text;
-        const meta = data.kind === 'user' ? 'KODUS user' : 'Group';
+        const meta = data.kind === 'user' ? (data.presence || 'Offline') : 'Group';
         return $(`
             <span class="compose-recipient-option">
               <img src="${avatar}" alt="" class="compose-recipient-avatar" width="18" height="18">
@@ -8068,6 +8801,7 @@ $(window).on('beforeunload pagehide', function() {
             composeSubject.value = buildComposeSubject();
         }
         composeMessageCount.textContent = String((composeMessage.value || '').length);
+        syncComposeMentionPreview();
     }
 
     function resetComposeForm() {
@@ -8082,6 +8816,7 @@ $(window).on('beforeunload pagehide', function() {
         updateComposeRecipientMeta();
         updateComposePreview();
         closeComposeEmojiMenu();
+        composeMessage?.focus();
     }
 
     function appendOptimisticComposeThread(labels, messageText, attachments = []) {
@@ -8149,6 +8884,7 @@ $(window).on('beforeunload pagehide', function() {
         updateComposePreview();
     });
     composeMessage?.addEventListener('input', updateComposePreview);
+    composeMessage?.addEventListener('scroll', syncComposeMentionPreview, { passive: true });
     composeAttachments?.addEventListener('change', updateComposeAttachments);
     composeAttachTrigger?.addEventListener('click', function(e) {
         e.preventDefault();
@@ -8261,6 +8997,9 @@ $(window).on('beforeunload pagehide', function() {
 
             if (payload.message_id) {
                 openMessage(payload.message_id);
+                window.setTimeout(function() {
+                    $('#replyText').trigger('input').focus();
+                }, 450);
             }
         })
         .catch(function(error) {

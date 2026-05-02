@@ -15,6 +15,7 @@ $userId = (int) ($_SESSION['user_id'] ?? 0);
 $userType = $_SESSION['user_type'] ?? null;
 $userEmail = $_SESSION['email'] ?? null;
 $userName = trim((string) ($_SESSION['username'] ?? ''));
+$actorName = $userName !== '' ? $userName : 'Someone';
 $messageId = (int) ($_POST['message_id'] ?? 0);
 $action = strtolower(trim((string) ($_POST['action'] ?? '')));
 
@@ -88,12 +89,22 @@ try {
         }
         $stmt = $conn->prepare("
             UPDATE contact_message_recipients
-            SET left_at = NOW()
+            SET left_at = NOW(), muted_at = NULL
             WHERE message_id = ? AND user_id = ? AND left_at IS NULL
         ");
         $stmt->bind_param('ii', $messageId, $userId);
         $stmt->execute();
+        $leftGroup = $stmt->affected_rows > 0;
         $stmt->close();
+        if ($leftGroup) {
+            mailboxCreateSystemReply(
+                $conn,
+                $messageId,
+                $userId,
+                $actorName . ' left the group.',
+                'group_left'
+            );
+        }
         $broadcastAction = 'group_left';
     } elseif ($action === 'add_member') {
         if (!$isGroup || !mailboxCanParticipateInThread($conn, $messageId, $userId)) {
@@ -154,6 +165,7 @@ try {
         ");
 
         $addedIds = [];
+        $addedNames = [];
         foreach ($users as $row) {
             $memberId = (int) ($row['id'] ?? 0);
             $email = trim((string) ($row['email'] ?? ''));
@@ -164,7 +176,10 @@ try {
 
             $upsertStmt->bind_param('iiss', $messageId, $memberId, $email, $name);
             $upsertStmt->execute();
-            $addedIds[] = $memberId;
+            if ($upsertStmt->affected_rows > 0) {
+                $addedIds[] = $memberId;
+                $addedNames[] = $name !== '' ? $name : $email;
+            }
 
             if ($readStmt) {
                 $readStmt->bind_param('ii', $messageId, $memberId);
@@ -179,6 +194,14 @@ try {
         if ($addedIds === []) {
             throw new RuntimeException('No members were added.');
         }
+
+        mailboxCreateSystemReply(
+            $conn,
+            $messageId,
+            $userId,
+            $actorName . ' added ' . implode(', ', $addedNames) . ' to the group.',
+            'group_member_added'
+        );
 
         $broadcastReceiverIds = $addedIds;
         $broadcastAction = 'group_member_added';
@@ -195,6 +218,22 @@ try {
             throw new RuntimeException('Use Leave group to remove yourself.');
         }
 
+        $memberName = 'Someone';
+        $memberStmt = $conn->prepare("
+            SELECT COALESCE(NULLIF(u.username, ''), COALESCE(NULLIF(cmr.recipient_name, ''), cmr.recipient_email)) AS display_name
+            FROM contact_message_recipients cmr
+            LEFT JOIN users u ON u.id = cmr.user_id
+            WHERE cmr.message_id = ? AND cmr.user_id = ?
+            LIMIT 1
+        ");
+        if ($memberStmt) {
+            $memberStmt->bind_param('ii', $messageId, $memberId);
+            $memberStmt->execute();
+            $memberRow = db_stmt_fetch_one_assoc($memberStmt);
+            $memberStmt->close();
+            $memberName = trim((string) ($memberRow['display_name'] ?? '')) ?: $memberName;
+        }
+
         $stmt = $conn->prepare("
             UPDATE contact_message_recipients
             SET left_at = NOW(), muted_at = NULL
@@ -207,12 +246,20 @@ try {
         }
         $stmt->bind_param('ii', $messageId, $memberId);
         $stmt->execute();
-        $updated = $stmt->affected_rows >= 0;
+        $updated = $stmt->affected_rows > 0;
         $stmt->close();
 
         if (!$updated) {
             throw new RuntimeException('Unable to remove member right now.');
         }
+
+        mailboxCreateSystemReply(
+            $conn,
+            $messageId,
+            $userId,
+            $actorName . ' removed ' . $memberName . ' from the group.',
+            'group_member_removed'
+        );
 
         $broadcastReceiverIds = [$memberId];
         $broadcastAction = 'group_member_removed';

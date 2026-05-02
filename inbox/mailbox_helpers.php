@@ -116,6 +116,36 @@ function mailboxEnsureSchema(mysqli $conn): void
         }
     }
 
+    if (!in_array('quote_target_type', $replyColumns, true)) {
+        if (!$conn->query("ALTER TABLE contact_replies ADD COLUMN quote_target_type VARCHAR(20) NULL DEFAULT NULL AFTER attachment")) {
+            throw new RuntimeException('Unable to add reply quote target type: ' . $conn->error);
+        }
+    }
+
+    if (!in_array('quote_reply_id', $replyColumns, true)) {
+        if (!$conn->query("ALTER TABLE contact_replies ADD COLUMN quote_reply_id INT NULL DEFAULT NULL AFTER quote_target_type")) {
+            throw new RuntimeException('Unable to add reply quote reply id: ' . $conn->error);
+        }
+    }
+
+    if (!in_array('quote_author', $replyColumns, true)) {
+        if (!$conn->query("ALTER TABLE contact_replies ADD COLUMN quote_author VARCHAR(255) NULL DEFAULT NULL AFTER quote_reply_id")) {
+            throw new RuntimeException('Unable to add reply quote author: ' . $conn->error);
+        }
+    }
+
+    if (!in_array('quote_excerpt', $replyColumns, true)) {
+        if (!$conn->query("ALTER TABLE contact_replies ADD COLUMN quote_excerpt TEXT NULL DEFAULT NULL AFTER quote_author")) {
+            throw new RuntimeException('Unable to add reply quote excerpt: ' . $conn->error);
+        }
+    }
+
+    if (!in_array('system_event_type', $replyColumns, true)) {
+        if (!$conn->query("ALTER TABLE contact_replies ADD COLUMN system_event_type VARCHAR(40) NULL DEFAULT NULL AFTER quote_excerpt")) {
+            throw new RuntimeException('Unable to add reply system event type: ' . $conn->error);
+        }
+    }
+
     if (!$conn->query("
         CREATE TABLE IF NOT EXISTS contact_message_recipients (
             id BIGINT NOT NULL AUTO_INCREMENT,
@@ -818,7 +848,7 @@ function mailboxLatestThreadPreviews(mysqli $conn, array $messageIds, int $curre
     }
 
     $replyStmt = $conn->prepare("
-        SELECT r.id, r.message_id, r.user_id, r.reply, r.attachment, r.sent_at, r.deleted_for_everyone_at
+        SELECT r.id, r.message_id, r.user_id, r.reply, r.attachment, r.sent_at, r.deleted_for_everyone_at, r.system_event_type
         FROM contact_replies r
         WHERE r.message_id IN ($placeholders)
         ORDER BY r.sent_at ASC, r.id ASC
@@ -837,7 +867,7 @@ function mailboxLatestThreadPreviews(mysqli $conn, array $messageIds, int $curre
 
             $previews[$messageId] = [
                 'text' => mailboxPreviewText($row['reply'] ?? '', $row['attachment'] ?? '', !empty($row['deleted_for_everyone_at'])),
-                'is_mine' => (int) ($row['user_id'] ?? 0) === $currentUserId,
+                'is_mine' => trim((string) ($row['system_event_type'] ?? '')) === '' && (int) ($row['user_id'] ?? 0) === $currentUserId,
                 'sent_at' => (string) ($row['sent_at'] ?? ''),
                 'sort_ts' => $sortTs,
                 'sort_id' => $replyId,
@@ -941,6 +971,64 @@ function mailboxIsMediaAttachmentMime(string $mime): bool
 function mailboxGeneratedMediaAttachmentFilename(string $extension): string
 {
     return 'att_' . gmdate('Ymd_His') . '_' . bin2hex(random_bytes(12)) . '.' . $extension;
+}
+
+function mailbox_is_supported_reaction_emoji(string $emoji): bool
+{
+    $emoji = trim($emoji);
+    if ($emoji === '') {
+        return false;
+    }
+
+    $length = function_exists('mb_strlen') ? mb_strlen($emoji, 'UTF-8') : strlen($emoji);
+    if ($length > 32 || preg_match('/[\x00-\x1F\x7F]/u', $emoji)) {
+        return false;
+    }
+
+    $emojiPattern = '/^(?=.*(?:\p{Extended_Pictographic}|[\x{1F1E6}-\x{1F1FF}]|\x{20E3}))[\p{Extended_Pictographic}\p{Emoji_Component}\x{FE0E}\x{FE0F}\x{200D}\x{20E3}\x{1F1E6}-\x{1F1FF}0-9#*]+$/u';
+    return preg_match($emojiPattern, $emoji) === 1;
+}
+
+function mailbox_quote_excerpt(string $text, string $fallback = 'Attachment'): string
+{
+    $normalized = trim(preg_replace('/\s+/u', ' ', $text) ?? $text);
+    if ($normalized === '') {
+        $normalized = $fallback;
+    }
+
+    if (function_exists('mb_strlen') && mb_strlen($normalized, 'UTF-8') > 240) {
+        return mb_substr($normalized, 0, 237, 'UTF-8') . '...';
+    }
+
+    if (!function_exists('mb_strlen') && strlen($normalized) > 240) {
+        return substr($normalized, 0, 237) . '...';
+    }
+
+    return $normalized;
+}
+
+function mailboxCreateSystemReply(mysqli $conn, int $messageId, int $actorUserId, string $message, string $eventType): int
+{
+    $message = trim($message);
+    $eventType = trim($eventType);
+    if ($messageId <= 0 || $actorUserId <= 0 || $message === '' || $eventType === '') {
+        return 0;
+    }
+
+    $stmt = $conn->prepare("
+        INSERT INTO contact_replies (message_id, user_id, reply, sent_at, updated_at, attachment, system_event_type)
+        VALUES (?, ?, ?, NOW(), NOW(), '', ?)
+    ");
+    if (!$stmt) {
+        return 0;
+    }
+
+    $stmt->bind_param('iiss', $messageId, $actorUserId, $message, $eventType);
+    $stmt->execute();
+    $replyId = (int) $stmt->insert_id;
+    $stmt->close();
+
+    return $replyId;
 }
 
 function mailboxSaveUploadedAttachments(array $files, string $uploadDir, ?int $maxSize = null): array

@@ -219,6 +219,7 @@ function app_notification_list(mysqli $conn, int $userId, int $limit = 50, int $
         LEFT JOIN app_notification_reads r
           ON r.notification_id = n.id AND r.user_id = ?
         WHERE 1 = 1 {$visibilitySql}
+          AND NOT (n.category = 'mail_mention' AND r.notification_id IS NOT NULL)
         ORDER BY n.created_at DESC, n.id DESC
         LIMIT {$limit} OFFSET {$offset}
     ";

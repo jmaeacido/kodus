@@ -36,8 +36,7 @@ if ($userId <= 0 || $messageId <= 0 || $emoji === '') {
     exit;
 }
 
-$allowedEmojis = ["\u{1F44D}", "\u{2764}\u{FE0F}", "\u{1F602}", "\u{1F389}", "\u{1F525}", "\u{1F44F}", "\u{1F64F}", "\u{2705}", "\u{1F440}", "\u{1F4A1}"];
-if (!in_array($emoji, $allowedEmojis, true)) {
+if (!mailbox_is_supported_reaction_emoji($emoji)) {
     http_response_code(422);
     echo json_encode(['success' => false, 'error' => 'Unsupported reaction.']);
     exit;

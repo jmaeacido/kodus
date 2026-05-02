@@ -51,13 +51,15 @@ $stmt = $conn->prepare("
            u.username,
            u.userType,
            u.picture,
-           u.sso_avatar_url
+           u.sso_avatar_url,
+           u.last_activity,
+           u.is_online
     FROM contact_message_recipients cmr
     LEFT JOIN users u ON u.id = cmr.user_id
     WHERE cmr.message_id = ?
       AND cmr.hidden_at IS NULL
+      AND cmr.left_at IS NULL
     ORDER BY
-      CASE WHEN cmr.left_at IS NULL THEN 0 ELSE 1 END,
       COALESCE(NULLIF(u.username, ''), NULLIF(cmr.recipient_name, ''), cmr.recipient_email)
 ");
 $stmt->bind_param('i', $messageId);
@@ -85,10 +87,9 @@ foreach ($rows as $row) {
         $roles[] = 'Admin';
     }
 
-    $status = 'Active';
-    if (!empty($row['left_at'])) {
-        $status = 'Left';
-    } elseif (!empty($row['muted_at'])) {
+    $presence = mailboxClassifyPresence($row['last_activity'] ?? null, (int) ($row['is_online'] ?? 0));
+    $status = $presence['detail'];
+    if (!empty($row['muted_at'])) {
         $status = 'Muted';
     }
 
@@ -100,7 +101,7 @@ foreach ($rows as $row) {
         'roles' => array_values(array_unique($roles)),
         'status' => $status,
         'is_self' => $memberId > 0 && $memberId === $userId,
-        'can_remove' => $canManageMembers && $memberId > 0 && $memberId !== $userId && empty($row['left_at']),
+        'can_remove' => $canManageMembers && $memberId > 0 && $memberId !== $userId,
     ];
 }
 

@@ -3,6 +3,7 @@ include('../header.php');
 include('../sidenav.php');
 
 $isAdmin = isset($_SESSION['user_type']) && $_SESSION['user_type'] === 'admin';
+$selectedFiscalYear = isset($_SESSION['selected_year']) ? (int) $_SESSION['selected_year'] : null;
 $importFlash = $_SESSION['meb_import_flash'] ?? null;
 unset($_SESSION['meb_import_flash']);
 ?>
@@ -50,6 +51,125 @@ unset($_SESSION['meb_import_flash']);
       color: #0a58ca;
       background: rgba(13, 110, 253, 0.16);
       border-color: rgba(13, 110, 253, 0.3);
+    }
+
+    .meb-batch-actions {
+      display: grid;
+      gap: 0.75rem;
+      max-width: 720px;
+      margin: 0.85rem 0 0;
+      padding: 0.85rem;
+      border: 1px solid rgba(148, 163, 184, 0.24);
+      border-radius: 8px;
+      background: rgba(15, 23, 42, 0.2);
+    }
+
+    .meb-batch-actions__header,
+    .meb-batch-actions__tools {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+    }
+
+    .meb-batch-actions__title {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin: 0;
+      font-size: 0.95rem;
+      font-weight: 700;
+    }
+
+    .meb-batch-actions__meta {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.25rem 0.55rem;
+      border-radius: 999px;
+      background: rgba(13, 110, 253, 0.12);
+      color: #8fc2ff;
+      font-size: 0.78rem;
+      font-weight: 700;
+    }
+
+    .meb-batch-actions__search {
+      min-width: 220px;
+      max-width: 320px;
+      border-radius: 6px;
+    }
+
+    .meb-batch-list {
+      display: grid;
+      gap: 0.45rem;
+      max-height: 220px;
+      overflow: auto;
+      padding-right: 0.25rem;
+    }
+
+    .meb-batch-option {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      align-items: center;
+      gap: 0.65rem;
+      margin: 0;
+      padding: 0.55rem 0.65rem;
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.04);
+      cursor: pointer;
+    }
+
+    .meb-batch-option:hover {
+      border-color: rgba(13, 110, 253, 0.42);
+      background: rgba(13, 110, 253, 0.09);
+    }
+
+    .meb-batch-option__id {
+      font-weight: 700;
+    }
+
+    .meb-batch-option__count,
+    .meb-batch-empty {
+      color: #9ca3af;
+      font-size: 0.82rem;
+    }
+
+    .meb-batch-actions__footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+    }
+
+    body[data-theme="light"] .meb-batch-actions {
+      background: #f8fafc;
+      border-color: rgba(15, 23, 42, 0.1);
+    }
+
+    body[data-theme="light"] .meb-batch-actions__meta {
+      color: #0b5ed7;
+      background: rgba(13, 110, 253, 0.08);
+    }
+
+    body[data-theme="light"] .meb-batch-option {
+      background: #ffffff;
+      border-color: rgba(15, 23, 42, 0.1);
+    }
+
+    body[data-theme="light"] .meb-batch-option__count,
+    body[data-theme="light"] .meb-batch-empty {
+      color: #64748b;
+    }
+
+    @media (max-width: 576px) {
+      .meb-batch-actions__search,
+      .meb-batch-actions__footer .btn {
+        width: 100%;
+        max-width: none;
+      }
     }
   </style>
 </head>
@@ -148,12 +268,37 @@ unset($_SESSION['meb_import_flash']);
             <button class="btn btn-outline-danger" type="submit" name="action" value="delete" id="deleteButton">Delete Selected</button>
             </form>
             <br>
-            <form action="delete_batch" method="POST" data-no-loader="true">
+            <form action="delete_batch" method="POST" data-no-loader="true" id="deleteBatchForm">
               <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(security_get_csrf_token(), ENT_QUOTES, 'UTF-8') ?>">
-              <select class="btn btn-outline-info" name="batchId" id="batchId" required>
-                <option value="" disabled selected>Select Batch ID</option>
-              </select>
-              <button class="btn btn-outline-danger" type="submit" name="deleteBatch">Delete Batch</button>
+              <div class="meb-batch-actions">
+                <div class="meb-batch-actions__header">
+                  <p class="meb-batch-actions__title">
+                    <i class="fas fa-layer-group" aria-hidden="true"></i>
+                    Batch deletion
+                  </p>
+                  <span class="meb-batch-actions__meta">
+                    <i class="fas fa-calendar-alt" aria-hidden="true"></i>
+                    FY <?= htmlspecialchars((string) ($selectedFiscalYear ?? 'Not selected'), ENT_QUOTES, 'UTF-8') ?>
+                  </span>
+                </div>
+                <div class="meb-batch-actions__tools">
+                  <input type="search" class="form-control form-control-sm meb-batch-actions__search" id="batchSearch" placeholder="Search batch ID">
+                  <div class="btn-group btn-group-sm" role="group" aria-label="Batch selection tools">
+                    <button class="btn btn-outline-info" type="button" id="selectVisibleBatches">Select visible</button>
+                    <button class="btn btn-outline-secondary" type="button" id="clearBatchSelection">Clear</button>
+                  </div>
+                </div>
+                <div class="meb-batch-list" id="batchList">
+                  <span class="meb-batch-empty">Loading fiscal year batches...</span>
+                </div>
+                <div class="meb-batch-actions__footer">
+                  <span class="meb-batch-empty" id="batchSelectionSummary">0 batches selected</span>
+                  <button class="btn btn-outline-danger btn-sm" type="submit" name="deleteBatch" id="deleteBatchButton" disabled>
+                    <i class="fas fa-trash-alt" aria-hidden="true"></i>
+                    Delete selected batches
+                  </button>
+                </div>
+              </div>
             </form>
             <?php endif; ?>
           </div>
@@ -181,6 +326,7 @@ unset($_SESSION['meb_import_flash']);
 <script src="../dist/js/adminlte.min.js"></script>
 <script>
   const isAdminView = <?php echo $isAdmin ? 'true' : 'false'; ?>;
+  const selectedFiscalYear = <?php echo json_encode($selectedFiscalYear); ?>;
   const importFlash = <?php echo json_encode($importFlash); ?>;
 
   function displayFileName() {
@@ -1091,46 +1237,193 @@ unset($_SESSION['meb_import_flash']);
 <?php if ($isAdmin): ?>
 <script>
 document.addEventListener("DOMContentLoaded", function() {
+    let fiscalYearBatches = [];
+    const selectedBatchIds = new Set();
+
+    function normalizeBatchPayload(payload) {
+        if (Array.isArray(payload)) {
+            return payload.map((batchId) => ({
+                id: String(batchId),
+                recordCount: null
+            }));
+        }
+
+        if (!payload || !Array.isArray(payload.batches)) {
+            return [];
+        }
+
+        return payload.batches.map((batch) => ({
+            id: String(batch.id || ''),
+            recordCount: Number.isFinite(Number(batch.recordCount)) ? Number(batch.recordCount) : null
+        })).filter((batch) => batch.id !== '');
+    }
+
+    function updateBatchSelectionSummary() {
+        const deleteButton = document.getElementById("deleteBatchButton");
+        const summary = document.getElementById("batchSelectionSummary");
+        const selectedCount = selectedBatchIds.size;
+
+        if (deleteButton) {
+            deleteButton.disabled = selectedCount === 0;
+        }
+
+        if (summary) {
+            summary.textContent = `${selectedCount} batch${selectedCount === 1 ? '' : 'es'} selected`;
+        }
+    }
+
+    function renderBatchOptions() {
+        const batchList = document.getElementById("batchList");
+        const batchSearch = document.getElementById("batchSearch");
+        if (!batchList) {
+            return;
+        }
+
+        const searchTerm = batchSearch ? batchSearch.value.trim().toLowerCase() : '';
+        const visibleBatches = fiscalYearBatches.filter((batch) => batch.id.toLowerCase().includes(searchTerm));
+
+        batchList.innerHTML = '';
+
+        if (visibleBatches.length === 0) {
+            const empty = document.createElement("span");
+            empty.className = "meb-batch-empty";
+            empty.textContent = fiscalYearBatches.length === 0
+                ? `No batches found for fiscal year ${selectedFiscalYear || ''}.`
+                : "No batches match your search.";
+            batchList.appendChild(empty);
+            updateBatchSelectionSummary();
+            return;
+        }
+
+        visibleBatches.forEach((batch) => {
+            const label = document.createElement("label");
+            label.className = "meb-batch-option";
+
+            const checkbox = document.createElement("input");
+            checkbox.type = "checkbox";
+            checkbox.name = "batchIds[]";
+            checkbox.value = batch.id;
+            checkbox.checked = selectedBatchIds.has(batch.id);
+
+            const batchId = document.createElement("span");
+            batchId.className = "meb-batch-option__id";
+            batchId.textContent = `Batch ID: ${batch.id}`;
+
+            const count = document.createElement("span");
+            count.className = "meb-batch-option__count";
+            count.textContent = batch.recordCount === null
+                ? ""
+                : `${batch.recordCount.toLocaleString()} record${batch.recordCount === 1 ? '' : 's'}`;
+
+            label.appendChild(checkbox);
+            label.appendChild(batchId);
+            label.appendChild(count);
+            batchList.appendChild(label);
+        });
+
+        updateBatchSelectionSummary();
+    }
+
     function loadBatchOptions() {
         fetch('fetch_batches.php')
             .then(response => response.json())
-            .then(data => {
-                const select = document.getElementById("batchId");
-                if (!select) {
-                    return;
+            .then(payload => {
+                if (payload && payload.error) {
+                    throw new Error(payload.error);
                 }
-
-                select.innerHTML = '<option value="" disabled selected>-- Select Batch ID --</option>';
-
-                if (data.length > 0) {
-                    data.forEach((batchId) => {
-                        const option = document.createElement("option");
-                        option.value = batchId;
-                        option.textContent = `Batch ID: ${batchId}`;
-                        select.appendChild(option);
-                    });
-                } else {
-                    const option = document.createElement("option");
-                    option.value = "";
-                    option.disabled = true;
-                    option.textContent = "No batches found";
-                    select.appendChild(option);
-                }
+                fiscalYearBatches = normalizeBatchPayload(payload);
+                renderBatchOptions();
             })
-            .catch(error => console.error("Error fetching batch IDs:", error));
+            .catch(error => {
+                console.error("Error fetching batch IDs:", error);
+                const batchList = document.getElementById("batchList");
+                if (batchList) {
+                    batchList.innerHTML = '<span class="meb-batch-empty">Unable to load fiscal year batches.</span>';
+                }
+            });
     }
 
     loadBatchOptions();
 
-    const deleteBatchForm = document.querySelector("form[action='delete_batch']");
+    const batchSearch = document.getElementById("batchSearch");
+    if (batchSearch) {
+        batchSearch.addEventListener("input", renderBatchOptions);
+    }
+
+    const batchList = document.getElementById("batchList");
+    if (batchList) {
+        batchList.addEventListener("change", function(event) {
+            if (event.target && event.target.matches('input[name="batchIds[]"]')) {
+                if (event.target.checked) {
+                    selectedBatchIds.add(event.target.value);
+                } else {
+                    selectedBatchIds.delete(event.target.value);
+                }
+                updateBatchSelectionSummary();
+            }
+        });
+    }
+
+    const selectVisibleBatches = document.getElementById("selectVisibleBatches");
+    if (selectVisibleBatches) {
+        selectVisibleBatches.addEventListener("click", function() {
+            document.querySelectorAll('#batchList input[name="batchIds[]"]').forEach((input) => {
+                input.checked = true;
+                selectedBatchIds.add(input.value);
+            });
+            updateBatchSelectionSummary();
+        });
+    }
+
+    const clearBatchSelection = document.getElementById("clearBatchSelection");
+    if (clearBatchSelection) {
+        clearBatchSelection.addEventListener("click", function() {
+            document.querySelectorAll('input[name="batchIds[]"]').forEach((input) => {
+                input.checked = false;
+            });
+            selectedBatchIds.clear();
+            updateBatchSelectionSummary();
+        });
+    }
+
+    const deleteBatchForm = document.getElementById("deleteBatchForm");
     if (!deleteBatchForm) {
         return;
     }
 
-    deleteBatchForm.addEventListener("submit", function(event) {
+    deleteBatchForm.addEventListener("submit", async function(event) {
       event.preventDefault();
 
+      const selectedBatchIdValues = Array.from(selectedBatchIds).filter(Boolean);
+
+      if (selectedBatchIdValues.length === 0) {
+          Swal.fire({
+              icon: 'warning',
+              title: 'No batch selected',
+              text: 'Please select at least one batch to delete.',
+          });
+          return;
+      }
+
+      const confirmResult = await Swal.fire({
+          icon: 'warning',
+          title: 'Delete selected batches?',
+          text: `This will delete ${selectedBatchIdValues.length} batch${selectedBatchIdValues.length === 1 ? '' : 'es'} and all matching MEB records for fiscal year ${selectedFiscalYear}.`,
+          showCancelButton: true,
+          confirmButtonText: 'Yes, delete',
+          cancelButtonText: 'Cancel',
+          confirmButtonColor: '#dc3545'
+      });
+
+      if (!confirmResult.isConfirmed) {
+          return;
+      }
+
       const formData = new FormData(this);
+      formData.delete('batchIds[]');
+      selectedBatchIdValues.forEach((batchId) => {
+          formData.append('batchIds[]', batchId);
+      });
 
       fetch('delete_batch.php', {
           method: 'POST',
@@ -1150,7 +1443,7 @@ document.addEventListener("DOMContentLoaded", function() {
               Swal.fire({
                   icon: 'success',
                   title: 'Success',
-                  text: 'Batch deleted successfully!',
+                  text: `${result.deletedBatches || selectedBatchIdValues.length} batch${(result.deletedBatches || selectedBatchIdValues.length) === 1 ? '' : 'es'} deleted successfully!`,
               }).then(() => {
                   location.reload();
               });
@@ -1181,4 +1474,3 @@ document.addEventListener("DOMContentLoaded", function() {
 </script>
 </body>
 </html>
-

@@ -1363,6 +1363,26 @@ $(document).ready(function () {
       allowPollingFallback: true,
       onChange: refreshUserStatuses
     });
+
+    if (typeof window.KODUSLiveRefresh.watchSocket === 'function') {
+      window.KODUSLiveRefresh.watchSocket({
+        key: 'users-management-presence',
+        channel: 'kodus.presence',
+        events: ['presence.changed'],
+        onMessage: refreshUserStatuses
+      });
+    }
+
+    if (typeof window.KODUSLiveRefresh.connectSocket === 'function') {
+      window.KODUSLiveRefresh.connectSocket().then(function(socket) {
+        if (!socket || socket.__kodusUsersManagementPresenceBound) return;
+        socket.__kodusUsersManagementPresenceBound = true;
+        socket.on('connect', refreshUserStatuses);
+        refreshUserStatuses();
+      }).catch(function() {
+        setRefreshTimestamp();
+      });
+    }
   }
 
   window.addEventListener('kodus:partial-refresh', function () {

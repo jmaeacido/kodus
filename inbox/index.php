@@ -37,13 +37,14 @@ if ($userType === 'admin') {
                COALESCE(mr.is_read, 0) AS user_read,
                sender_user.picture AS sender_picture,
                sender_user.id AS sender_user_id,
+               sender_user.first_name AS sender_first_name,
                sender_user.sso_avatar_url AS sender_sso_avatar_url,
                sender_user.last_activity AS sender_last_activity,
                sender_user.is_online AS sender_is_online,
                current_member.muted_at AS current_member_muted_at,
                current_member.left_at AS current_member_left_at,
                (
-                   SELECT GROUP_CONCAT(DISTINCT u.username ORDER BY u.username SEPARATOR ', ')
+                   SELECT GROUP_CONCAT(DISTINCT COALESCE(NULLIF(SUBSTRING_INDEX(TRIM(u.first_name), ' ', 1), ''), NULLIF(u.username, ''), u.email) ORDER BY COALESCE(NULLIF(SUBSTRING_INDEX(TRIM(u.first_name), ' ', 1), ''), NULLIF(u.username, ''), u.email) SEPARATOR ', ')
                    FROM contact_message_recipients cmr
                    INNER JOIN users u ON u.id = cmr.user_id
                    WHERE cmr.message_id = cm.id
@@ -124,13 +125,14 @@ if ($userType === 'admin') {
                COALESCE(mr.is_read, 0) AS user_read,
                sender_user.picture AS sender_picture,
                sender_user.id AS sender_user_id,
+               sender_user.first_name AS sender_first_name,
                sender_user.sso_avatar_url AS sender_sso_avatar_url,
                sender_user.last_activity AS sender_last_activity,
                sender_user.is_online AS sender_is_online,
                current_member.muted_at AS current_member_muted_at,
                current_member.left_at AS current_member_left_at,
                (
-                   SELECT GROUP_CONCAT(DISTINCT u.username ORDER BY u.username SEPARATOR ', ')
+                   SELECT GROUP_CONCAT(DISTINCT COALESCE(NULLIF(SUBSTRING_INDEX(TRIM(u.first_name), ' ', 1), ''), NULLIF(u.username, ''), u.email) ORDER BY COALESCE(NULLIF(SUBSTRING_INDEX(TRIM(u.first_name), ' ', 1), ''), NULLIF(u.username, ''), u.email) SEPARATOR ', ')
                    FROM contact_message_recipients cmr
                    INNER JOIN users u ON u.id = cmr.user_id
                    WHERE cmr.message_id = cm.id
@@ -272,11 +274,12 @@ $trashCountStmt->close();
 
 $composeOpen = isset($_GET['compose']) && $_GET['compose'] !== '0';
 $composeRecipients = [];
-$recipientResult = $conn->query("SELECT id, username, email, picture, sso_avatar_url, last_activity, is_online FROM users ORDER BY username");
+$recipientResult = $conn->query("SELECT id, username, email, first_name, picture, sso_avatar_url, last_activity, is_online FROM users ORDER BY COALESCE(NULLIF(first_name, ''), username, email)");
 if ($recipientResult) {
     while ($recipientRow = $recipientResult->fetch_assoc()) {
         $recipientRow['avatar_url'] = mailbox_user_avatar_url($recipientRow['picture'] ?? '', $recipientRow['sso_avatar_url'] ?? '', $base_url);
         $recipientRow['presence'] = mailboxClassifyPresence($recipientRow['last_activity'] ?? null, (int) ($recipientRow['is_online'] ?? 0));
+        $recipientRow['display_name'] = mailboxDisplayName($recipientRow, 'User');
         $composeRecipients[] = $recipientRow;
     }
 }
@@ -1423,7 +1426,8 @@ $composeCsrfToken = security_get_csrf_token();
     }
 
     .mailbox-app .emoji-menu,
-    .compose-modal .emoji-menu {
+    .compose-modal .emoji-menu,
+    .emoji-menu.is-body-bound {
       position: fixed;
       width: min(328px, calc(100vw - 1.5rem));
       padding: 0.65rem;
@@ -1432,7 +1436,7 @@ $composeCsrfToken = security_get_csrf_token();
       border: 1px solid color-mix(in srgb, var(--messenger-divider) 72%, rgba(255, 255, 255, 0.18) 28%);
       box-shadow: 0 18px 42px rgba(0, 0, 0, 0.28);
       display: block;
-      z-index: 1075;
+      z-index: 1090;
       color: var(--messenger-text, #212529);
       backdrop-filter: blur(12px);
     }
@@ -1441,13 +1445,25 @@ $composeCsrfToken = security_get_csrf_token();
       position: absolute;
     }
 
+    body.dark-mode .emoji-menu.is-body-bound,
+    body[data-theme="dark"] .emoji-menu.is-body-bound {
+      --messenger-panel-strong: #1f2021;
+      --messenger-divider: rgba(255, 255, 255, 0.06);
+      --messenger-text: #f5f7fb;
+      --messenger-muted: #aeb4bd;
+      --messenger-accent: #2374e1;
+      --messenger-chip: rgba(255, 255, 255, 0.08);
+    }
+
     .mailbox-app .emoji-menu[hidden],
-    .compose-modal .emoji-menu[hidden] {
+    .compose-modal .emoji-menu[hidden],
+    .emoji-menu.is-body-bound[hidden] {
       display: none;
     }
 
     .mailbox-app .emoji-item,
-    .compose-modal .emoji-item {
+    .compose-modal .emoji-item,
+    .emoji-menu.is-body-bound .emoji-item {
       border: 0;
       background: transparent;
       border-radius: 0.55rem;
@@ -1465,13 +1481,16 @@ $composeCsrfToken = security_get_csrf_token();
     .mailbox-app .emoji-item:hover,
     .mailbox-app .emoji-item:focus,
     .compose-modal .emoji-item:hover,
-    .compose-modal .emoji-item:focus {
+    .compose-modal .emoji-item:focus,
+    .emoji-menu.is-body-bound .emoji-item:hover,
+    .emoji-menu.is-body-bound .emoji-item:focus {
       background: color-mix(in srgb, var(--messenger-accent) 16%, transparent);
       outline: none;
     }
 
     .mailbox-app .emoji-panel-head,
-    .compose-modal .emoji-panel-head {
+    .compose-modal .emoji-panel-head,
+    .emoji-menu.is-body-bound .emoji-panel-head {
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -1485,7 +1504,8 @@ $composeCsrfToken = security_get_csrf_token();
     }
 
     .mailbox-app .emoji-panel-cats,
-    .compose-modal .emoji-panel-cats {
+    .compose-modal .emoji-panel-cats,
+    .emoji-menu.is-body-bound .emoji-panel-cats {
       display: inline-flex;
       align-items: center;
       gap: 0.18rem;
@@ -1493,7 +1513,8 @@ $composeCsrfToken = security_get_csrf_token();
     }
 
     .mailbox-app .emoji-panel-cat,
-    .compose-modal .emoji-panel-cat {
+    .compose-modal .emoji-panel-cat,
+    .emoji-menu.is-body-bound .emoji-panel-cat {
       width: 1.55rem;
       height: 1.55rem;
       border: 0;
@@ -1512,13 +1533,16 @@ $composeCsrfToken = security_get_csrf_token();
     .mailbox-app .emoji-panel-cat:hover,
     .mailbox-app .emoji-panel-cat:focus,
     .compose-modal .emoji-panel-cat:hover,
-    .compose-modal .emoji-panel-cat:focus {
+    .compose-modal .emoji-panel-cat:focus,
+    .emoji-menu.is-body-bound .emoji-panel-cat:hover,
+    .emoji-menu.is-body-bound .emoji-panel-cat:focus {
       background: color-mix(in srgb, var(--messenger-accent) 22%, transparent);
       outline: none;
     }
 
     .mailbox-app .emoji-panel-search,
-    .compose-modal .emoji-panel-search {
+    .compose-modal .emoji-panel-search,
+    .emoji-menu.is-body-bound .emoji-panel-search {
       width: 100%;
       height: 2rem;
       border-radius: 0.7rem;
@@ -1532,12 +1556,14 @@ $composeCsrfToken = security_get_csrf_token();
     }
 
     .mailbox-app .emoji-panel-search::placeholder,
-    .compose-modal .emoji-panel-search::placeholder {
+    .compose-modal .emoji-panel-search::placeholder,
+    .emoji-menu.is-body-bound .emoji-panel-search::placeholder {
       color: var(--messenger-muted);
     }
 
     .mailbox-app .emoji-grid,
-    .compose-modal .emoji-grid {
+    .compose-modal .emoji-grid,
+    .emoji-menu.is-body-bound .emoji-grid {
       display: grid;
       grid-template-columns: repeat(8, minmax(0, 1fr));
       gap: 0.28rem;
@@ -1547,12 +1573,14 @@ $composeCsrfToken = security_get_csrf_token();
     }
 
     .mailbox-app .emoji-panel-section,
-    .compose-modal .emoji-panel-section {
+    .compose-modal .emoji-panel-section,
+    .emoji-menu.is-body-bound .emoji-panel-section {
       display: contents;
     }
 
     .mailbox-app .emoji-panel-label,
-    .compose-modal .emoji-panel-label {
+    .compose-modal .emoji-panel-label,
+    .emoji-menu.is-body-bound .emoji-panel-label {
       grid-column: 1 / -1;
       margin-top: 0.35rem;
       color: var(--messenger-muted);
@@ -1821,7 +1849,7 @@ $composeCsrfToken = security_get_csrf_token();
       border: 1px solid var(--mailbox-border);
       box-shadow: 0 12px 28px color-mix(in srgb, var(--messenger-text) 14%, transparent);
       display: block;
-      z-index: 2140;
+      z-index: 1060;
       color: var(--mailbox-text);
       pointer-events: auto;
     }
@@ -2316,7 +2344,7 @@ $composeCsrfToken = security_get_csrf_token();
     }
 
     .compose-modal .compose-message-shell .emoji-menu {
-      z-index: 1080;
+      z-index: 1095;
     }
 
     .compose-modal .compose-file-summary {
@@ -4635,6 +4663,12 @@ $composeCsrfToken = security_get_csrf_token();
       max-width: 12rem;
     }
 
+    body.kodus-composer-emoji-open .mailbox-app .reply .chat-reactions {
+      opacity: 0;
+      pointer-events: none;
+      z-index: 0;
+    }
+
     .mailbox-app .reply.mine .chat-reactions {
       left: -0.55rem;
       right: auto;
@@ -4833,7 +4867,7 @@ $composeCsrfToken = security_get_csrf_token();
     }
 
     .mailbox-app .chat-composer-tool-stack .emoji-menu {
-      z-index: 1075;
+      z-index: 1095;
     }
 
     .mailbox-app .reply-actions {
@@ -5076,10 +5110,11 @@ $composeCsrfToken = security_get_csrf_token();
                               $messageId = (int) $row['id'];
                               $isGroupThread = mailboxIsGroupThread($row);
                               $recipientLabel = trim((string) ($row['recipient_names'] ?? ''));
-                              $senderLabel = trim((string) ($row['user_name'] ?? ''));
-                              if ($senderLabel === '') {
-                                  $senderLabel = trim((string) ($row['user_email'] ?? 'Unknown'));
-                              }
+                              $senderLabel = mailboxDisplayName([
+                                  'first_name' => $row['sender_first_name'] ?? '',
+                                  'user_name' => $row['user_name'] ?? '',
+                                  'user_email' => $row['user_email'] ?? '',
+                              ], 'Unknown');
                               $isSenderView = !empty($_SESSION['email']) && strcasecmp((string) ($row['user_email'] ?? ''), (string) $_SESSION['email']) === 0;
                               $displayLabel = $isGroupThread
                                   ? (trim((string) ($row['group_name'] ?? '')) !== '' ? (string) $row['group_name'] : 'Group chat')
@@ -5094,7 +5129,7 @@ $composeCsrfToken = security_get_csrf_token();
                                   : avatar_resolve_url($displayPicture, $displaySsoAvatar, $base_url, dirname(__DIR__));
                               $presenceUserId = $isGroupThread ? 0 : (int) ($isSenderView ? ($row['recipient_user_id'] ?? 0) : ($row['sender_user_id'] ?? 0));
                               $presence = $isGroupThread
-                                  ? ['detail' => 'Group chat', 'class' => 'offline']
+                                  ? mailboxGroupPresence($conn, $messageId)
                                   : mailboxClassifyPresence(
                                       $isSenderView ? ($row['recipient_last_activity'] ?? null) : ($row['sender_last_activity'] ?? null),
                                       (int) ($isSenderView ? ($row['recipient_is_online'] ?? 0) : ($row['sender_is_online'] ?? 0))
@@ -5243,11 +5278,11 @@ $composeCsrfToken = security_get_csrf_token();
                   value="user_<?php echo (int) $composeRecipient['id']; ?>"
                   data-avatar="<?php echo htmlspecialchars($composeRecipient['avatar_url']); ?>"
                   data-kind="user"
-                  data-name="<?php echo htmlspecialchars($composeRecipient['username']); ?>"
+                  data-name="<?php echo htmlspecialchars($composeRecipient['display_name']); ?>"
                   data-email="<?php echo htmlspecialchars($composeRecipient['email']); ?>"
                   data-presence="<?php echo htmlspecialchars($composeRecipient['presence']['detail'] ?? 'Offline'); ?>"
                 >
-                  <?php echo htmlspecialchars($composeRecipient['username']); ?>
+                  <?php echo htmlspecialchars($composeRecipient['display_name']); ?>
                 </option>
               <?php endforeach; ?>
             </select>
@@ -5306,11 +5341,11 @@ $composeCsrfToken = security_get_csrf_token();
                         value="user_<?php echo (int) $composeRecipient['id']; ?>"
                         data-avatar="<?php echo htmlspecialchars($composeRecipient['avatar_url']); ?>"
                         data-kind="user"
-                        data-name="<?php echo htmlspecialchars($composeRecipient['username']); ?>"
+                        data-name="<?php echo htmlspecialchars($composeRecipient['display_name']); ?>"
                         data-email="<?php echo htmlspecialchars($composeRecipient['email']); ?>"
                         data-presence="<?php echo htmlspecialchars($composeRecipient['presence']['detail'] ?? 'Offline'); ?>"
                       >
-                        <?php echo htmlspecialchars($composeRecipient['username']); ?>
+                        <?php echo htmlspecialchars($composeRecipient['display_name']); ?>
                       </option>
                     <?php endforeach; ?>
                   </select>
@@ -5767,8 +5802,19 @@ function positionEmojiMenu(trigger, menu) {
         if (menu.parentElement !== modalContent) {
             modalContent.appendChild(menu);
         }
-        menu.classList.add('is-modal-bound');
+        menu.classList.add('is-composer-picker', 'is-modal-bound');
+        menu.classList.remove('is-body-bound');
     } else {
+        if (!menu.dataset.originalParentId && menu.parentElement && menu.parentElement !== document.body) {
+            if (!menu.parentElement.id) {
+                menu.parentElement.id = `${menu.id || 'emojiMenu'}Parent`;
+            }
+            menu.dataset.originalParentId = menu.parentElement.id;
+        }
+        if (menu.parentElement !== document.body) {
+            document.body.appendChild(menu);
+        }
+        menu.classList.add('is-composer-picker', 'is-body-bound');
         menu.classList.remove('is-modal-bound');
     }
 
@@ -5820,6 +5866,14 @@ function positionEmojiMenu(trigger, menu) {
     menu.style.maxWidth = `${Math.max(180, Math.round(bounds.right - bounds.left))}px`;
 }
 
+function syncComposerEmojiLayerState() {
+    const hasOpenComposerEmoji = !!document.querySelector('.emoji-menu.is-composer-picker:not([hidden])');
+    document.body.classList.toggle('kodus-composer-emoji-open', hasOpenComposerEmoji);
+    if (hasOpenComposerEmoji && typeof window.closeReactionPickers === 'function') {
+        window.closeReactionPickers();
+    }
+}
+
 function closeEmojiPicker(trigger, menu) {
     if (!menu) {
         return;
@@ -5830,10 +5884,21 @@ function closeEmojiPicker(trigger, menu) {
     menu.style.top = '';
     menu.style.right = '';
     menu.style.bottom = '';
+    menu.style.maxWidth = '';
+
+    if (!menu.classList.contains('is-modal-bound') && menu.dataset.originalParentId) {
+        const originalParent = document.getElementById(menu.dataset.originalParentId);
+        if (originalParent && menu.parentElement !== originalParent) {
+            originalParent.appendChild(menu);
+        }
+    }
+    menu.classList.remove('is-modal-bound', 'is-body-bound');
 
     if (trigger) {
         trigger.setAttribute('aria-expanded', 'false');
     }
+
+    syncComposerEmojiLayerState();
 }
 
 function toggleEmojiPicker(trigger, menu) {
@@ -5849,6 +5914,8 @@ function toggleEmojiPicker(trigger, menu) {
     if (shouldOpen) {
         positionEmojiMenu(trigger, menu);
     }
+
+    syncComposerEmojiLayerState();
 
     return shouldOpen;
 }
@@ -5962,10 +6029,6 @@ function getComparableConversationMarkupFromHtml(html) {
         trigger.setAttribute('aria-expanded', 'false');
     });
     return normalizeHtml(wrapper.innerHTML);
-}
-
-function isConversationNearBottom() {
-    return false;
 }
 
 function updateMailboxSummary() {
@@ -6171,6 +6234,9 @@ function applyUnreadCount(count) {
         badge.remove();
         topbarBadge.remove();
     }
+    if (window.parent && window.parent !== window && typeof window.parent.updateKodusChatBubbleUnreadBadges === 'function') {
+        window.parent.updateKodusChatBubbleUnreadBadges(unreadCount);
+    }
 }
 
 function updateUnreadCount() {
@@ -6330,10 +6396,6 @@ function renderLiveTypingIndicator() {
         parent: el.parentElement ? el.parentElement.className : null
     });
 
-    const conversation = el.parentElement;
-    if (conversation) {
-        conversation.scrollTop = conversation.scrollHeight;
-    }
 }
 
 function showLiveTypingUser(userId, name) {
@@ -6579,7 +6641,7 @@ function positionReactionPicker(state) {
     picker.style.left = `${left}px`;
     picker.style.top = `${top}px`;
     picker.style.width = `${pickerWidth}px`;
-    picker.style.zIndex = '2140';
+    picker.style.zIndex = '1060';
     logReactionPickerDebug('position', { messageId: state.messageId, replyId: state.replyId, left, top, anchorRect });
 }
 
@@ -6788,7 +6850,6 @@ function appendOptimisticReply(replyText, attachments = [], quote = null) {
         return;
     }
 
-    const timeLabel = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
     const safeReply = escapeReplyHtml(replyText).replace(/\n/g, '<br>');
     const safeReplyWithMentions = safeReply.replace(/(^|[\s(])(@(?:everyone|[\p{L}\p{N}_.-]+))/gu, '$1<span class="chat-mention-chip">$2</span>');
     const userLabel = $('#mainSidebar .user-panel .info > a').first().text().trim() || 'You';
@@ -6817,7 +6878,6 @@ function appendOptimisticReply(replyText, attachments = [], quote = null) {
           <img src="${avatarSrc}" alt="${escapeReplyHtml(userLabel)}" class="reply-avatar">
           <div class="reply-meta">
             <strong>${escapeReplyHtml(userLabel)}</strong>
-            <span>${timeLabel}</span>
             <span class="text-info optimistic-status">Sending...</span>
           </div>
         </div>
@@ -7710,6 +7770,17 @@ $(document).on('submit', '#replyForm', function(e) {
     const optimisticReply = appendOptimisticReply(replyText, outgoingFiles, quoteDraft);
     const submitButton = $(this).find('[type="submit"]');
     submitButton.prop('disabled', true);
+    stopTypingHeartbeat();
+    if (typeof window.KODUSResetReplyComposer === 'function') {
+        window.KODUSResetReplyComposer();
+    } else {
+        form.reset();
+        form.dataset.mentionedUserIds = '';
+        $('#replyFilePreview').empty();
+        $('#mentionedUserIds').val('');
+        clearReplyQuoteDraft();
+        $('#replyText').trigger('input').focus();
+    }
 
     $.ajax({
         url: 'send_reply.php',
@@ -7719,17 +7790,6 @@ $(document).on('submit', '#replyForm', function(e) {
         contentType: false,
         success: function(resp) {
             if (resp.status === 'success') {
-                stopTypingHeartbeat();
-                if (typeof window.KODUSResetReplyComposer === 'function') {
-                    window.KODUSResetReplyComposer();
-                } else {
-                    form.reset();
-                    form.dataset.mentionedUserIds = '';
-                    $('#replyFilePreview').empty();
-                    $('#mentionedUserIds').val('');
-                    clearReplyQuoteDraft();
-                    $('#replyText').trigger('input').focus();
-                }
                 closeReactionPickers();
                 optimisticReply?.find('.optimistic-status')
                     .removeClass('text-info text-danger')
@@ -7858,6 +7918,12 @@ if (window.KODUSLiveRefresh && typeof window.KODUSLiveRefresh.watchSocket === 'f
         onMessage: function(payload) {
             const data = payload && payload.data ? payload.data : {};
             applyMessengerPresence(data.user_id, data.online || data.status === 'online', data.last_active_at || data.last_active || data.at);
+            updateMessageList();
+            if ($('#messageDetail .chat-shell[data-presence-user-id="0"]').length) {
+                refreshCurrentThread().always(function() {
+                    notifyParentKodusBubbleThreadState();
+                });
+            }
         }
     });
 

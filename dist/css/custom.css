@@ -27,6 +27,16 @@
 	--kodus-scrollbar-thumb-active: rgba(184, 194, 204, 0.48);
 }
 
+#mainTopbar {
+	z-index: 1040;
+}
+
+#mainTopbar .dropdown-menu,
+#mainTopbar .dropdown-menu-lg,
+#mainTopbar .dropdown-menu-xl {
+	z-index: 1049;
+}
+
 body[data-theme="light"] {
 	--kodus-page-bg: #f4f6f9;
 	--kodus-surface: #ffffff;
@@ -245,7 +255,7 @@ hr {
 }
 
 .dropdown-menu {
-    z-index: 1051 !important; /* Ensure it's above everything */
+    z-index: 1049 !important; /* Keep app dropdowns over page chrome without outranking Bootstrap modals */
     position: absolute !important;
     transition: opacity 0.2s ease-in-out;
 }

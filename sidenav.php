@@ -168,7 +168,7 @@ if (isset($_SESSION['user_id']) && is_numeric($_SESSION['user_id'])) {
       right: 1rem;
       bottom: auto;
       left: auto;
-      z-index: 1085;
+      z-index: 1035;
       display: flex;
       flex-direction: column;
       gap: 0.75rem;
@@ -230,7 +230,7 @@ if (isset($_SESSION['user_id']) && is_numeric($_SESSION['user_id'])) {
       position: fixed;
       right: calc(var(--kodus-bubble-edge-gap) + var(--kodus-bubble-reserved-right));
       bottom: calc(0.75rem + env(safe-area-inset-bottom));
-      z-index: 1085;
+      z-index: 1035;
       display: flex;
       flex-direction: row-reverse;
       align-items: flex-end;
@@ -336,6 +336,31 @@ if (isset($_SESSION['user_id']) && is_numeric($_SESSION['user_id'])) {
 
     .kodus-chat-bubble__presence.is-online {
       background: #31a24c;
+    }
+
+    .kodus-chat-bubble__unread {
+      position: absolute;
+      top: -0.28rem;
+      left: -0.28rem;
+      z-index: 3;
+      min-width: 1.15rem;
+      height: 1.15rem;
+      padding: 0 0.32rem;
+      border-radius: 999px;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: #dc3545;
+      color: #fff;
+      border: 2px solid #fff;
+      font-size: 0.68rem;
+      font-weight: 800;
+      line-height: 1;
+      box-shadow: 0 6px 12px rgba(15, 23, 42, 0.2);
+    }
+
+    .kodus-chat-bubble__unread.is-visible {
+      display: inline-flex;
     }
 
     .kodus-chat-bubble__title {
@@ -872,9 +897,14 @@ if (isset($_SESSION['user_id']) && is_numeric($_SESSION['user_id'])) {
                   <span class="dropdown-item text-center text-muted">No unread messages</span>
               <?php else:
                   foreach ($messages as $row):
-                      $senderName = trim(($row['first_name'] ?? '') . ' ' . ($row['last_name'] ?? ''));
+                      $senderFirstName = trim((string) ($row['first_name'] ?? ''));
+                      $senderFirstNameParts = preg_split('/\s+/', $senderFirstName, -1, PREG_SPLIT_NO_EMPTY);
+                      $senderName = trim((string) ($senderFirstNameParts[0] ?? ''));
                       if ($senderName === '') {
-                          $senderName = htmlspecialchars($row['user_name'] ?? 'Unknown');
+                          $senderName = trim((string) ($row['user_name'] ?? ''));
+                      }
+                      if ($senderName === '') {
+                          $senderName = trim((string) ($row['user_email'] ?? 'Unknown'));
                       }
                       $latestPreview = $latestPreviews[(int) $row['id']] ?? [
                           'text' => mailboxPreviewText($row['message'] ?? '', $row['attachment'] ?? ''),
@@ -888,7 +918,7 @@ if (isset($_SESSION['user_id']) && is_numeric($_SESSION['user_id'])) {
                       <img src="<?= $avatar ?>" alt="User Avatar" class="img-size-50 mr-3 img-circle">
                       <div class="media-body">
                         <h3 class="dropdown-item-title">
-                          <?= $senderName ?>
+                          <?= htmlspecialchars($senderName, ENT_QUOTES, 'UTF-8') ?>
                         </h3>
                         <p class="text-sm"><?= $snippet !== '' ? $snippet : 'New message' ?></p>
                       </div>
@@ -930,6 +960,7 @@ if (isset($_SESSION['user_id']) && is_numeric($_SESSION['user_id'])) {
           <span class="kodus-chat-bubble__avatar-wrap">
             <img class="kodus-chat-bubble__avatar" src="<?= $app_root; ?>dist/img/default.webp" alt="">
             <span class="kodus-chat-bubble__presence is-offline" aria-hidden="true"></span>
+            <span class="kodus-chat-bubble__unread" aria-label="Unread messages"></span>
           </span>
         </button>
         <div class="kodus-chat-bubble__title">Messenger</div>
@@ -1697,6 +1728,20 @@ function updateKodusChatBubbleStateFromNode(bubble) {
   });
 }
 
+function updateKodusChatBubbleUnreadBadges(count) {
+  const unreadCount = Math.max(0, Number(count || 0));
+  document.querySelectorAll('.kodus-chat-bubble').forEach(function(bubble) {
+    const badge = bubble.querySelector('.kodus-chat-bubble__unread');
+    if (!badge) {
+      return;
+    }
+    const showBadge = unreadCount > 0 && bubble.classList.contains('is-minimized');
+    badge.textContent = unreadCount > 99 ? '99+' : String(unreadCount);
+    badge.classList.toggle('is-visible', showBadge);
+    badge.hidden = !showBadge;
+  });
+}
+
 function enforceKodusChatBubbleOverflow() {
   const stack = getKodusChatBubbleStack();
   if (!stack) {
@@ -1717,6 +1762,9 @@ function enforceKodusChatBubbleOverflow() {
     .forEach(function(bubble, index) {
       bubble.style.setProperty('--minimized-index', String(index));
     });
+  if (typeof updateUnreadCount === 'function') {
+    updateUnreadCount();
+  }
 }
 
 function applyKodusBubblePresence(userId, status) {

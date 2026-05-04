@@ -27,15 +27,16 @@ $query = "
     SELECT cm.*,
            sender_user.picture AS sender_picture,
            sender_user.id AS sender_user_id,
+           sender_user.first_name AS sender_first_name,
            sender_user.sso_avatar_url AS sender_sso_avatar_url,
            sender_user.last_activity AS sender_last_activity,
            sender_user.is_online AS sender_is_online,
            (
-               SELECT COALESCE(NULLIF(u.username, ''), COALESCE(NULLIF(cmr.recipient_name, ''), cmr.recipient_email))
+               SELECT COALESCE(NULLIF(SUBSTRING_INDEX(TRIM(u.first_name), ' ', 1), ''), NULLIF(u.username, ''), COALESCE(NULLIF(cmr.recipient_name, ''), cmr.recipient_email))
                FROM contact_message_recipients cmr
                LEFT JOIN users u ON u.id = cmr.user_id
                WHERE cmr.message_id = cm.id
-               ORDER BY COALESCE(NULLIF(u.username, ''), COALESCE(NULLIF(cmr.recipient_name, ''), cmr.recipient_email))
+               ORDER BY COALESCE(NULLIF(SUBSTRING_INDEX(TRIM(u.first_name), ' ', 1), ''), NULLIF(u.username, ''), COALESCE(NULLIF(cmr.recipient_name, ''), cmr.recipient_email))
                LIMIT 1
            ) AS primary_recipient_name,
            (
@@ -43,7 +44,7 @@ $query = "
                FROM contact_message_recipients cmr
                LEFT JOIN users u ON u.id = cmr.user_id
                WHERE cmr.message_id = cm.id
-               ORDER BY COALESCE(NULLIF(u.username, ''), COALESCE(NULLIF(cmr.recipient_name, ''), cmr.recipient_email))
+               ORDER BY COALESCE(NULLIF(SUBSTRING_INDEX(TRIM(u.first_name), ' ', 1), ''), NULLIF(u.username, ''), COALESCE(NULLIF(cmr.recipient_name, ''), cmr.recipient_email))
                LIMIT 1
            ) AS primary_recipient_user_id,
            (
@@ -51,7 +52,7 @@ $query = "
                FROM contact_message_recipients cmr
                LEFT JOIN users u ON u.id = cmr.user_id
                WHERE cmr.message_id = cm.id
-               ORDER BY COALESCE(NULLIF(u.username, ''), COALESCE(NULLIF(cmr.recipient_name, ''), cmr.recipient_email))
+               ORDER BY COALESCE(NULLIF(SUBSTRING_INDEX(TRIM(u.first_name), ' ', 1), ''), NULLIF(u.username, ''), COALESCE(NULLIF(cmr.recipient_name, ''), cmr.recipient_email))
                LIMIT 1
            ) AS primary_recipient_picture,
            (
@@ -59,7 +60,7 @@ $query = "
                FROM contact_message_recipients cmr
                LEFT JOIN users u ON u.id = cmr.user_id
                WHERE cmr.message_id = cm.id
-               ORDER BY COALESCE(NULLIF(u.username, ''), COALESCE(NULLIF(cmr.recipient_name, ''), cmr.recipient_email))
+               ORDER BY COALESCE(NULLIF(SUBSTRING_INDEX(TRIM(u.first_name), ' ', 1), ''), NULLIF(u.username, ''), COALESCE(NULLIF(cmr.recipient_name, ''), cmr.recipient_email))
                LIMIT 1
            ) AS primary_recipient_sso_avatar_url,
            (
@@ -67,7 +68,7 @@ $query = "
                FROM contact_message_recipients cmr
                LEFT JOIN users u ON u.id = cmr.user_id
                WHERE cmr.message_id = cm.id
-               ORDER BY COALESCE(NULLIF(u.username, ''), COALESCE(NULLIF(cmr.recipient_name, ''), cmr.recipient_email))
+               ORDER BY COALESCE(NULLIF(SUBSTRING_INDEX(TRIM(u.first_name), ' ', 1), ''), NULLIF(u.username, ''), COALESCE(NULLIF(cmr.recipient_name, ''), cmr.recipient_email))
                LIMIT 1
            ) AS primary_recipient_last_activity,
            (
@@ -75,11 +76,11 @@ $query = "
                FROM contact_message_recipients cmr
                LEFT JOIN users u ON u.id = cmr.user_id
                WHERE cmr.message_id = cm.id
-               ORDER BY COALESCE(NULLIF(u.username, ''), COALESCE(NULLIF(cmr.recipient_name, ''), cmr.recipient_email))
+               ORDER BY COALESCE(NULLIF(SUBSTRING_INDEX(TRIM(u.first_name), ' ', 1), ''), NULLIF(u.username, ''), COALESCE(NULLIF(cmr.recipient_name, ''), cmr.recipient_email))
                LIMIT 1
            ) AS primary_recipient_is_online,
            (
-               SELECT GROUP_CONCAT(DISTINCT u.username ORDER BY u.username SEPARATOR ', ')
+               SELECT GROUP_CONCAT(DISTINCT COALESCE(NULLIF(SUBSTRING_INDEX(TRIM(u.first_name), ' ', 1), ''), NULLIF(u.username, ''), u.email) ORDER BY COALESCE(NULLIF(SUBSTRING_INDEX(TRIM(u.first_name), ' ', 1), ''), NULLIF(u.username, ''), u.email) SEPARATOR ', ')
                FROM contact_message_recipients cmr
                INNER JOIN users u ON u.id = cmr.user_id
                WHERE cmr.message_id = cm.id
@@ -88,12 +89,12 @@ $query = "
            (
                SELECT GROUP_CONCAT(
                    DISTINCT CONCAT(
-                       COALESCE(NULLIF(u.username, ''), COALESCE(NULLIF(cmr.recipient_name, ''), cmr.recipient_email)),
+                       COALESCE(NULLIF(SUBSTRING_INDEX(TRIM(u.first_name), ' ', 1), ''), NULLIF(u.username, ''), COALESCE(NULLIF(cmr.recipient_name, ''), cmr.recipient_email)),
                        ' <',
                        cmr.recipient_email,
                        '>'
                    )
-                   ORDER BY COALESCE(NULLIF(u.username, ''), COALESCE(NULLIF(cmr.recipient_name, ''), cmr.recipient_email))
+                   ORDER BY COALESCE(NULLIF(SUBSTRING_INDEX(TRIM(u.first_name), ' ', 1), ''), NULLIF(u.username, ''), COALESCE(NULLIF(cmr.recipient_name, ''), cmr.recipient_email))
                    SEPARATOR '||'
                )
                FROM contact_message_recipients cmr
@@ -158,8 +159,16 @@ $originalIsMine = mailboxOwnerMatchesCurrentUser(
 );
 $originalReplyClass = $originalIsMine ? 'reply mine' : 'reply theirs';
 $originalDisplayName = $originalIsMine
-    ? (trim((string) ($_SESSION['username'] ?? '')) !== '' ? (string) $_SESSION['username'] : 'You')
-    : (trim((string) ($message['user_name'] ?? '')) !== '' ? (string) $message['user_name'] : $originalSenderEmail);
+    ? mailboxDisplayName([
+        'first_name' => $_SESSION['first_name'] ?? '',
+        'username' => $_SESSION['username'] ?? '',
+        'email' => $_SESSION['email'] ?? '',
+    ], 'You')
+    : mailboxDisplayName([
+        'first_name' => $message['sender_first_name'] ?? '',
+        'user_name' => $message['user_name'] ?? '',
+        'user_email' => $originalSenderEmail,
+    ], $originalSenderEmail);
 $originalAvatarUrl = avatar_resolve_url($message['sender_picture'] ?? '', $message['sender_sso_avatar_url'] ?? '', $base_url, dirname(__DIR__));
 $canDeleteForEveryone = $userType === 'admin'
     || mailboxOwnerMatchesCurrentUser(
@@ -186,7 +195,7 @@ if ($isGroupThread) {
 }
 
 $stmt = $conn->prepare("
-    SELECT r.*, u.username, u.userType, u.picture, u.sso_avatar_url, deleter.username AS deleted_by_username
+    SELECT r.*, u.username, u.first_name, u.userType, u.picture, u.sso_avatar_url, deleter.username AS deleted_by_username, deleter.first_name AS deleted_by_first_name
     FROM contact_replies r
     JOIN users u ON r.user_id = u.id
     LEFT JOIN users deleter ON deleter.id = r.deleted_by_user_id
@@ -202,9 +211,7 @@ $replyCount = count($replies);
 $participantLabels = [];
 $participantMentions = [];
 $participantMentionItems = [];
-$senderParticipantLabel = trim((string) ($message['user_name'] ?? '')) !== ''
-    ? (string) $message['user_name']
-    : (string) ($message['user_email'] ?? 'Unknown');
+$senderParticipantLabel = $originalDisplayName;
 if (!$isGroupThread) {
     $participantLabels[] = $senderParticipantLabel;
     $participantMentions[] = $senderParticipantLabel;
@@ -239,7 +246,7 @@ if ($isGroupThread) {
     ];
     $mentionStmt = $conn->prepare("
         SELECT cmr.user_id,
-               COALESCE(NULLIF(u.username, ''), COALESCE(NULLIF(cmr.recipient_name, ''), cmr.recipient_email)) AS display_name
+               COALESCE(NULLIF(SUBSTRING_INDEX(TRIM(u.first_name), ' ', 1), ''), NULLIF(u.username, ''), COALESCE(NULLIF(cmr.recipient_name, ''), cmr.recipient_email)) AS display_name
         FROM contact_message_recipients cmr
         LEFT JOIN users u ON u.id = cmr.user_id
         WHERE cmr.message_id = ?
@@ -297,7 +304,7 @@ if (trim((string) $chatAvatarUrl) === '') {
 
 $chatPresenceUserId = $isGroupThread ? 0 : (int) ($originalIsMine ? ($message['primary_recipient_user_id'] ?? 0) : ($message['sender_user_id'] ?? 0));
 $chatPresence = $isGroupThread
-    ? ['detail' => 'Group chat', 'class' => 'offline']
+    ? mailboxGroupPresence($conn, $id)
     : mailboxClassifyPresence(
         $originalIsMine ? ($message['primary_recipient_last_activity'] ?? null) : ($message['sender_last_activity'] ?? null),
         (int) ($originalIsMine ? ($message['primary_recipient_is_online'] ?? 0) : ($message['sender_is_online'] ?? 0))
@@ -309,7 +316,7 @@ $chatStatusCopy = $currentFolder === 'trash'
             ? 'You left this group'
             : (!empty($groupMemberState['muted_at'])
                 ? 'Muted - ' . count($participantLabels) . ' members'
-                : count($participantLabels) . ' members'))
+                : $chatPresence['detail'] . ' - ' . count($participantLabels) . ' members'))
         : $chatPresence['detail']);
 $chatMetaCopy = $currentFolder === 'trash'
     ? 'Restore this chat to send new updates.'
@@ -378,6 +385,48 @@ function messengerFriendlyTime(?string $value): string
     }
 
     return date('M j, g:i A', $timestamp);
+}
+
+function messengerSeparatorLabel(?string $value): string
+{
+    $timestamp = strtotime((string) $value);
+    if (!$timestamp) {
+        return '';
+    }
+
+    $date = date('Y-m-d', $timestamp);
+    if ($date === date('Y-m-d')) {
+        return 'Today ' . date('g:i A', $timestamp);
+    }
+    if ($date === date('Y-m-d', strtotime('-1 day'))) {
+        return 'Yesterday ' . date('g:i A', $timestamp);
+    }
+
+    return date('M j, Y g:i A', $timestamp);
+}
+
+function shouldRenderMessengerSeparator(?string $current, ?string $previous): bool
+{
+    $currentTs = strtotime((string) $current);
+    if (!$currentTs) {
+        return false;
+    }
+
+    $previousTs = strtotime((string) $previous);
+    if (!$previousTs) {
+        return true;
+    }
+
+    return date('Y-m-d', $currentTs) !== date('Y-m-d', $previousTs)
+        || ($currentTs - $previousTs) >= 900;
+}
+
+function renderMessengerSeparator(?string $value): string
+{
+    $label = messengerSeparatorLabel($value);
+    return $label !== ''
+        ? '<div class="chat-system-event chat-time-separator"><span>' . htmlspecialchars($label, ENT_QUOTES, 'UTF-8') . '</span></div>'
+        : '';
 }
 
 function renderReactionBar(array $summary, int $messageId, ?int $replyId): string
@@ -467,7 +516,12 @@ function renderReply($row, $userId, $userType, array $reactionSummary, int $mess
     $isDeleted = !empty($row['deleted_for_everyone_at']);
     $canEdit = $isMine && !$isDeleted;
     $canDelete = ($isMine || $userType === 'admin') && !$isDeleted;
-    $quoteAuthor = trim((string) ($row['username'] ?? ''));
+    $displayName = mailboxDisplayName($row, 'Someone');
+    $deletedBy = mailboxDisplayName([
+        'first_name' => $row['deleted_by_first_name'] ?? '',
+        'username' => $row['deleted_by_username'] ?? '',
+    ], '');
+    $quoteAuthor = $displayName;
     $quoteExcerpt = mailbox_quote_excerpt((string) ($row['reply'] ?? ''), !empty($row['attachment']) ? 'Attachment' : 'Message');
     ob_start();
     ?>
@@ -481,13 +535,13 @@ function renderReply($row, $userId, $userType, array $reactionSummary, int $mess
       data-quote-reply-id="<?= (int) $row['id'] ?>"
       data-quote-author="<?= htmlspecialchars($quoteAuthor, ENT_QUOTES) ?>"
       data-quote-excerpt="<?= htmlspecialchars($quoteExcerpt, ENT_QUOTES) ?>"
+      title="<?= htmlspecialchars(messengerFriendlyTime($row['sent_at'] ?? ''), ENT_QUOTES) ?>"
     >
       <div class="reply-head">
-        <img src="<?= htmlspecialchars($avatarUrl) ?>" alt="<?= htmlspecialchars($row['username']) ?>" class="reply-avatar">
+        <img src="<?= htmlspecialchars($avatarUrl) ?>" alt="<?= htmlspecialchars($displayName) ?>" class="reply-avatar">
         <div class="reply-meta">
-          <strong><?= htmlspecialchars($row['username']) ?></strong>
+          <strong><?= htmlspecialchars($displayName) ?></strong>
           <span><?= htmlspecialchars($row['userType']) ?></span>
-          <span><?= htmlspecialchars(messengerFriendlyTime($row['sent_at'] ?? '')) ?></span>
           <?php if ($isDeleted): ?>
             <span class="badge badge-secondary">Removed</span>
           <?php endif; ?>
@@ -536,7 +590,7 @@ function renderReply($row, $userId, $userType, array $reactionSummary, int $mess
       </div>
       <?php if ($isDeleted): ?>
         <div class="reply-deleted-copy">
-          This message was removed for everyone<?= !empty($row['deleted_by_username']) ? ' by ' . htmlspecialchars((string) $row['deleted_by_username']) : '' ?>.
+          This message was removed for everyone<?= $deletedBy !== '' ? ' by ' . htmlspecialchars($deletedBy) : '' ?>.
         </div>
       <?php else: ?>
         <?= renderQuotedReplyPreview($row) ?>
@@ -564,13 +618,13 @@ function renderOriginalMessageBubble($message, $originalReplyClass, $originalAva
       data-quote-reply-id=""
       data-quote-author="<?= htmlspecialchars($originalDisplayName, ENT_QUOTES) ?>"
       data-quote-excerpt="<?= htmlspecialchars($quoteExcerpt, ENT_QUOTES) ?>"
+      title="<?= htmlspecialchars(messengerFriendlyTime($message['sent_at'] ?? ''), ENT_QUOTES) ?>"
     >
       <div class="reply-head">
         <img src="<?= htmlspecialchars($originalAvatarUrl) ?>" alt="<?= htmlspecialchars($originalDisplayName) ?>" class="reply-avatar">
         <div class="reply-meta">
           <strong><?= htmlspecialchars($originalDisplayName) ?></strong>
           <span>Started the conversation</span>
-          <span><?= htmlspecialchars(messengerFriendlyTime($message['sent_at'] ?? '')) ?></span>
         </div>
         <div class="reply-tools ml-auto">
           <button
@@ -607,11 +661,18 @@ foreach ($replies as $reply) {
 }
 
 if ($onlyConversation) {
+    $previousMessageTime = null;
     ?>
     <div id="conversationWrapper" class="mt-4">
       <div class="conversation-scroll">
+        <?= renderMessengerSeparator($message['sent_at'] ?? '') ?>
+        <?php $previousMessageTime = (string) ($message['sent_at'] ?? ''); ?>
         <?= renderOriginalMessageBubble($message, $originalReplyClass, $originalAvatarUrl, $originalDisplayName, $messageReactionSummary) ?>
         <?php foreach ($replies as $reply): ?>
+            <?php if (shouldRenderMessengerSeparator($reply['sent_at'] ?? '', $previousMessageTime)): ?>
+                <?= renderMessengerSeparator($reply['sent_at'] ?? '') ?>
+            <?php endif; ?>
+            <?php $previousMessageTime = (string) ($reply['sent_at'] ?? $previousMessageTime); ?>
             <?= renderReply($reply, $userId, (string) $userType, $replyReactionSummary[(int) ($reply['id'] ?? 0)] ?? [], (int) $message['id']) ?>
         <?php endforeach; ?>
         <div class="chat-typing-indicator reply theirs" id="threadTypingIndicator" hidden>
@@ -686,11 +747,11 @@ if ($onlyConversation) {
     <div class="mailbox-read-meta chat-thread-participants">
       <div class="mailbox-read-meta-item">
         <span>Started by</span>
-        <strong><?= htmlspecialchars($message['user_name']) ?></strong>
+        <strong><?= htmlspecialchars($originalDisplayName) ?></strong>
       </div>
       <div class="mailbox-read-meta-item">
         <span>Conversation with</span>
-        <strong><?= htmlspecialchars(trim((string) ($message['recipient_names'] ?? '')) !== '' ? $message['recipient_names'] : 'Admin') ?></strong>
+        <strong><?= htmlspecialchars($recipientDisplay !== '' ? $recipientDisplay : 'Admin') ?></strong>
       </div>
       <div class="mailbox-read-meta-item">
         <span>Members</span>
@@ -726,8 +787,14 @@ if ($onlyConversation) {
 
   <div id="conversationWrapper" class="mt-4">
     <div class="conversation-scroll">
+      <?php $previousMessageTime = (string) ($message['sent_at'] ?? ''); ?>
+      <?= renderMessengerSeparator($previousMessageTime) ?>
       <?= renderOriginalMessageBubble($message, $originalReplyClass, $originalAvatarUrl, $originalDisplayName, $messageReactionSummary) ?>
       <?php foreach ($replies as $reply): ?>
+          <?php if (shouldRenderMessengerSeparator($reply['sent_at'] ?? '', $previousMessageTime)): ?>
+              <?= renderMessengerSeparator($reply['sent_at'] ?? '') ?>
+          <?php endif; ?>
+          <?php $previousMessageTime = (string) ($reply['sent_at'] ?? $previousMessageTime); ?>
           <?= renderReply($reply, $userId, (string) $userType, $replyReactionSummary[(int) ($reply['id'] ?? 0)] ?? [], (int) $message['id']) ?>
       <?php endforeach; ?>
       <div class="chat-typing-indicator reply theirs" id="threadTypingIndicator" hidden>
@@ -1229,6 +1296,12 @@ if ($onlyConversation) {
         if (mentionedField) {
             mentionedField.value = '';
         }
+        selectedReplyFiles = [];
+        clearReplyPreviewUrls();
+        syncReplyFileInput();
+        renderReplyFilePreview();
+        setReplyPreviewState();
+        window.setAttachmentValidationMessage?.(attachmentError, '');
         closeEmojiMenu();
         closeMentionMenu();
         window.KODUSClearReplyQuote?.();

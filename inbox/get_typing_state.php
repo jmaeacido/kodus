@@ -31,7 +31,7 @@ if ($cleanupStmt) {
 }
 
 $stmt = $conn->prepare("
-    SELECT mts.user_id, u.username
+    SELECT mts.user_id, u.username, u.first_name, u.email
     FROM mailbox_typing_status mts
     INNER JOIN users u ON u.id = mts.user_id
     WHERE mts.message_id = ?
@@ -48,7 +48,7 @@ $typing = [];
 foreach ($rows as $row) {
     $typing[] = [
         'user_id' => (int) ($row['user_id'] ?? 0),
-        'username' => (string) ($row['username'] ?? 'Someone'),
+        'username' => mailboxDisplayName($row, 'Someone'),
     ];
 }
 

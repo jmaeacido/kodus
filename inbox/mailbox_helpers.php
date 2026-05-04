@@ -429,6 +429,90 @@ function mailboxClassifyPresence(?string $lastActivity, int $isOnline): array
     ];
 }
 
+function mailboxFirstNameToken(?string $firstName): string
+{
+    $firstName = trim((string) $firstName);
+    if ($firstName === '') {
+        return '';
+    }
+
+    $parts = preg_split('/\s+/', $firstName, -1, PREG_SPLIT_NO_EMPTY) ?: [];
+    return trim((string) ($parts[0] ?? ''));
+}
+
+function mailboxDisplayName(array $row, string $fallback = 'Unknown'): string
+{
+    $firstToken = mailboxFirstNameToken($row['first_name'] ?? null);
+    if ($firstToken !== '') {
+        return $firstToken;
+    }
+
+    foreach (['name', 'display_name', 'recipient_name', 'user_name', 'username', 'email', 'user_email', 'recipient_email'] as $key) {
+        $value = trim((string) ($row[$key] ?? ''));
+        if ($value !== '') {
+            return $value;
+        }
+    }
+
+    return $fallback;
+}
+
+function mailboxGroupPresence(mysqli $conn, int $messageId, int $excludeUserId = 0): array
+{
+    if ($messageId <= 0) {
+        return ['label' => 'Offline', 'class' => 'offline', 'detail' => 'No active members'];
+    }
+
+    $stmt = $conn->prepare("
+        SELECT DISTINCT u.id, u.last_activity, u.is_online
+        FROM users u
+        INNER JOIN (
+            SELECT cmr.user_id
+            FROM contact_message_recipients cmr
+            WHERE cmr.message_id = ?
+              AND cmr.user_id IS NOT NULL
+              AND cmr.left_at IS NULL
+              AND cmr.hidden_at IS NULL
+            UNION
+            SELECT sender.id AS user_id
+            FROM contact_messages cm
+            INNER JOIN users sender
+                ON (
+                    LOWER(sender.email) = LOWER(cm.user_email)
+                    OR sender.username = cm.user_name
+                )
+            LEFT JOIN contact_message_recipients sender_state
+                ON sender_state.message_id = cm.id
+                AND sender_state.user_id = sender.id
+            WHERE cm.id = ?
+              AND sender.id IS NOT NULL
+              AND sender_state.left_at IS NULL
+              AND sender_state.hidden_at IS NULL
+        ) members ON members.user_id = u.id
+        WHERE (? = 0 OR u.id <> ?)
+    ");
+    if (!$stmt) {
+        return ['label' => 'Offline', 'class' => 'offline', 'detail' => 'No active members'];
+    }
+
+    $stmt->bind_param('iiii', $messageId, $messageId, $excludeUserId, $excludeUserId);
+    $stmt->execute();
+    $best = ['label' => 'Offline', 'class' => 'offline', 'detail' => 'No active members'];
+    foreach (db_stmt_fetch_all_assoc($stmt) as $row) {
+        $presence = mailboxClassifyPresence($row['last_activity'] ?? null, (int) ($row['is_online'] ?? 0));
+        if (($presence['class'] ?? '') === 'online') {
+            $best = ['label' => 'Online', 'class' => 'online', 'detail' => 'Active members now'];
+            break;
+        }
+        if (($presence['class'] ?? '') === 'idle' && ($best['class'] ?? '') !== 'online') {
+            $best = ['label' => 'Idle', 'class' => 'idle', 'detail' => 'Members active recently'];
+        }
+    }
+    $stmt->close();
+
+    return $best;
+}
+
 function mailboxGetFolder(?string $rawFolder): string
 {
     return strtolower(trim((string) $rawFolder)) === 'trash' ? 'trash' : 'inbox';
@@ -748,8 +832,8 @@ function mailboxFetchReactionSummary(mysqli $conn, int $messageId, ?int $replyId
                COUNT(*) AS reaction_count,
                MAX(CASE WHEN mr.user_id = ? THEN 1 ELSE 0 END) AS reacted_by_current_user,
                GROUP_CONCAT(
-                   CONCAT(COALESCE(NULLIF(u.username, ''), CONCAT('User #', mr.user_id)), ' ', mr.emoji)
-                   ORDER BY COALESCE(NULLIF(u.username, ''), CONCAT('User #', mr.user_id))
+                   CONCAT(COALESCE(NULLIF(SUBSTRING_INDEX(TRIM(u.first_name), ' ', 1), ''), NULLIF(u.username, ''), CONCAT('User #', mr.user_id)), ' ', mr.emoji)
+                   ORDER BY COALESCE(NULLIF(SUBSTRING_INDEX(TRIM(u.first_name), ' ', 1), ''), NULLIF(u.username, ''), CONCAT('User #', mr.user_id))
                    SEPARATOR '||'
                ) AS reactor_details
         FROM message_reactions mr

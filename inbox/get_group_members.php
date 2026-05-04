@@ -49,6 +49,7 @@ $stmt = $conn->prepare("
            cmr.left_at,
            cmr.hidden_at,
            u.username,
+           u.first_name,
            u.userType,
            u.picture,
            u.sso_avatar_url,
@@ -60,7 +61,7 @@ $stmt = $conn->prepare("
       AND cmr.hidden_at IS NULL
       AND cmr.left_at IS NULL
     ORDER BY
-      COALESCE(NULLIF(u.username, ''), NULLIF(cmr.recipient_name, ''), cmr.recipient_email)
+      COALESCE(NULLIF(SUBSTRING_INDEX(TRIM(u.first_name), ' ', 1), ''), NULLIF(u.username, ''), NULLIF(cmr.recipient_name, ''), cmr.recipient_email)
 ");
 $stmt->bind_param('i', $messageId);
 $stmt->execute();
@@ -71,13 +72,7 @@ $members = [];
 foreach ($rows as $row) {
     $memberId = (int) ($row['user_id'] ?? 0);
     $email = trim((string) ($row['recipient_email'] ?? ''));
-    $name = trim((string) ($row['username'] ?? ''));
-    if ($name === '') {
-        $name = trim((string) ($row['recipient_name'] ?? ''));
-    }
-    if ($name === '') {
-        $name = $email !== '' ? $email : 'Member';
-    }
+    $name = mailboxDisplayName($row, $email !== '' ? $email : 'Member');
 
     $roles = [];
     if ($creatorEmail !== '' && strtolower($email) === $creatorEmail) {

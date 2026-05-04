@@ -45,7 +45,7 @@ if ($groupName === '' || count($memberIds) < 2) {
 $allMemberIds = array_values(array_unique(array_merge([$userId], $memberIds)));
 $placeholders = implode(',', array_fill(0, count($allMemberIds), '?'));
 $types = str_repeat('i', count($allMemberIds));
-$stmt = $conn->prepare("SELECT id, email, username FROM users WHERE id IN ($placeholders)");
+$stmt = $conn->prepare("SELECT id, email, username, first_name FROM users WHERE id IN ($placeholders)");
 $stmt->bind_param($types, ...$allMemberIds);
 $stmt->execute();
 $users = db_stmt_fetch_all_assoc($stmt);
@@ -110,7 +110,7 @@ try {
     foreach ($users as $row) {
         $memberId = (int) $row['id'];
         $email = (string) $row['email'];
-        $name = (string) $row['username'];
+        $name = mailboxDisplayName($row, (string) $row['email']);
         $recipientStmt->bind_param('iiss', $messageId, $memberId, $email, $name);
         $recipientStmt->execute();
 

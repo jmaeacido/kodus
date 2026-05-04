@@ -1930,6 +1930,9 @@ function updateUnreadCount() {
     } else {
       badge.remove();
     }
+    if (typeof window.updateKodusChatBubbleUnreadBadges === 'function') {
+      window.updateKodusChatBubbleUnreadBadges(data.count || 0);
+    }
   });
 }
 

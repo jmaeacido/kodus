@@ -199,10 +199,9 @@ $latestPreviews = mailboxLatestThreadPreviews(
 
 foreach ($feedRows as $row) {
     $isGroupThread = mailboxIsGroupThread($row);
-    $senderName = $isGroupThread ? trim((string) ($row['group_name'] ?? 'Group chat')) : trim((string) ($row['first_name'] ?? '') . ' ' . (string) ($row['last_name'] ?? ''));
-    if ($senderName === '') {
-        $senderName = trim((string) ($row['user_name'] ?? 'Unknown'));
-    }
+    $senderName = $isGroupThread
+        ? trim((string) ($row['group_name'] ?? 'Group chat'))
+        : mailboxDisplayName($row, 'Unknown');
 
     $messageId = (int) $row['id'];
     $latestPreview = $latestPreviews[$messageId] ?? [

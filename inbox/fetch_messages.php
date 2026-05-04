@@ -24,6 +24,7 @@ if ($userType === 'admin') {
                COALESCE(mr.is_read, 0) AS user_read,
                sender_user.picture AS sender_picture,
                sender_user.id AS sender_user_id,
+               sender_user.first_name AS sender_first_name,
                sender_user.sso_avatar_url AS sender_sso_avatar_url,
                sender_user.last_activity AS sender_last_activity,
                sender_user.is_online AS sender_is_online,
@@ -31,7 +32,7 @@ if ($userType === 'admin') {
                current_member.left_at AS current_member_left_at,
                TRIM(BOTH ', ' FROM CONCAT_WS(', ',
                    (
-                       SELECT GROUP_CONCAT(DISTINCT u.username ORDER BY u.username SEPARATOR ', ')
+                       SELECT GROUP_CONCAT(DISTINCT COALESCE(NULLIF(SUBSTRING_INDEX(TRIM(u.first_name), ' ', 1), ''), NULLIF(u.username, ''), u.email) ORDER BY COALESCE(NULLIF(SUBSTRING_INDEX(TRIM(u.first_name), ' ', 1), ''), NULLIF(u.username, ''), u.email) SEPARATOR ', ')
                        FROM contact_message_recipients cmr
                        INNER JOIN users u ON u.id = cmr.user_id
                        WHERE cmr.message_id = cm.id
@@ -112,6 +113,7 @@ if ($userType === 'admin') {
                COALESCE(mr.is_read, 0) AS user_read,
                sender_user.picture AS sender_picture,
                sender_user.id AS sender_user_id,
+               sender_user.first_name AS sender_first_name,
                sender_user.sso_avatar_url AS sender_sso_avatar_url,
                sender_user.last_activity AS sender_last_activity,
                sender_user.is_online AS sender_is_online,
@@ -119,7 +121,7 @@ if ($userType === 'admin') {
                current_member.left_at AS current_member_left_at,
                TRIM(BOTH ', ' FROM CONCAT_WS(', ',
                    (
-                       SELECT GROUP_CONCAT(DISTINCT u.username ORDER BY u.username SEPARATOR ', ')
+                       SELECT GROUP_CONCAT(DISTINCT COALESCE(NULLIF(SUBSTRING_INDEX(TRIM(u.first_name), ' ', 1), ''), NULLIF(u.username, ''), u.email) ORDER BY COALESCE(NULLIF(SUBSTRING_INDEX(TRIM(u.first_name), ' ', 1), ''), NULLIF(u.username, ''), u.email) SEPARATOR ', ')
                        FROM contact_message_recipients cmr
                        INNER JOIN users u ON u.id = cmr.user_id
                        WHERE cmr.message_id = cm.id
@@ -217,10 +219,11 @@ if ($messages === []): ?>
                     $messageId = (int) $row['id'];
                     $isGroupThread = mailboxIsGroupThread($row);
                     $recipientLabel = trim((string) ($row['recipient_names'] ?? ''));
-                    $senderLabel = trim((string) ($row['user_name'] ?? ''));
-                    if ($senderLabel === '') {
-                        $senderLabel = trim((string) ($row['user_email'] ?? 'Unknown'));
-                    }
+                    $senderLabel = mailboxDisplayName([
+                        'first_name' => $row['sender_first_name'] ?? '',
+                        'user_name' => $row['user_name'] ?? '',
+                        'user_email' => $row['user_email'] ?? '',
+                    ], 'Unknown');
                     $isSenderView = mailboxOwnerMatchesCurrentUser(
                         (string) ($row['user_email'] ?? ''),
                         (string) ($row['user_name'] ?? ''),
@@ -240,7 +243,7 @@ if ($messages === []): ?>
                         : avatar_resolve_url($displayPicture, $displaySsoAvatar, $base_url, dirname(__DIR__));
                     $presenceUserId = $isGroupThread ? 0 : (int) ($isSenderView ? ($row['recipient_user_id'] ?? 0) : ($row['sender_user_id'] ?? 0));
                     $presence = $isGroupThread
-                        ? ['detail' => 'Group chat', 'class' => 'offline']
+                        ? mailboxGroupPresence($conn, $messageId)
                         : mailboxClassifyPresence(
                             $isSenderView ? ($row['recipient_last_activity'] ?? null) : ($row['sender_last_activity'] ?? null),
                             (int) ($isSenderView ? ($row['recipient_is_online'] ?? 0) : ($row['sender_is_online'] ?? 0))

@@ -132,7 +132,7 @@ try {
 
         $placeholders = implode(',', array_fill(0, count($memberIds), '?'));
         $types = str_repeat('i', count($memberIds));
-        $userStmt = $conn->prepare("SELECT id, email, username FROM users WHERE id IN ({$placeholders})");
+        $userStmt = $conn->prepare("SELECT id, email, username, first_name FROM users WHERE id IN ({$placeholders})");
         if (!$userStmt) {
             throw new RuntimeException('Unable to validate selected members.');
         }
@@ -169,7 +169,7 @@ try {
         foreach ($users as $row) {
             $memberId = (int) ($row['id'] ?? 0);
             $email = trim((string) ($row['email'] ?? ''));
-            $name = trim((string) ($row['username'] ?? ''));
+            $name = mailboxDisplayName($row, $email);
             if ($memberId <= 0 || $email === '') {
                 continue;
             }
@@ -220,7 +220,7 @@ try {
 
         $memberName = 'Someone';
         $memberStmt = $conn->prepare("
-            SELECT COALESCE(NULLIF(u.username, ''), COALESCE(NULLIF(cmr.recipient_name, ''), cmr.recipient_email)) AS display_name
+            SELECT COALESCE(NULLIF(SUBSTRING_INDEX(TRIM(u.first_name), ' ', 1), ''), NULLIF(u.username, ''), COALESCE(NULLIF(cmr.recipient_name, ''), cmr.recipient_email)) AS display_name
             FROM contact_message_recipients cmr
             LEFT JOIN users u ON u.id = cmr.user_id
             WHERE cmr.message_id = ? AND cmr.user_id = ?

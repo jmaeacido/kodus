@@ -2,6 +2,7 @@
 require_once __DIR__ . '/vendor/autoload.php';
 require_once __DIR__ . '/mail_config.php';
 require_once __DIR__ . '/audit_helpers.php';
+require_once __DIR__ . '/base_url.php';
 
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
@@ -203,9 +204,35 @@ function notification_render_email_shell(string $eyebrow, string $title, string 
 HTML;
 }
 
+function notification_email_url(string $path = ''): string
+{
+    $configuredBase = app_env('APP_URL', 'https://caraga-kodus-dev.dswd.gov.ph') ?? 'https://caraga-kodus-dev.dswd.gov.ph';
+    $base = rtrim($configuredBase, '/');
+
+    if (!preg_match('#^https?://#i', $base)) {
+        $base = 'https://caraga-kodus-dev.dswd.gov.ph';
+    }
+
+    $path = trim($path);
+    if ($path === '' || $path === '/' || $path === './') {
+        return $base . '/';
+    }
+
+    if (preg_match('#^https?://#i', $path)) {
+        $parts = parse_url($path);
+        $urlPath = isset($parts['path']) ? '/' . ltrim((string) $parts['path'], '/') : '/';
+        $query = isset($parts['query']) && (string) $parts['query'] !== '' ? '?' . $parts['query'] : '';
+        $fragment = isset($parts['fragment']) && (string) $parts['fragment'] !== '' ? '#' . $parts['fragment'] : '';
+
+        return $base . $urlPath . $query . $fragment;
+    }
+
+    return $base . '/' . ltrim($path, '/');
+}
+
 function notification_render_action_button(string $url, string $label, string $accent = '#0d6efd'): string
 {
-    $safeUrl = htmlspecialchars($url, ENT_QUOTES, 'UTF-8');
+    $safeUrl = htmlspecialchars(notification_email_url($url), ENT_QUOTES, 'UTF-8');
     $safeLabel = htmlspecialchars($label, ENT_QUOTES, 'UTF-8');
     $safeAccent = htmlspecialchars($accent, ENT_QUOTES, 'UTF-8');
 

@@ -49,6 +49,9 @@ function password_policy_application_urls(): array
     };
 
     $appendUrl(app_env('APP_URL'));
+    if ($urls !== []) {
+        return $urls;
+    }
 
     $aliasList = app_env('APP_URL_ALIASES', '') ?? '';
     if ($aliasList !== '') {
@@ -94,7 +97,7 @@ function password_policy_build_reset_links(string $token, bool $enforced = true)
 
     foreach (password_policy_application_urls() as $appUrl) {
         $links[] = [
-            'url' => rtrim($appUrl, '/') . '/' . basename(rtrim(__DIR__, DIRECTORY_SEPARATOR)) . '/reset-password.php?token=' . urlencode($token) . $suffix,
+            'url' => rtrim($appUrl, '/') . '/reset-password.php?token=' . urlencode($token) . $suffix,
             'label' => password_policy_link_label($appUrl),
         ];
     }
@@ -209,7 +212,7 @@ function password_policy_prepare_reset(mysqli $conn, int $userId): ?string
 function password_policy_build_reset_link(string $token): string
 {
     $links = password_policy_build_reset_links($token, true);
-    return $links[0]['url'] ?? (rtrim(password_policy_application_url(), '/') . '/' . basename(rtrim(__DIR__, DIRECTORY_SEPARATOR)) . '/reset-password.php?token=' . urlencode($token) . '&enforced=1');
+    return $links[0]['url'] ?? (rtrim(password_policy_application_url(), '/') . '/reset-password.php?token=' . urlencode($token) . '&enforced=1');
 }
 
 function password_policy_in_app_sender_email(): string

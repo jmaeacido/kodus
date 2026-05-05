@@ -291,8 +291,14 @@ if (!$validLocation) {
     exit;
 }
 
+if (!auth_can_edit_implementation_province($conn, $province)) {
+    http_response_code(403);
+    echo json_encode(['success' => false, 'message' => 'Editors can only edit implementation records in their assigned province.']);
+    exit;
+}
+
 if ($id > 0) {
-    $existingStmt = $conn->prepare('SELECT id FROM project_lawa_binhi_targets WHERE id = ? AND fiscal_year = ? LIMIT 1');
+    $existingStmt = $conn->prepare('SELECT id, province FROM project_lawa_binhi_targets WHERE id = ? AND fiscal_year = ? LIMIT 1');
     $existingStmt->bind_param('ii', $id, $selectedYear);
     $existingStmt->execute();
     $existingTarget = db_stmt_fetch_one_assoc($existingStmt);
@@ -301,6 +307,12 @@ if ($id > 0) {
     if (!$existingTarget) {
         http_response_code(404);
         echo json_encode(['success' => false, 'message' => 'The selected baseline target could not be found for the active fiscal year.']);
+        exit;
+    }
+
+    if (!auth_can_edit_implementation_province($conn, $existingTarget['province'] ?? '')) {
+        http_response_code(403);
+        echo json_encode(['success' => false, 'message' => 'Editors can only edit implementation records in their assigned province.']);
         exit;
     }
 

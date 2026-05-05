@@ -71,6 +71,7 @@ $result = db_stmt_fetch_all_assoc($stmt);
 
 $data = [];
 foreach ($result as $row) {
+    $row['can_edit'] = auth_can_edit_meb_province($conn, $row['province'] ?? '') ? 1 : 0;
     $data[] = $row;
 }
 $stmt->close();

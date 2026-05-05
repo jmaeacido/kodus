@@ -3,6 +3,7 @@ include('../header.php');
 include('../sidenav.php');
 
 $isAdmin = isset($_SESSION['user_type']) && $_SESSION['user_type'] === 'admin';
+$canEditMebRecords = in_array((string) ($_SESSION['user_type'] ?? ''), ['admin', 'editor'], true);
 $selectedFiscalYear = isset($_SESSION['selected_year']) ? (int) $_SESSION['selected_year'] : null;
 $importFlash = $_SESSION['meb_import_flash'] ?? null;
 unset($_SESSION['meb_import_flash']);
@@ -326,6 +327,7 @@ unset($_SESSION['meb_import_flash']);
 <script src="../dist/js/adminlte.min.js"></script>
 <script>
   const isAdminView = <?php echo $isAdmin ? 'true' : 'false'; ?>;
+  const canEditMebRecords = <?php echo $canEditMebRecords ? 'true' : 'false'; ?>;
   const selectedFiscalYear = <?php echo json_encode($selectedFiscalYear); ?>;
   const importFlash = <?php echo json_encode($importFlash); ?>;
 
@@ -849,8 +851,9 @@ unset($_SESSION['meb_import_flash']);
           const fullName = [lastName, givenNames]
               .filter(value => value !== '')
               .join(lastName && givenNames ? ', ' : '');
+          const canEditRecord = canEditMebRecords && String(rowData.can_edit ?? '0') === '1';
           const editUrl = `data-tracking-meb-edit?ids=${encodeURIComponent(String(rowData.id ?? ''))}&return_to=${encodeURIComponent('data-tracking-meb')}`;
-          const adminAction = isAdminView
+          const editAction = canEditRecord
               ? `
                   <div class="mt-3">
                       <a href="${editUrl}" class="kodus-detail-action">
@@ -887,7 +890,7 @@ unset($_SESSION['meb_import_flash']);
                           <span class="kodus-detail-eyebrow">Eligible Beneficiary</span>
                           <h3 class="kodus-detail-title">${formatFallback(fullName, 'No recorded name')}</h3>
                           <p class="kodus-detail-subtitle">${formatFallback(rowData.barangay, 'No barangay')}, ${formatFallback(rowData.lgu, 'No municipality')}, ${formatFallback(rowData.province, 'No province')}</p>
-                          ${adminAction}
+                          ${editAction}
                       </div>
                       <div class="kodus-detail-pill">Record #${escapeHtml(rowData.id ?? 'N/A')}</div>
                   </div>

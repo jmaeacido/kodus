@@ -36,6 +36,24 @@ if ($id <= 0) {
     exit;
 }
 
+$lookupStmt = $conn->prepare('SELECT province FROM project_lawa_binhi_targets WHERE id = ? AND fiscal_year = ? LIMIT 1');
+$lookupStmt->bind_param('ii', $id, $selectedYear);
+$lookupStmt->execute();
+$targetRow = db_stmt_fetch_one_assoc($lookupStmt);
+$lookupStmt->close();
+
+if (!$targetRow) {
+    http_response_code(404);
+    echo json_encode(['success' => false, 'message' => 'Target record not found.']);
+    exit;
+}
+
+if (!auth_can_edit_implementation_province($conn, $targetRow['province'] ?? '')) {
+    http_response_code(403);
+    echo json_encode(['success' => false, 'message' => 'Editors can only delete implementation records in their assigned province.']);
+    exit;
+}
+
 $stmt = $conn->prepare('DELETE FROM project_lawa_binhi_targets WHERE id = ? AND fiscal_year = ?');
 $stmt->bind_param('ii', $id, $selectedYear);
 $stmt->execute();

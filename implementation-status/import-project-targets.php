@@ -173,6 +173,10 @@ try {
             throw new RuntimeException('Every row must include province, municipality, barangay, and numeric LAWA, BINHI, CapBuild, and Community action plan target counts.');
         }
 
+        if (!auth_can_edit_implementation_province($conn, $province)) {
+            throw new RuntimeException('Editors can only import implementation targets for their assigned province.');
+        }
+
         $lawaTarget = (int) str_replace(',', '', $lawaTargetRaw);
         $binhiTarget = (int) str_replace(',', '', $binhiTargetRaw);
         $binhiVegetableTarget = $binhiVegetableTargetRaw !== '' && is_numeric(str_replace(',', '', $binhiVegetableTargetRaw)) ? (int) str_replace(',', '', $binhiVegetableTargetRaw) : 0;

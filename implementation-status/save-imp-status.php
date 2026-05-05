@@ -42,6 +42,12 @@ if ($municipality === '' || $province === '' || !is_array($rows) || empty($rows)
     exit;
 }
 
+if (!auth_can_edit_implementation_province($conn, $province)) {
+    http_response_code(403);
+    echo json_encode(['success' => false, 'message' => 'Editors can only edit implementation activity records in their assigned province.']);
+    exit;
+}
+
 $forumRanges = [
     'PLGU Forum' => [$plguFrom, $plguTo],
     'MLGU Forum' => [$mlguFrom, $mlguTo],

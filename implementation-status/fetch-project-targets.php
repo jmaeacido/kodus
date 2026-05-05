@@ -81,8 +81,9 @@ foreach ($result as $row) {
         ];
     }
 
+    $canEditTarget = $canManageTargets && auth_can_edit_implementation_province($conn, $row['province'] ?? '');
     $actions = '<span class="text-muted">View only</span>';
-    if ($canManageTargets) {
+    if ($canEditTarget) {
         $actions = '<span class="kodus-row-actions"><button type="button" class="btn btn-sm btn-primary edit-target-btn" data-id="' . (int) $row['id'] . '" data-no-loader="true" title="Edit" aria-label="Edit"><i class="nav-icon fas fa-pen"></i></button>'
             . '<button type="button" class="btn btn-sm btn-danger delete-target-btn" data-id="' . (int) $row['id'] . '" data-location="' . htmlspecialchars($row['barangay'] . ', ' . $row['municipality'], ENT_QUOTES, 'UTF-8') . '" data-no-loader="true" title="Delete" aria-label="Delete"><i class="nav-icon fas fa-trash"></i></button>';
         $actions .= '</span>';
@@ -122,6 +123,7 @@ foreach ($result as $row) {
         'project_classifications_display' => implode(', ', $projectClassifications),
         'target_partner_beneficiaries' => (int) $row['target_partner_beneficiaries'],
         'updated_at' => !empty($row['updated_at']) ? date('M d, Y h:i A', strtotime($row['updated_at'])) : '',
+        'can_edit' => $canEditTarget ? 1 : 0,
         'action' => $actions,
     ];
 }

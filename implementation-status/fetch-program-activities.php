@@ -661,13 +661,15 @@ if ($result !== []) {
         $fundDisbursementPercentage = $fundObligationPartnerBeneficiaries > 0
             ? round(($fundDisbursementServedPartnerBeneficiaries / $fundObligationPartnerBeneficiaries) * 100, 2)
             : 0;
+        $canEditActivity = $canManageActivities && auth_can_edit_implementation_province($conn, $row['province'] ?? '');
         $detailsButton = '<button class="btn btn-primary btn-sm details-btn" title="View details" aria-label="View details"><i class="nav-icon fas fa-eye"></i></button>';
-        $editButton = $canManageActivities ? '<button class="btn btn-warning btn-sm edit-btn" title="Edit" aria-label="Edit"><i class="nav-icon fas fa-pen"></i></button>' : '';
+        $editButton = $canEditActivity ? '<button class="btn btn-warning btn-sm edit-btn" title="Edit" aria-label="Edit"><i class="nav-icon fas fa-pen"></i></button>' : '';
 
         $data[] = [
             'action' => '<span class="kodus-row-actions">' . $detailsButton . $editButton . '</span>',
             'province' => $row['province'],
             'municipality' => $row['municipality'],
+            'can_edit' => $canEditActivity ? 1 : 0,
             'lawa_target_beneficiaries' => (int) $row['lawa_target_beneficiaries'],
             'binhi_target_beneficiaries' => (int) $row['binhi_target_beneficiaries'],
             'capbuild_target_beneficiaries' => (int) $row['capbuild_target_beneficiaries'],
@@ -736,4 +738,3 @@ if ($result !== []) {
 }
 
 $stmt->close();
-

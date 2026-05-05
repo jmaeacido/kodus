@@ -1,9 +1,10 @@
 ﻿<?php
   include('../header.php');
 
-  if (!isset($_SESSION['user_type']) || $_SESSION['user_type'] !== 'admin') {
+  $currentUserType = (string) ($_SESSION['user_type'] ?? '');
+  if (!in_array($currentUserType, ['admin', 'editor'], true)) {
       header("HTTP/1.1 403 Forbidden");
-      echo "Access denied. Admins only.";
+      echo "Access denied.";
       exit;
   }
   
@@ -47,6 +48,20 @@ $stmt = $conn->prepare($sql);
 $stmt->bind_param(str_repeat('i', count($ids)), ...$ids);
 $stmt->execute();
 $result = db_stmt_fetch_all_assoc($stmt);
+
+if (count($result) !== count($ids)) {
+    header("HTTP/1.1 404 Not Found");
+    echo "One or more selected records could not be found.";
+    exit;
+}
+
+foreach ($result as $row) {
+    if (!auth_can_edit_meb_province($conn, $row['province'] ?? '')) {
+        header("HTTP/1.1 403 Forbidden");
+        echo "Editors can only edit records in their assigned province.";
+        exit;
+    }
+}
 
 $csrfToken = security_get_csrf_token();
 $returnTo = $_GET['return_to'] ?? 'data-tracking-meb';
@@ -578,4 +593,3 @@ document.addEventListener("DOMContentLoaded", function () {
 
 </body>
 </html>
-

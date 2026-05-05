@@ -181,6 +181,7 @@ $totalStmt->close();
 
 $position = ((int) ($positionRow['total_before'] ?? 0)) + 1;
 $totalRecords = (int) ($totalRow['total_records'] ?? 0);
+$targetRow['can_edit'] = auth_can_edit_meb_province($conn, $targetRow['province'] ?? '') ? 1 : 0;
 
 echo json_encode([
     'success' => true,

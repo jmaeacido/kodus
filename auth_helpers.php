@@ -47,6 +47,7 @@ function auth_store_user_session(array $user): void
     $_SESSION['picture'] = $user['picture'];
     $_SESSION['sso_avatar_url'] = $user['sso_avatar_url'] ?? '';
     $_SESSION['user_type'] = $user['userType'];
+    $_SESSION['user_area'] = $user['area'] ?? '';
     $_SESSION['profile_review_required'] = !empty($user['profile_review_required']);
     $themePreference = $user['theme_preference'] ?? 'light';
     theme_store_session_preference($themePreference);
@@ -56,6 +57,80 @@ function auth_store_user_session(array $user): void
 function auth_current_user_type(): string
 {
     return (string) ($_SESSION['user_type'] ?? 'user');
+}
+
+function auth_normalize_assignment_area(?string $value): string
+{
+    $normalized = strtolower(trim((string) $value));
+    $normalized = preg_replace('/\s+/', ' ', $normalized);
+
+    return $normalized ?? '';
+}
+
+function auth_current_user_area(?mysqli $conn = null): string
+{
+    $sessionArea = trim((string) ($_SESSION['user_area'] ?? ''));
+    if ($sessionArea !== '') {
+        return $sessionArea;
+    }
+
+    $userId = (int) ($_SESSION['user_id'] ?? 0);
+    if (!$conn instanceof mysqli || $userId <= 0) {
+        return '';
+    }
+
+    $stmt = $conn->prepare('SELECT area FROM users WHERE id = ? LIMIT 1');
+    if (!$stmt) {
+        return '';
+    }
+
+    $stmt->bind_param('i', $userId);
+    $stmt->execute();
+    $row = db_stmt_fetch_one_assoc($stmt);
+    $stmt->close();
+
+    $area = trim((string) ($row['area'] ?? ''));
+    $_SESSION['user_area'] = $area;
+
+    return $area;
+}
+
+function auth_can_edit_meb_province(mysqli $conn, ?string $province): bool
+{
+    $userType = auth_current_user_type();
+    if ($userType === 'admin') {
+        return true;
+    }
+
+    if ($userType !== 'editor') {
+        return false;
+    }
+
+    $assignedArea = auth_normalize_assignment_area(auth_current_user_area($conn));
+    $recordProvince = auth_normalize_assignment_area($province);
+
+    return $assignedArea !== '' && $recordProvince !== '' && $assignedArea === $recordProvince;
+}
+
+function auth_can_edit_implementation_province(mysqli $conn, ?string $province): bool
+{
+    $userType = auth_current_user_type();
+    if ($userType === 'admin') {
+        return true;
+    }
+
+    if ($userType !== 'editor') {
+        return false;
+    }
+
+    $assignedArea = auth_normalize_assignment_area(auth_current_user_area($conn));
+    if ($assignedArea === 'field office') {
+        return true;
+    }
+
+    $recordProvince = auth_normalize_assignment_area($province);
+
+    return $assignedArea !== '' && $recordProvince !== '' && $assignedArea === $recordProvince;
 }
 
 function auth_implementation_editor_types(): array

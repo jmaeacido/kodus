@@ -3546,6 +3546,7 @@ $(document).ready(function() {
     // Details button
     $('#program-activities-table tbody').on('click', '.details-btn', function() {
         var data = table.row($(this).parents('tr')).data();
+        const canEditActivity = canManageActivities && String(data?.can_edit ?? '0') === '1';
         Swal.fire({
             title: 'Program Activity Details',
             width: 900,
@@ -3558,8 +3559,8 @@ $(document).ready(function() {
                     window.KodusPageLoader.hideModalLoader();
                 }
             },
-            confirmButtonText: canManageActivities ? '<i class="fas fa-times"></i> Close' : '<i class="fas fa-times"></i>',
-            showDenyButton: canManageActivities,
+            confirmButtonText: canEditActivity ? '<i class="fas fa-times"></i> Close' : '<i class="fas fa-times"></i>',
+            showDenyButton: canEditActivity,
             denyButtonText: '<i class="fas fa-pen"></i> Edit',
             denyButtonColor: '#007bff'
         }).then((result) => {
@@ -3575,6 +3576,9 @@ $(document).ready(function() {
         }
 
         const data = table.row($(this).parents('tr')).data();
+        if (String(data?.can_edit ?? '0') !== '1') {
+            return;
+        }
         openProgramActivityEditor(data);
     });
 

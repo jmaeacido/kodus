@@ -1,7 +1,9 @@
 // ===============================
 // 📦 Dependencies
 // ===============================
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ quiet: true });
+require('dotenv').config({ path: path.resolve(__dirname, '..', '.env'), quiet: true });
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
@@ -20,8 +22,12 @@ app.use(express.json());
 // ===============================
 const PORT = process.env.PORT || 6001;
 const APP_URL = process.env.APP_URL || `http://localhost:${PORT}`;
-const SOCKET_BEARER_TOKEN = sanitizeToken(process.env.SOCKET_BEARER_TOKEN || '');
+const SOCKET_TOKEN_SOURCE = sanitizeToken(process.env.SOCKET_BEARER_TOKEN || '') !== ''
+  ? 'SOCKET_BEARER_TOKEN'
+  : (sanitizeToken(process.env.KODUS_SOCKET_BEARER_TOKEN || '') !== '' ? 'KODUS_SOCKET_BEARER_TOKEN' : 'none');
+const SOCKET_BEARER_TOKEN = sanitizeToken(process.env.SOCKET_BEARER_TOKEN || process.env.KODUS_SOCKET_BEARER_TOKEN || '');
 const SOCKET_TOKEN = SOCKET_BEARER_TOKEN;
+const SOCKET_DEBUG = ['1', 'true', 'yes', 'on'].includes(String(process.env.KODUS_SOCKET_DEBUG || process.env.SOCKET_DEBUG || '').toLowerCase());
 
 // ===============================
 // 🔐 Token Validator
@@ -30,16 +36,32 @@ function sanitizeToken(token) {
   return String(token || '').trim().replace(/^['"]|['"]$/g, '');
 }
 
-function isValidToken(token) {
+function logTime() {
+  return new Date().toISOString();
+}
+
+function inspectToken(token) {
   const expectedToken = sanitizeToken(SOCKET_BEARER_TOKEN);
   const receivedToken = sanitizeToken(token);
-  const matches = expectedToken !== '' && receivedToken === expectedToken;
 
-  console.log(
-    `Broadcast auth token expected_configured=${expectedToken !== ''} expected_length=${expectedToken.length} received_length=${receivedToken.length} match=${matches}`
-  );
+  return {
+    expectedConfigured: expectedToken !== '',
+    expectedLength: expectedToken.length,
+    receivedLength: receivedToken.length,
+    matches: expectedToken !== '' && receivedToken === expectedToken,
+  };
+}
 
-  return matches;
+function isValidToken(token) {
+  const inspection = inspectToken(token);
+
+  if (SOCKET_DEBUG || !inspection.matches) {
+    console.log(
+      `${logTime()} Broadcast auth token expected_configured=${inspection.expectedConfigured} expected_length=${inspection.expectedLength} received_length=${inspection.receivedLength} match=${inspection.matches}`
+    );
+  }
+
+  return inspection.matches;
 }
 
 function extractBearerToken(req) {
@@ -47,7 +69,9 @@ function extractBearerToken(req) {
   const hasAuthorization = authorization !== '';
   const hasBearerPrefix = /^Bearer\s+/i.test(authorization);
 
-  console.log(`Broadcast auth header present=${hasAuthorization} bearer_prefix=${hasBearerPrefix}`);
+  if (SOCKET_DEBUG || !hasBearerPrefix) {
+    console.log(`${logTime()} Broadcast auth header present=${hasAuthorization} bearer_prefix=${hasBearerPrefix}`);
+  }
 
   if (!hasBearerPrefix) {
     return '';
@@ -140,13 +164,18 @@ io.on('connection', (socket) => {
 app.post('/broadcast', (req, res) => {
   const { channel, event, data } = req.body;
   const bearerToken = extractBearerToken(req);
+  const tokenInspection = inspectToken(bearerToken);
 
-  if (!channel || !event || !isValidToken(bearerToken)) {
-    console.warn('⛔ Unauthorized Laravel broadcast attempt.');
+  if (!channel || !event || !tokenInspection.matches) {
+    console.warn(
+      `${logTime()} ⛔ Unauthorized Laravel broadcast attempt. channel_present=${!!channel} event_present=${!!event} expected_configured=${tokenInspection.expectedConfigured} expected_length=${tokenInspection.expectedLength} received_length=${tokenInspection.receivedLength} match=${tokenInspection.matches}`
+    );
     return res.status(403).json({ error: 'Unauthorized' });
   }
 
-  console.log(`✅ Secure Laravel broadcast → [${channel}] Event: "${event}"`);
+  if (SOCKET_DEBUG || event !== 'mail.typing') {
+    console.log(`${logTime()} ✅ Secure Laravel broadcast → [${channel}] Event: "${event}"`);
+  }
 
   io.to(channel).emit(event, data);
 
@@ -541,7 +570,8 @@ app.get('/socket-ui/docs', (req, res) => {
 // 🚀 Start Server
 // ===============================
 server.listen(PORT, () => {
-  console.log(`🚀 Socket.IO server running on port: ${PORT}`);
-  console.log(`🔗 App URL: ${APP_URL}`);
-  console.log(`🔐 Token protection enabled`);
+  console.log(`${logTime()} 🚀 Socket.IO server running on port: ${PORT}`);
+  console.log(`${logTime()} 🔗 App URL: ${APP_URL}`);
+  console.log(`${logTime()} 🔐 Token protection ${SOCKET_BEARER_TOKEN ? 'enabled' : 'disabled'} source=${SOCKET_TOKEN_SOURCE} length=${SOCKET_BEARER_TOKEN.length}`);
+  console.log(`${logTime()} 🧾 Socket debug logging ${SOCKET_DEBUG ? 'enabled' : 'disabled'}`);
 });

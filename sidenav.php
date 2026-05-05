@@ -691,6 +691,16 @@ if (isset($_SESSION['user_id']) && is_numeric($_SESSION['user_id'])) {
       color: #6c757d;
     }
 
+    .topbar-live-toggle.has-unread > i {
+      color: #ffc107;
+      filter: drop-shadow(0 0 0.35rem rgba(255, 193, 7, 0.45));
+    }
+
+    #topbarChatToggle.has-unread > i {
+      color: #dc3545;
+      filter: drop-shadow(0 0 0.35rem rgba(220, 53, 69, 0.42));
+    }
+
     @media (max-width: 767.98px) {
       .app-alert-stack {
         top: 8.85rem;
@@ -738,7 +748,7 @@ if (isset($_SESSION['user_id']) && is_numeric($_SESSION['user_id'])) {
     <ul class="navbar-nav ml-auto">
 
       <li class="nav-item dropdown">
-        <a class="nav-link position-relative" data-toggle="dropdown" href="#" id="topbarNotificationToggle">
+        <a class="nav-link position-relative topbar-live-toggle<?= ($topbarAppNotificationFeed['count'] ?? 0) > 0 ? ' has-unread' : '' ?>" data-toggle="dropdown" href="#" id="topbarNotificationToggle">
           <i class="far fa-bell"></i>
           <?php if (($topbarAppNotificationFeed['count'] ?? 0) > 0): ?>
             <span class="badge badge-warning navbar-badge" id="topbarNotificationBadge"><?= (int) $topbarAppNotificationFeed['count'] ?></span>
@@ -789,7 +799,7 @@ if (isset($_SESSION['user_id']) && is_numeric($_SESSION['user_id'])) {
       </li>
 
       <li class="nav-item dropdown">
-        <a class="nav-link position-relative" data-toggle="dropdown" href="#" id="topbarChatToggle">
+        <a class="nav-link position-relative topbar-live-toggle<?= $unreadCount > 0 ? ' has-unread' : '' ?>" data-toggle="dropdown" href="#" id="topbarChatToggle">
           <i class="far fa-comments"></i>
           <?php if ($unreadCount > 0): ?>
             <span class="badge badge-danger navbar-badge" id="topbarUnreadBadge"><?= $unreadCount ?></span>
@@ -913,7 +923,7 @@ if (isset($_SESSION['user_id']) && is_numeric($_SESSION['user_id'])) {
                       $snippet = htmlspecialchars(mailboxFormatThreadPreview($latestPreview, 40));
                       $avatar = topbar_notification_avatar($row, $base_url);
                   ?>
-                  <a href="<?php echo $app_root; ?>messenger/index.php?msg=<?= $row['id'] ?>" class="dropdown-item" data-no-loader="true">
+                  <a href="<?php echo $app_root; ?>messenger/index.php?msg=<?= $row['id'] ?>" class="dropdown-item" data-no-loader="true" data-message-id="<?= (int) $row['id'] ?>">
                     <div class="media">
                       <img src="<?= $avatar ?>" alt="User Avatar" class="img-size-50 mr-3 img-circle">
                       <div class="media-body">
@@ -1597,6 +1607,46 @@ function openKodusChatBubbleFromUrl(url, title, event) {
   return true;
 }
 
+function markMailboxMessageRead(messageId) {
+  const normalizedId = Number(messageId || 0);
+  if (normalizedId <= 0) {
+    return Promise.resolve(false);
+  }
+
+  const body = new URLSearchParams();
+  body.append('id', String(normalizedId));
+  body.append('csrf_token', window.KODUS_CSRF_TOKEN || '');
+
+  return fetch('<?= $app_root; ?>messenger/mark_read.php', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+      'X-Requested-With': 'XMLHttpRequest'
+    },
+    body: body.toString()
+  })
+    .then(function(res) {
+      if (!res.ok) {
+        return false;
+      }
+      return res.json().then(function(payload) {
+        return !!(payload && payload.success);
+      }).catch(function() {
+        return true;
+      });
+    })
+    .then(function(success) {
+      if (success) {
+        refreshUnreadCount();
+      }
+      return success;
+    })
+    .catch(function(error) {
+      kodusDebugLog('Mailbox read sync failed.', error);
+      return false;
+    });
+}
+
 function syncKodusBubbleFromFrame(bubble) {
   const frame = bubble?.querySelector('.kodusChatBubbleFrame');
   if (!bubble || !frame || !frame.contentDocument) {
@@ -2066,6 +2116,7 @@ function refreshUnreadCount() {
 
       if (toggle) {
         toggle.classList.toggle("text-warning", count > 0);
+        toggle.classList.toggle("has-unread", count > 0);
       }
 
       if (list) {
@@ -2073,7 +2124,7 @@ function refreshUnreadCount() {
           list.innerHTML = '<span class="dropdown-item text-center text-muted">No unread messages</span>';
         } else {
           list.innerHTML = items.map(item => `
-            <a href="${item.url}" class="dropdown-item" data-no-loader="true">
+            <a href="${item.url}" class="dropdown-item" data-no-loader="true" data-message-id="${Number(item.id || 0)}">
               <div class="media">
                 <img src="${item.avatar}" alt="User Avatar" class="img-size-50 mr-3 img-circle">
                 <div class="media-body">
@@ -2111,6 +2162,7 @@ function showAppAlert(item) {
   toast.className = 'app-alert-toast';
   toast.href = item.url || '<?= $app_root; ?>home';
   toast.dataset.noLoader = 'true';
+  toast.dataset.notificationId = String(Number(item.id || 0));
   toast.innerHTML = `
     <span class="app-alert-toast-icon">
       <i class="${escapeHtml(item.icon_class || 'fas fa-bell')} ${escapeHtml(item.color_class || 'text-warning')}"></i>
@@ -2272,6 +2324,7 @@ function refreshAppNotifications() {
 
       if (toggle) {
         toggle.classList.toggle('text-warning', count > 0);
+        toggle.classList.toggle('has-unread', count > 0);
       }
 
       if (list) {
@@ -2330,7 +2383,32 @@ window.addEventListener('message', function(event) {
 });
 
 document.addEventListener('click', function (event) {
+  const notificationLink = event.target.closest('#topbarNotificationList .app-notification-item[data-notification-id], .app-alert-toast[data-notification-id]');
+  if (notificationLink) {
+    const notificationId = Number(notificationLink.getAttribute('data-notification-id') || 0);
+    if (notificationId > 0) {
+      notificationLink.classList.remove('is-unread');
+      markAppNotificationsRead([notificationId]);
+      window.setTimeout(refreshAppNotifications, 250);
+    }
+  }
+
   const chatLink = event.target.closest('#topbarChatList a[href*="messenger/"], #topbarNotificationList a[href*="messenger/"], .mail-alert-toast[href*="messenger/"], .app-alert-toast[href*="messenger/"]');
+  if (chatLink) {
+    let messageId = Number(chatLink.getAttribute('data-message-id') || 0);
+    if (messageId <= 0) {
+      try {
+        const chatUrl = new URL(chatLink.href, window.location.origin);
+        messageId = Number(chatUrl.searchParams.get('msg') || chatUrl.searchParams.get('id') || 0);
+      } catch (error) {
+        messageId = 0;
+      }
+    }
+    if (messageId > 0) {
+      markMailboxMessageRead(messageId);
+    }
+  }
+
   if (chatLink && openKodusChatBubbleFromUrl(chatLink.href, chatLink.querySelector('.dropdown-item-title')?.textContent || 'Messenger', event)) {
     return;
   }

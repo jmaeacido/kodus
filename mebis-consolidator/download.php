@@ -174,7 +174,33 @@ function mebis_collect_uploaded_files(array $files): array
 
 function mebis_consolidator_jobs_dir(): string
 {
-    return __DIR__ . '/jobs';
+    return mebis_consolidator_resolve_writable_jobs_dir(__DIR__ . '/jobs');
+}
+
+function mebis_consolidator_resolve_writable_jobs_dir(string $preferredDir): string
+{
+    if (mebis_consolidator_prepare_jobs_dir($preferredDir)) {
+        return $preferredDir;
+    }
+
+    $fallbackDir = rtrim(sys_get_temp_dir(), DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'kodus-mebis-consolidator-jobs';
+    if (mebis_consolidator_prepare_jobs_dir($fallbackDir)) {
+        error_log(sprintf('MEBIS consolidator jobs directory is not writable; using fallback %s', $fallbackDir));
+        return $fallbackDir;
+    }
+
+    throw new RuntimeException('The MEBIS consolidator job folder is not writable by the web server.');
+}
+
+function mebis_consolidator_prepare_jobs_dir(string $dir): bool
+{
+    if (!is_dir($dir) && !@mkdir($dir, 0777, true) && !is_dir($dir)) {
+        return false;
+    }
+
+    @chmod($dir, 02775);
+
+    return is_writable($dir);
 }
 
 function mebis_consolidator_store_job_files(array $files): array

@@ -9,18 +9,38 @@ require_once dirname(__DIR__, 2) . '/base_url.php';
 
 function mebis_template_jobs_dir(): string
 {
-    return dirname(__DIR__) . '/jobs';
+    return mebis_template_resolve_writable_jobs_dir(dirname(__DIR__) . '/jobs');
+}
+
+function mebis_template_resolve_writable_jobs_dir(string $preferredDir): string
+{
+    if (mebis_template_prepare_jobs_dir($preferredDir)) {
+        return $preferredDir;
+    }
+
+    $fallbackDir = rtrim(sys_get_temp_dir(), DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'kodus-mebis-lgu-template-jobs';
+    if (mebis_template_prepare_jobs_dir($fallbackDir)) {
+        error_log(sprintf('MEBIS template jobs directory is not writable; using fallback %s', $fallbackDir));
+        return $fallbackDir;
+    }
+
+    throw new RuntimeException('The MEBIS template job folder is not writable by the web server.');
+}
+
+function mebis_template_prepare_jobs_dir(string $dir): bool
+{
+    if (!is_dir($dir) && !@mkdir($dir, 0777, true) && !is_dir($dir)) {
+        return false;
+    }
+
+    @chmod($dir, 02775);
+
+    return is_writable($dir);
 }
 
 function mebis_template_ensure_jobs_dir(): void
 {
     $dir = mebis_template_jobs_dir();
-    if (!is_dir($dir)) {
-        mkdir($dir, 0777, true);
-    }
-
-    @chmod($dir, 02775);
-
     if (!is_writable($dir)) {
         throw new RuntimeException('The MEBIS template job folder is not writable by the web server.');
     }
@@ -521,10 +541,12 @@ function mebis_template_run_job(mysqli $conn, string $jobToken): void
 
             $municipality = (string) ($dataset['municipality_name'] ?? '');
             $batchNumber = mebis_template_next_batch_number($municipality, $requestBatchState);
+            $outputToken = bin2hex(random_bytes(8));
             $filename = sprintf(
-                '%03d_%s batch %02d.xlsx',
+                '%03d_%s_%s batch %02d.xlsx',
                 $index + 1,
                 mebis_template_filename_label($municipality),
+                $outputToken,
                 $batchNumber
             );
 
@@ -540,7 +562,6 @@ function mebis_template_run_job(mysqli $conn, string $jobToken): void
                 return;
             }
 
-            $outputToken = bin2hex(random_bytes(8));
             mebis_template_add_history_entry($conn, [
                 'token' => $outputToken,
                 'filename' => $filename,

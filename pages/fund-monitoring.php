@@ -443,6 +443,10 @@ $grandTotals['utilization_disbursement'] = fm_percent($grandTotals['total_disbur
               </div>
               <?php endif; ?>
               <div class="fm-actions">
+                <a href="fund-monitoring-export" class="btn btn-info">
+                  <i class="fas fa-file-export mr-1"></i>
+                  Export
+                </a>
                 <?php if ($isAdmin && $preparedItems !== []): ?>
                 <button type="button" class="btn btn-success" data-toggle="modal" data-target="#transactionModal">Update Transactions</button>
                 <?php endif; ?>

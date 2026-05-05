@@ -123,6 +123,52 @@ function mebis_generated_import_next_batch_id(mysqli $conn): string
     return str_pad((string) $latestBatchId, 5, '0', STR_PAD_LEFT);
 }
 
+function mebis_generated_import_find_output_for_update(mysqli $conn, string $token): ?array
+{
+    mebis_template_history_ensure_schema($conn);
+
+    $stmt = $conn->prepare("
+        SELECT id, output_token, filename, municipality_name, row_count, source_file, created_by,
+               imported_at, imported_batch_id, imported_by, created_at
+        FROM mebis_lgu_template_outputs
+        WHERE output_token = ?
+        LIMIT 1
+        FOR UPDATE
+    ");
+    if (!$stmt) {
+        return null;
+    }
+
+    $stmt->bind_param('s', $token);
+    $stmt->execute();
+    $row = db_stmt_fetch_one_assoc($stmt);
+    $stmt->close();
+
+    if (!$row) {
+        return null;
+    }
+
+    $filename = (string) ($row['filename'] ?? '');
+    if ($filename === '' || !is_file(mebis_template_outputs_dir() . '/' . $filename)) {
+        return null;
+    }
+
+    return [
+        'id' => (int) ($row['id'] ?? 0),
+        'token' => (string) ($row['output_token'] ?? ''),
+        'filename' => $filename,
+        'municipality_name' => (string) ($row['municipality_name'] ?? ''),
+        'rows' => (int) ($row['row_count'] ?? 0),
+        'source_file' => (string) ($row['source_file'] ?? ''),
+        'created_by' => isset($row['created_by']) ? (int) ($row['created_by']) : null,
+        'imported_at' => (string) ($row['imported_at'] ?? ''),
+        'imported_batch_id' => (string) ($row['imported_batch_id'] ?? ''),
+        'imported_by' => isset($row['imported_by']) ? (int) ($row['imported_by']) : null,
+        'is_imported' => trim((string) ($row['imported_at'] ?? '')) !== '',
+        'created_at' => (string) ($row['created_at'] ?? ''),
+    ];
+}
+
 function mebis_generated_import_output(mysqli $conn, string $token): array
 {
     $token = preg_replace('/[^a-f0-9]/i', '', $token);
@@ -130,12 +176,16 @@ function mebis_generated_import_output(mysqli $conn, string $token): array
         throw new RuntimeException('No generated template was selected for import.');
     }
 
-    $entry = mebis_template_find_output($conn, $token);
+    $conn->begin_transaction();
+
+    try {
+    $entry = mebis_generated_import_find_output_for_update($conn, $token);
     if (!$entry) {
         throw new RuntimeException('Generated template file not found.');
     }
 
     if (!empty($entry['is_imported'])) {
+        $conn->commit();
         return [
             'success' => true,
             'skipped' => true,
@@ -260,6 +310,11 @@ function mebis_generated_import_output(mysqli $conn, string $token): array
     }
 
     mebis_template_mark_output_imported($conn, $token, $batchId, isset($_SESSION['user_id']) ? (int) $_SESSION['user_id'] : null);
+    $conn->commit();
+    } catch (Throwable $e) {
+        $conn->rollback();
+        throw $e;
+    }
 
     app_notification_create($conn, [
         'category' => 'meb',

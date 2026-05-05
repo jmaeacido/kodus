@@ -193,11 +193,16 @@ function mebis_template_list_outputs(mysqli $conn): array
     }
 
     $entries = [];
+    $seenFilenames = [];
     while ($row = $result->fetch_assoc()) {
         $filename = (string) ($row['filename'] ?? '');
         if ($filename === '' || !is_file(mebis_template_outputs_dir() . '/' . $filename)) {
             continue;
         }
+        if (isset($seenFilenames[$filename])) {
+            continue;
+        }
+        $seenFilenames[$filename] = true;
 
         $entries[] = [
             'id' => (int) ($row['id'] ?? 0),

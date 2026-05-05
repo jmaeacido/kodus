@@ -644,16 +644,21 @@ $savedOutputs = mebis_template_list_outputs($conn);
       const pendingItems = items.filter(function (item) {
         return item && !item.is_imported && item.token;
       });
+      const pendingTokensJson = JSON.stringify(pendingItems.map(function (item) {
+        return item.token;
+      }));
 
       outputs.innerHTML = `
         ${pendingItems.length > 0
           ? `<form action="import_generated_all" method="post" class="mt-3 mb-0">
               <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(security_get_csrf_token(), ENT_QUOTES, 'UTF-8') ?>">
-              <input type="hidden" name="tokens_json" value="${escapeTemplateHtml(JSON.stringify(pendingItems.map(function (item) { return item.token; })))}">
+              <input type="hidden" name="tokens_json" value="${escapeTemplateHtml(pendingTokensJson)}">
+              ${pendingItems.map(function (item) {
+                return `<input type="hidden" name="tokens[]" value="${escapeTemplateHtml(item.token || '')}">`;
+              }).join('')}
               <button
                 type="submit"
                 class="btn btn-sm btn-success"
-                id="mebisTemplateImportAllSubmit"
               >
                 <i class="fas fa-file-import mr-1"></i>
                 Import All

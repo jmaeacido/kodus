@@ -450,6 +450,56 @@ function auth_enforce_session_timeout(string $logoutUrl, int $timeoutSeconds = 3
     $_SESSION['last_activity'] = time();
 }
 
+function auth_force_local_logout_redirect(mysqli $conn, string $reason): void
+{
+    $feedback = auth_logout_user($conn, $reason);
+    $query = http_build_query([
+        'logout' => $reason,
+        'status' => $feedback['icon'],
+    ]);
+    $redirect = auth_relative_prefix_to_app_root();
+
+    header('Location: ' . $redirect . ($query !== '' ? '?' . $query : ''));
+    exit();
+}
+
+function auth_enforce_fresh_session_role(mysqli $conn): void
+{
+    $userId = $_SESSION['user_id'] ?? null;
+    if (!is_numeric($userId)) {
+        return;
+    }
+
+    $stmt = $conn->prepare('SELECT userType, deleted_at FROM users WHERE id = ? LIMIT 1');
+    if (!$stmt) {
+        return;
+    }
+
+    $userId = (int) $userId;
+    $stmt->bind_param('i', $userId);
+    $stmt->execute();
+    $row = db_stmt_fetch_one_assoc($stmt);
+    $stmt->close();
+
+    if (!$row || !empty($row['deleted_at'])) {
+        auth_force_local_logout_redirect($conn, 'deactivated');
+    }
+
+    $databaseUserType = (string) ($row['userType'] ?? 'user');
+    $sessionUserType = (string) ($_SESSION['user_type'] ?? 'user');
+    if ($databaseUserType !== $sessionUserType) {
+        $roleChangeState = role_change_get_state($conn, $userId);
+        if (!$roleChangeState) {
+            role_change_schedule($conn, $userId, $sessionUserType, $databaseUserType, 20);
+            return;
+        }
+
+        if (!empty($roleChangeState['expired'])) {
+            auth_force_local_logout_redirect($conn, 'role_changed');
+        }
+    }
+}
+
 function auth_handle_page_access(mysqli $conn): void
 {
     $currentPage = basename((string) ($_SERVER['PHP_SELF'] ?? ''));
@@ -475,6 +525,8 @@ function auth_handle_page_access(mysqli $conn): void
         }
         auth_redirect_to_login();
     }
+
+    auth_enforce_fresh_session_role($conn);
 }
 
 function auth_mark_user_online(mysqli $conn): void

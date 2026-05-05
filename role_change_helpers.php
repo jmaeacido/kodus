@@ -53,7 +53,7 @@ function role_change_schedule(
 {
     role_change_ensure_schema($conn);
 
-    $forceLogoutAt = date('Y-m-d H:i:s', time() + max(5, $countdownSeconds));
+    $forceLogoutAt = date('Y-m-d H:i:s', time() + max(0, $countdownSeconds));
     $stmt = $conn->prepare("
         UPDATE users
         SET role_change_old_type = ?,

@@ -9,6 +9,8 @@ require_once __DIR__ . '/../security.php';
 require_once __DIR__ . '/../auth_helpers.php';
 require_once __DIR__ . '/../env_helpers.php';
 require_once __DIR__ . '/../app_location_helpers.php';
+require_once __DIR__ . '/../base_url.php';
+require_once __DIR__ . '/../app_notification_helpers.php';
 require_once __DIR__ . '/helpers/parser.php';
 require_once __DIR__ . '/helpers/history.php';
 
@@ -170,8 +172,53 @@ function mebis_collect_uploaded_files(array $files): array
     return $items;
 }
 
-try {
-    $mebisFiles = mebis_collect_uploaded_files($_FILES['mebis_files'] ?? []);
+function mebis_consolidator_jobs_dir(): string
+{
+    return __DIR__ . '/jobs';
+}
+
+function mebis_consolidator_store_job_files(array $files): array
+{
+    $token = bin2hex(random_bytes(16));
+    $dir = mebis_consolidator_jobs_dir() . '/' . $token;
+    if (!is_dir($dir) && !mkdir($dir, 0777, true)) {
+        throw new RuntimeException('Unable to create the background job folder.');
+    }
+    @chmod($dir, 02775);
+
+    $stored = [];
+    foreach (array_values($files) as $index => $file) {
+        $name = (string) ($file['name'] ?? ('MEBIS workbook ' . ($index + 1)));
+        $extension = strtolower(pathinfo($name, PATHINFO_EXTENSION)) ?: 'xlsx';
+        $path = $dir . '/' . sprintf('%03d_%s.%s', $index + 1, bin2hex(random_bytes(6)), $extension);
+        if (!move_uploaded_file((string) $file['tmp_name'], $path)) {
+            throw new RuntimeException(sprintf('Unable to queue %s for background processing.', $name));
+        }
+        $stored[] = [
+            'tmp_name' => $path,
+            'name' => $name,
+            'size' => (int) ($file['size'] ?? 0),
+        ];
+    }
+
+    return [$token, $stored];
+}
+
+function mebis_consolidator_cleanup_job_files(string $token): void
+{
+    $dir = mebis_consolidator_jobs_dir() . '/' . preg_replace('/[^a-f0-9]/i', '', $token);
+    foreach (glob($dir . '/*') ?: [] as $path) {
+        if (is_file($path)) {
+            @unlink($path);
+        }
+    }
+    if (is_dir($dir)) {
+        @rmdir($dir);
+    }
+}
+
+function mebis_generate_consolidated_template(mysqli $conn = null, array $mebisFiles = [], ?int $createdBy = null): array
+{
     $psgcPath = __DIR__ . '/helpers/CARAGA-PSGC-4Q-2025-Publication-Datafile.xlsx';
 
     if (!is_file($psgcPath)) {
@@ -255,11 +302,81 @@ try {
             'filename' => $filename,
             'row_count' => count($rows),
             'source_files' => array_map(static fn(array $file): string => (string) $file['name'], $mebisFiles),
-            'created_by' => isset($_SESSION['user_id']) ? (int) $_SESSION['user_id'] : null,
+            'created_by' => $createdBy,
         ]);
     }
 
-    mebis_finish(true, sprintf('Consolidated CSV saved with %d rows.', count($rows)));
+    return [
+        'token' => $id,
+        'filename' => $filename,
+        'rows' => count($rows),
+    ];
+}
+
+try {
+    $mebisFiles = mebis_collect_uploaded_files($_FILES['mebis_files'] ?? []);
+    $createdBy = isset($_SESSION['user_id']) ? (int) $_SESSION['user_id'] : null;
+
+    if (mebis_is_ajax_request() && function_exists('fastcgi_finish_request')) {
+        [$jobToken, $storedFiles] = mebis_consolidator_store_job_files($mebisFiles);
+        ignore_user_abort(true);
+        http_response_code(202);
+        header('Content-Type: application/json');
+        header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+        echo json_encode([
+            'success' => true,
+            'message' => sprintf(
+                '%d workbook%s queued for background name-matching template generation. A notification will appear when the CSV is ready.',
+                count($storedFiles),
+                count($storedFiles) === 1 ? ' was' : 's were'
+            ),
+        ]);
+
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_write_close();
+        }
+
+        fastcgi_finish_request();
+
+        try {
+            $result = mebis_generate_consolidated_template($conn instanceof mysqli ? $conn : null, $storedFiles, $createdBy);
+            if ($conn instanceof mysqli) {
+                app_notification_create($conn, [
+                    'category' => 'mebis_name_matching',
+                    'title' => 'Name-matching CSV ready',
+                    'message' => sprintf('MEBIS name-matching CSV saved with %d rows.', (int) $result['rows']),
+                    'url' => app_url('mebis-consolidator/'),
+                    'icon_class' => 'fas fa-file-csv',
+                    'color_class' => 'text-success',
+                    'actor_user_id' => null,
+                    'target_user_id' => $createdBy,
+                    'actor_name' => 'KODUS',
+                ]);
+            }
+        } catch (Throwable $backgroundException) {
+            if ($conn instanceof mysqli) {
+                app_notification_create($conn, [
+                    'category' => 'mebis_name_matching',
+                    'title' => 'Name-matching CSV failed',
+                    'message' => 'Template generation failed: ' . $backgroundException->getMessage(),
+                    'url' => app_url('mebis-consolidator/'),
+                    'icon_class' => 'fas fa-exclamation-triangle',
+                    'color_class' => 'text-danger',
+                    'actor_user_id' => null,
+                    'target_user_id' => $createdBy,
+                    'actor_name' => 'KODUS',
+                ]);
+            }
+            error_log('MEBIS consolidator background generation failed: ' . $backgroundException->getMessage());
+        } finally {
+            mebis_consolidator_cleanup_job_files($jobToken);
+        }
+
+        exit;
+    }
+
+    $result = mebis_generate_consolidated_template($conn instanceof mysqli ? $conn : null, $mebisFiles, $createdBy);
+    mebis_finish(true, sprintf('Consolidated CSV saved with %d rows.', (int) $result['rows']));
 } catch (Throwable $e) {
     mebis_redirect_with_error($e->getMessage());
 }

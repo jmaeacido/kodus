@@ -5,12 +5,14 @@ require_once __DIR__ . '/socket_helpers.php';
 function app_notification_visibility_sql_for_current_user(): string
 {
     $userType = (string) ($_SESSION['user_type'] ?? 'user');
+    $userId = (int) ($_SESSION['user_id'] ?? 0);
+    $targetSql = $userId > 0 ? " AND (n.target_user_id IS NULL OR n.target_user_id = {$userId})" : ' AND n.target_user_id IS NULL';
 
     if ($userType === 'admin') {
-        return '';
+        return $targetSql;
     }
 
-    return " AND n.category NOT IN ('first_login', 'users')";
+    return $targetSql . " AND n.category NOT IN ('first_login', 'users')";
 }
 
 function app_notification_ensure_schema(mysqli $conn): void
@@ -33,12 +35,26 @@ function app_notification_ensure_schema(mysqli $conn): void
             icon_class VARCHAR(80) NOT NULL DEFAULT 'fas fa-bell',
             color_class VARCHAR(40) NOT NULL DEFAULT 'text-warning',
             actor_user_id INT NULL DEFAULT NULL,
+            target_user_id INT NULL DEFAULT NULL,
             actor_name VARCHAR(255) DEFAULT NULL,
             created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
             INDEX idx_app_notifications_created_at (created_at),
-            INDEX idx_app_notifications_category (category)
+            INDEX idx_app_notifications_category (category),
+            INDEX idx_app_notifications_target_user (target_user_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
     );
+
+    $targetColumn = $conn->query("SHOW COLUMNS FROM app_notifications LIKE 'target_user_id'");
+    if ($targetColumn && $targetColumn->num_rows === 0) {
+        $conn->query(
+            "ALTER TABLE app_notifications
+                ADD COLUMN target_user_id INT NULL DEFAULT NULL AFTER actor_user_id,
+                ADD INDEX idx_app_notifications_target_user (target_user_id)"
+        );
+    }
+    if ($targetColumn) {
+        $targetColumn->close();
+    }
 
     $conn->query(
         "CREATE TABLE IF NOT EXISTS app_notification_reads (
@@ -123,13 +139,14 @@ function app_notification_create(mysqli $conn, array $payload): int
     $iconClass = trim((string) ($payload['icon_class'] ?? 'fas fa-bell')) ?: 'fas fa-bell';
     $colorClass = trim((string) ($payload['color_class'] ?? 'text-warning')) ?: 'text-warning';
     $actorUserId = isset($payload['actor_user_id']) ? (int) $payload['actor_user_id'] : null;
+    $targetUserId = isset($payload['target_user_id']) ? (int) $payload['target_user_id'] : null;
     $actorName = trim((string) ($payload['actor_name'] ?? ''));
     $actorName = $actorName !== '' ? $actorName : null;
 
     $stmt = $conn->prepare(
         'INSERT INTO app_notifications
-            (category, title, message, url, icon_class, color_class, actor_user_id, actor_name, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())'
+            (category, title, message, url, icon_class, color_class, actor_user_id, target_user_id, actor_name, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())'
     );
 
     if (!$stmt) {
@@ -137,7 +154,7 @@ function app_notification_create(mysqli $conn, array $payload): int
     }
 
     $stmt->bind_param(
-        'ssssssis',
+        'ssssssiis',
         $category,
         $title,
         $message,
@@ -145,6 +162,7 @@ function app_notification_create(mysqli $conn, array $payload): int
         $iconClass,
         $colorClass,
         $actorUserId,
+        $targetUserId,
         $actorName
     );
 
@@ -160,6 +178,7 @@ function app_notification_create(mysqli $conn, array $payload): int
         'notification_id' => $notificationId,
         'category' => $category,
         'actor_id' => (int) ($actorUserId ?? 0),
+        'target_user_id' => (int) ($targetUserId ?? 0),
     ]);
 
     return $notificationId;

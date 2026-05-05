@@ -42,9 +42,6 @@ if (!$job) {
 
 <script>
 (function(){
-  // fire-and-forget run.php
-  fetch('run_job.php?job=' + encodeURIComponent(<?= json_encode($jobId) ?>), { method: 'POST' }).catch(()=>{});
-
   const jobId = <?= json_encode($jobId) ?>;
 
   Swal.fire({

@@ -5,6 +5,7 @@ require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/../app_notification_helpers.php';
 
 header('Content-Type: application/json');
+app_notification_ensure_schema($conn);
 
 security_require_method(['POST']);
 security_require_csrf_token();

@@ -68,10 +68,12 @@ try {
     $_SESSION['kds_done'] = false;
     $_SESSION['kds_results'] = [];
 
+    crossmatch_start_background_job((int) $jobId);
+
     if (crossmatch_is_ajax_request()) {
         security_send_json([
             'success' => true,
-            'message' => 'Crossmatching job started.',
+            'message' => 'Crossmatching job started in the background.',
             'job_id' => $jobId,
             'redirect' => "start.php?job={$jobId}",
         ]);

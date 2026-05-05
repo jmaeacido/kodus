@@ -7,6 +7,7 @@
     require_once __DIR__ . '/../auth_helpers.php';
     require_once __DIR__ . '/../socket_helpers.php';
     require_once __DIR__ . '/../app_notification_helpers.php';
+    require_once __DIR__ . '/../base_url.php';
     require_once __DIR__ . '/../config.php';
 
     require '../vendor/autoload.php'; // Load PhpSpreadsheet library
@@ -23,6 +24,8 @@ function meb_import_is_ajax_request(): bool {
 }
 
 function meb_import_redirect_with_flash(string $type, string $message): void {
+    $redirectUrl = app_url('pages/data-tracking-meb');
+
     $_SESSION['meb_import_flash'] = [
         'type' => $type,
         'message' => $message,
@@ -33,11 +36,11 @@ function meb_import_redirect_with_flash(string $type, string $message): void {
             'success' => $type === 'success',
             'type' => $type,
             'message' => $message,
-            'redirect' => 'data-tracking-meb',
+            'redirect' => $redirectUrl,
         ], $type === 'success' ? 200 : 400);
     }
 
-    header("Location: data-tracking-meb");
+    header('Location: ' . $redirectUrl);
     exit;
 }
 
@@ -323,6 +326,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                     if ($errorMsg === '' && $rowCount > 0) {
                         $successMsg = "Data imported successfully! Batch ID: $batchId";
+                        $generatedImportToken = preg_replace('/[^a-f0-9]/i', '', (string) ($GLOBALS['mebis_generated_import_token'] ?? ''));
+                        if ($generatedImportToken !== '') {
+                            require_once __DIR__ . '/../mebis-lgu-template/helpers/history.php';
+                            mebis_template_mark_output_imported(
+                                $conn,
+                                $generatedImportToken,
+                                (string) $batchId,
+                                isset($_SESSION['user_id']) ? (int) $_SESSION['user_id'] : null
+                            );
+                        }
+
                         app_notification_create($conn, [
                             'category' => 'meb',
                             'title' => 'MEB batch imported',

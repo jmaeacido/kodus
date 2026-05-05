@@ -11,6 +11,7 @@ require_once __DIR__ . '/../env_helpers.php';
 require_once __DIR__ . '/../app_location_helpers.php';
 require_once __DIR__ . '/helpers/history.php';
 require_once __DIR__ . '/helpers/template.php';
+require_once __DIR__ . '/helpers/jobs.php';
 
 security_configure_runtime_for_web();
 security_bootstrap_session();
@@ -45,6 +46,11 @@ function mebis_template_is_ajax_request(): bool
 function mebis_template_finish(bool $success, string $message, int $statusCode = 200): void
 {
     if (mebis_template_is_ajax_request()) {
+        $extraPayload = [];
+        if (isset($GLOBALS['mebis_template_response_payload']) && is_array($GLOBALS['mebis_template_response_payload'])) {
+            $extraPayload = $GLOBALS['mebis_template_response_payload'];
+        }
+
         if (!$success) {
             error_log(sprintf(
                 'MEBIS LGU template request failed: %s [status=%d, content_length=%s, post_max_size=%s, upload_max_filesize=%s]',
@@ -56,11 +62,42 @@ function mebis_template_finish(bool $success, string $message, int $statusCode =
             ));
         }
 
-        security_send_json([
+        if ($success && isset($extraPayload['job_token']) && function_exists('fastcgi_finish_request')) {
+            $payload = array_merge([
+                'success' => true,
+                'message' => $message,
+                'status_code' => $statusCode,
+            ], $extraPayload);
+
+            ignore_user_abort(true);
+            http_response_code($statusCode);
+            header('Content-Type: application/json');
+            header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+            echo json_encode($payload);
+
+            if (session_status() === PHP_SESSION_ACTIVE) {
+                session_write_close();
+            }
+
+            fastcgi_finish_request();
+
+            $backgroundConn = $GLOBALS['conn'] ?? null;
+            if ($backgroundConn instanceof mysqli) {
+                try {
+                    mebis_template_run_job($backgroundConn, (string) $extraPayload['job_token']);
+                } catch (Throwable $backgroundException) {
+                    error_log('MEBIS LGU template background run failed after response: ' . $backgroundException->getMessage());
+                }
+            }
+
+            exit;
+        }
+
+        security_send_json(array_merge([
             'success' => $success,
             'message' => $message,
             'status_code' => $statusCode,
-        ], $success ? $statusCode : 200);
+        ], $extraPayload), $success ? $statusCode : 200);
     }
 
     if ($success) {
@@ -210,44 +247,32 @@ function mebis_template_collect_uploaded_files(array $files): array
 
 try {
     $files = mebis_template_collect_uploaded_files($_FILES['mebis_files'] ?? []);
-    mebis_template_ensure_outputs_dir();
+    if (!$conn instanceof mysqli) {
+        throw new RuntimeException('The database connection is unavailable. Please try again.');
+    }
 
-    $generatedCount = 0;
-    $requestBatchState = [];
+    $requestedBy = (int) ($_SESSION['user_id'] ?? 0);
+    if ($requestedBy <= 0) {
+        throw new RuntimeException('Your session expired. Please sign in again before generating templates.');
+    }
 
-    foreach (array_values($files) as $index => $file) {
-        $dataset = mebis_template_parse_workbook($file['tmp_name'], $file['name']);
-        $municipality = (string) ($dataset['municipality_name'] ?? '');
-        $batchNumber = mebis_template_next_batch_number($municipality, $requestBatchState);
-        $filename = sprintf(
-            '%03d_%s batch %02d.xlsx',
-            $index + 1,
-            mebis_template_filename_label($municipality),
-            $batchNumber
-        );
+    $jobToken = mebis_template_create_job($conn, $files, $requestedBy);
+    $GLOBALS['mebis_template_response_payload'] = ['job_token' => $jobToken];
 
-        $outputPath = mebis_template_outputs_dir() . '/' . $filename;
-        mebis_template_write_workbook($dataset, $outputPath);
-
-        if ($conn instanceof mysqli) {
-            mebis_template_add_history_entry($conn, [
-                'token' => bin2hex(random_bytes(8)),
-                'filename' => $filename,
-                'municipality_name' => $municipality,
-                'row_count' => count($dataset['rows'] ?? []),
-                'source_file' => (string) $file['name'],
-                'created_by' => isset($_SESSION['user_id']) ? (int) $_SESSION['user_id'] : null,
-            ]);
-        }
-
-        $generatedCount++;
+    if (!function_exists('fastcgi_finish_request') && !mebis_template_start_background_job($jobToken)) {
+        mebis_template_update_job($conn, $jobToken, [
+            'status' => 'failed',
+            'message' => 'Unable to start the background generator.',
+            'finished_at' => true,
+        ]);
+        throw new RuntimeException('Unable to start the background generator. Please try again.');
     }
 
     mebis_template_finish(true, sprintf(
-        '%d LGU template file%s generated successfully.',
-        $generatedCount,
-        $generatedCount === 1 ? '' : 's'
-    ));
+        '%d workbook%s queued for background template generation. You can continue using KODUS; a notification will appear when the files are ready.',
+        count($files),
+        count($files) === 1 ? ' was' : 's were'
+    ), 202);
 } catch (Throwable $e) {
     mebis_template_redirect_with_error($e->getMessage());
 }

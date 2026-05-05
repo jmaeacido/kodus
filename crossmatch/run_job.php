@@ -5,6 +5,10 @@ error_reporting(E_ALL);
 
 session_start();
 require_once __DIR__ . '/../config.php';
+require_once __DIR__ . '/../env_helpers.php';
+require_once __DIR__ . '/../app_location_helpers.php';
+require_once __DIR__ . '/../base_url.php';
+require_once __DIR__ . '/../app_notification_helpers.php';
 require_once __DIR__ . '/helpers/file_parser.php';
 require_once __DIR__ . '/helpers/fuzzy.php';
 require_once __DIR__ . '/helpers/jobs.php';
@@ -16,20 +20,32 @@ function updateCrossmatchJobStatus(mysqli $conn, int $jobId, int $percent, strin
     $stmt->close();
 }
 
-$jobId = (int)($_GET['job'] ?? $_POST['job'] ?? ($_SESSION['kds_cfg']['job_id'] ?? 0));
+$isCli = PHP_SAPI === 'cli';
+$jobId = (int)($isCli ? ($argv[1] ?? 0) : ($_GET['job'] ?? $_POST['job'] ?? ($_SESSION['kds_cfg']['job_id'] ?? 0)));
 if ($jobId <= 0) {
     http_response_code(400);
     echo "Missing job id.";
     exit;
 }
 
-$job = crossmatch_fetch_accessible_job(
-    $conn,
-    $jobId,
-    (int) ($_SESSION['user_id'] ?? 0),
-    (string) ($_SESSION['user_type'] ?? ''),
-    'id, user_id, file1_name, file2_name, rule, threshold'
-);
+$job = null;
+if ($isCli) {
+    $stmt = $conn->prepare('SELECT id, user_id, file1_name, file2_name, rule, threshold FROM crossmatch_jobs WHERE id = ? LIMIT 1');
+    if ($stmt) {
+        $stmt->bind_param('i', $jobId);
+        $stmt->execute();
+        $job = db_stmt_fetch_one_assoc($stmt);
+        $stmt->close();
+    }
+} else {
+    $job = crossmatch_fetch_accessible_job(
+        $conn,
+        $jobId,
+        (int) ($_SESSION['user_id'] ?? 0),
+        (string) ($_SESSION['user_type'] ?? ''),
+        'id, user_id, file1_name, file2_name, rule, threshold'
+    );
+}
 
 if (!$job) {
     http_response_code(403);
@@ -94,12 +110,35 @@ try {
     $insertStmt->close();
     updateCrossmatchJobStatus($conn, $jobId, 100, 'Completed', 1);
 
+    app_notification_create($conn, [
+        'category' => 'crossmatch',
+        'title' => 'Crossmatching complete',
+        'message' => 'Crossmatching job #' . $jobId . ' finished and results are ready.',
+        'url' => app_url('crossmatch/results.php?job=' . $jobId),
+        'icon_class' => 'fas fa-random',
+        'color_class' => 'text-success',
+        'actor_user_id' => null,
+        'target_user_id' => isset($job['user_id']) ? (int) $job['user_id'] : null,
+        'actor_name' => 'KODUS',
+    ]);
+
     http_response_code(204);
     exit;
 } catch (Throwable $e) {
     $err = $e->getMessage();
     error_log('Crossmatch run error: ' . $err);
     updateCrossmatchJobStatus($conn, $jobId, 100, $err, 1);
+    app_notification_create($conn, [
+        'category' => 'crossmatch',
+        'title' => 'Crossmatching failed',
+        'message' => 'Crossmatching job #' . $jobId . ' failed: ' . $err,
+        'url' => app_url('crossmatch/'),
+        'icon_class' => 'fas fa-exclamation-triangle',
+        'color_class' => 'text-danger',
+        'actor_user_id' => null,
+        'target_user_id' => isset($job['user_id']) ? (int) $job['user_id'] : null,
+        'actor_name' => 'KODUS',
+    ]);
 
     http_response_code(500);
     echo 'Error: ' . $err;

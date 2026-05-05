@@ -1384,10 +1384,14 @@ let topbarNotificationInitialized = false;
 let topbarSeenNotificationIds = [];
 let topbarSeenMailActivityKeys = [];
 const topbarShownMailActivityKeys = new Set();
-let topbarAppNotificationInitialized = false;
-let topbarSeenAppNotificationIds = [];
+let topbarAppNotificationInitialized = true;
+let topbarSeenAppNotificationIds = <?= json_encode(array_values(array_map(
+  static fn($item): int => (int) ($item['id'] ?? 0),
+  array_slice((array) ($topbarAppNotificationFeed['items'] ?? []), 0, 20)
+))) ?>;
 let mailBellAudioContext = null;
 let mailBellUnlocked = false;
+let topbarAppNotificationPollTimer = null;
 
 function kodusDebugLog() {
   try {
@@ -2295,6 +2299,24 @@ function refreshAppNotifications() {
 }
 
 window.refreshAppNotifications = refreshAppNotifications;
+
+function startAppNotificationFallbackPolling() {
+  if (topbarAppNotificationPollTimer) {
+    return;
+  }
+
+  topbarAppNotificationPollTimer = window.setInterval(function() {
+    refreshAppNotifications();
+  }, 15000);
+}
+
+startAppNotificationFallbackPolling();
+document.addEventListener('visibilitychange', function() {
+  if (!document.hidden) {
+    refreshAppNotifications();
+  }
+});
+window.addEventListener('focus', refreshAppNotifications);
 window.addEventListener('resize', enforceKodusChatBubbleOverflow, { passive: true });
 window.addEventListener('message', function(event) {
   if (event.origin !== window.location.origin || !event.data) {

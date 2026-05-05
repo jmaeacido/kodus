@@ -3,6 +3,8 @@ set_time_limit(0);
 ini_set('memory_limit', '1024M');
 
 require_once __DIR__ . '/../config.php';
+require_once __DIR__ . '/../base_url.php';
+require_once __DIR__ . '/../app_notification_helpers.php';
 require_once __DIR__ . '/helpers/validator.php';
 require_once __DIR__ . '/../vendor/autoload.php';
 
@@ -149,6 +151,17 @@ try {
 
     if ($total < 2) {
         updateDedupJob($conn, $jobId, 'done', 100);
+        app_notification_create($conn, [
+            'category' => 'deduplication',
+            'title' => 'Deduplication complete',
+            'message' => 'Deduplication job #' . $jobId . ' finished and results are ready.',
+            'url' => app_url('deduplication/results.php?job=' . $jobId),
+            'icon_class' => 'fas fa-object-group',
+            'color_class' => 'text-success',
+            'actor_user_id' => null,
+            'target_user_id' => isset($job['user_id']) ? (int) $job['user_id'] : null,
+            'actor_name' => 'KODUS',
+        ]);
         exit;
     }
 
@@ -224,8 +237,30 @@ try {
 
     $insertStmt->close();
     updateDedupJob($conn, $jobId, 'done', 100);
+    app_notification_create($conn, [
+        'category' => 'deduplication',
+        'title' => 'Deduplication complete',
+        'message' => 'Deduplication job #' . $jobId . ' finished and results are ready.',
+        'url' => app_url('deduplication/results.php?job=' . $jobId),
+        'icon_class' => 'fas fa-object-group',
+        'color_class' => 'text-success',
+        'actor_user_id' => null,
+        'target_user_id' => isset($job['user_id']) ? (int) $job['user_id'] : null,
+        'actor_name' => 'KODUS',
+    ]);
 } catch (Throwable $e) {
     updateDedupJob($conn, $jobId, 'failed', 100);
+    app_notification_create($conn, [
+        'category' => 'deduplication',
+        'title' => 'Deduplication failed',
+        'message' => 'Deduplication job #' . $jobId . ' failed: ' . $e->getMessage(),
+        'url' => app_url('deduplication/'),
+        'icon_class' => 'fas fa-exclamation-triangle',
+        'color_class' => 'text-danger',
+        'actor_user_id' => null,
+        'target_user_id' => isset($job['user_id']) ? (int) $job['user_id'] : null,
+        'actor_name' => 'KODUS',
+    ]);
     file_put_contents(
         $errorFile,
         date('c') . " - ERROR: " . $e->getMessage() . "\n",

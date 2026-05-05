@@ -43,3 +43,58 @@ function crossmatch_fetch_accessible_job(mysqli $conn, int $jobId, int $userId, 
     $ownerId = isset($job['user_id']) ? (int) $job['user_id'] : 0;
     return ($ownerId > 0 && $ownerId === $userId) ? $job : null;
 }
+
+function crossmatch_find_php_binary(): string
+{
+    $candidates = [
+        PHP_BINDIR . DIRECTORY_SEPARATOR . (stripos(PHP_OS_FAMILY, 'Windows') === 0 ? 'php.exe' : 'php'),
+        PHP_BINARY,
+    ];
+
+    foreach ($candidates as $candidate) {
+        if (is_string($candidate) && $candidate !== '' && is_file($candidate)) {
+            return $candidate;
+        }
+    }
+
+    return 'php';
+}
+
+function crossmatch_start_background_job(int $jobId): bool
+{
+    if ($jobId <= 0) {
+        return false;
+    }
+
+    $php = crossmatch_find_php_binary();
+    $runner = dirname(__DIR__) . '/run_job.php';
+
+    if (stripos(PHP_OS_FAMILY, 'Windows') === 0) {
+        $quote = static function (string $value): string {
+            return "'" . str_replace("'", "''", $value) . "'";
+        };
+        $script = 'Start-Process -FilePath '
+            . $quote($php)
+            . ' -ArgumentList @('
+            . $quote($runner)
+            . ', '
+            . $quote((string) $jobId)
+            . ') -WindowStyle Hidden';
+        $command = 'powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command '
+            . escapeshellarg($script);
+        $handle = @popen($command, 'r');
+        if (!is_resource($handle)) {
+            return false;
+        }
+        pclose($handle);
+        return true;
+    }
+
+    $command = escapeshellarg($php) . ' ' . escapeshellarg($runner) . ' ' . escapeshellarg((string) $jobId) . ' > /dev/null 2>&1 &';
+    $handle = @popen($command, 'r');
+    if (!is_resource($handle)) {
+        return false;
+    }
+    pclose($handle);
+    return true;
+}

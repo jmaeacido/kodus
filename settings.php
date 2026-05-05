@@ -4,6 +4,7 @@ include('sidenav.php');
 require_once __DIR__ . '/position_helpers.php';
 require_once __DIR__ . '/profile_completion_helpers.php';
 require_once __DIR__ . '/sso_helpers.php';
+require_once __DIR__ . '/area_helpers.php';
 
 function settings_value_or_fallback(array $primary, array $fallback, string $key): string
 {
@@ -142,6 +143,8 @@ $currentPosition = trim((string) ($user['position'] ?? ''));
 $currentPositionAbr = trim((string) ($user['positionAbr'] ?? ''));
 $currentPositionAbr = $currentPositionAbr !== '' ? $currentPositionAbr : kodus_position_abbreviation($currentPosition);
 $hasCustomPosition = $currentPosition !== '' && !array_key_exists($currentPosition, $positionMap);
+$assignmentAreas = kodus_assignment_areas();
+$currentArea = trim((string) ($user['area'] ?? ''));
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -374,7 +377,17 @@ $hasCustomPosition = $currentPosition !== '' && !array_key_exists($currentPositi
                                             <input type="text" id="positionAbr" name="positionAbr" class="form-control" value="<?= htmlspecialchars($currentPositionAbr, ENT_QUOTES, 'UTF-8') ?>" readonly required>
                                             <small class="form-text text-muted" id="positionAbrHelp"><?= $hasCustomPosition ? 'Generated automatically from your custom position using the same acronym-style format.' : 'Filled automatically from the selected position.' ?></small>
                                         </div>
-                                        <div class="form-group col-md-4"><label for="area">Area of Assignment</label><input type="text" id="area" name="area" class="form-control" value="<?= htmlspecialchars((string) ($user['area'] ?? ''), ENT_QUOTES, 'UTF-8') ?>" required></div>
+                                        <div class="form-group col-md-4">
+                                            <label for="area">Area of Assignment</label>
+                                            <select id="area" name="area" class="form-control" required>
+                                                <option value="" disabled <?= $currentArea === '' || !kodus_is_assignment_area($currentArea) ? 'selected' : '' ?>>Select area of assignment</option>
+                                                <?php foreach ($assignmentAreas as $assignmentArea): ?>
+                                                    <option value="<?= htmlspecialchars($assignmentArea, ENT_QUOTES, 'UTF-8') ?>" <?= $currentArea === $assignmentArea ? 'selected' : '' ?>>
+                                                        <?= htmlspecialchars($assignmentArea, ENT_QUOTES, 'UTF-8') ?>
+                                                    </option>
+                                                <?php endforeach; ?>
+                                            </select>
+                                        </div>
                                     </div>
 
                                     <div class="settings-section-title mt-3">Contact And Access</div>
@@ -950,4 +963,3 @@ $(function () {
 </script>
 </body>
 </html>
-

@@ -3,6 +3,7 @@ require_once __DIR__ . '/security.php';
 security_bootstrap_session();
 require_once __DIR__ . '/theme_helpers.php';
 require_once __DIR__ . '/position_helpers.php';
+require_once __DIR__ . '/area_helpers.php';
 include('config.php');
 
 security_require_method(['POST']);
@@ -28,11 +29,11 @@ $username = trim((string) ($_POST['username'] ?? ''));
 $password = (string) ($_POST['password'] ?? '');
 $themePreference = theme_normalize_preference($_POST['theme_preference'] ?? 'light');
 
-if ($firstName === '' || $lastName === '' || $position === '' || $positionAbr === '' || $area === '' || $username === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+if ($firstName === '' || $lastName === '' || $position === '' || $positionAbr === '' || !kodus_is_assignment_area($area) || $username === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
     $_SESSION['settings_flash'] = [
         'type' => 'error',
         'title' => 'Profile Not Saved',
-        'message' => 'Please complete all required fields, enter a valid position and abbreviation, and provide a valid email address.'
+        'message' => 'Please complete all required fields, select a valid area of assignment, enter a valid position and abbreviation, and provide a valid email address.'
     ];
     header("Location: settings");
     exit;

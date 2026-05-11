@@ -2,6 +2,7 @@
 include('../header.php');
 include('../sidenav.php');
 require_once __DIR__ . '/helpers/history.php';
+require_once __DIR__ . '/helpers/request_letters.php';
 
 function mebis_read_output_municipality_summary(string $filename): array
 {
@@ -93,6 +94,11 @@ if ($errorMessage) {
 mebis_history_ensure_schema($conn);
 $savedOutputs = mebis_list_outputs($conn);
 $outputSummaries = [];
+$requestLetterTemplates = mebis_request_letter_templates();
+$requestLetterFields = [];
+foreach (array_keys($requestLetterTemplates) as $templateKey) {
+    $requestLetterFields[$templateKey] = mebis_request_letter_manual_fields($templateKey);
+}
 
 foreach ($savedOutputs as $entry) {
     $token = (string) ($entry['token'] ?? '');
@@ -214,6 +220,25 @@ foreach ($savedOutputs as $entry) {
 
     body[data-theme="dark"] .mebis-missing-file {
       color: #fbbf24;
+    }
+
+    .mebis-action-buttons {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.35rem;
+    }
+
+    .mebis-request-letter-form {
+      text-align: left;
+    }
+
+    .mebis-request-letter-form .form-group {
+      margin-bottom: 0.8rem;
+    }
+
+    .mebis-request-letter-form small {
+      display: block;
+      margin-top: 0.2rem;
     }
 
     .mebis-name-job-status-panel {
@@ -452,10 +477,25 @@ foreach ($savedOutputs as $entry) {
                         </td>
                         <td>
                           <?php if ($fileExists): ?>
-                            <a href="file?id=<?= urlencode((string) ($entry['token'] ?? '')) ?>" class="btn btn-sm btn-primary" download>
-                              <i class="fas fa-download mr-1"></i>
-                              Download
-                            </a>
+                            <div class="mebis-action-buttons">
+                              <a href="file?id=<?= urlencode((string) ($entry['token'] ?? '')) ?>" class="btn btn-sm btn-primary" download>
+                                <i class="fas fa-download mr-1"></i>
+                                Download
+                              </a>
+                              <?php foreach ($requestLetterTemplates as $template): ?>
+                                <button
+                                  type="button"
+                                  class="btn btn-sm btn-outline-success mebis-request-letter-button"
+                                  data-output-token="<?= htmlspecialchars((string) ($entry['token'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
+                                  data-output-filename="<?= htmlspecialchars((string) ($entry['filename'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
+                                  data-template-key="<?= htmlspecialchars((string) ($template['key'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
+                                  data-template-label="<?= htmlspecialchars((string) ($template['label'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
+                                >
+                                  <i class="fas fa-file-word mr-1"></i>
+                                  <?= htmlspecialchars((string) ($template['label'] ?? ''), ENT_QUOTES, 'UTF-8') ?> Letter
+                                </button>
+                              <?php endforeach; ?>
+                            </div>
                           <?php else: ?>
                             <span class="text-muted">Output file is no longer on disk.</span>
                           <?php endif; ?>
@@ -502,8 +542,14 @@ $(function() {
   });
 
   const summaries = <?= json_encode($outputSummaries, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
+  const requestLetterFields = <?= json_encode($requestLetterFields, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
+  const requestLetterCsrfToken = <?= json_encode(security_get_csrf_token()) ?>;
   const summaryMeta = document.getElementById('municipality-summary-meta');
   const summaryBody = document.getElementById('municipality-summary-body');
+
+  function escapeHtml(value) {
+    return $('<div>').text(String(value || '')).html();
+  }
 
   function renderSummaryRows(token) {
     if (!summaryBody || !summaryMeta) {
@@ -525,7 +571,7 @@ $(function() {
       return;
     }
 
-    summaryMeta.innerHTML = 'Showing row counts from <strong>' + $('<div>').text(payload.filename || '').html() + '</strong>';
+    summaryMeta.innerHTML = 'Showing row counts from <strong>' + escapeHtml(payload.filename || '') + '</strong>';
 
     if (rows.length === 0) {
       summaryTable.row.add([
@@ -538,8 +584,8 @@ $(function() {
 
     rows.forEach(function(row) {
       summaryTable.row.add([
-        $('<div>').text(row.province_name || '').html(),
-        $('<div>').text(row.city_name || '').html(),
+        escapeHtml(row.province_name || ''),
+        escapeHtml(row.city_name || ''),
         Number(row.row_count || 0)
       ]);
     });
@@ -551,6 +597,184 @@ $(function() {
     button.addEventListener('click', function() {
       renderSummaryRows(button.getAttribute('data-summary-token') || '');
     });
+  });
+
+  function buildRequestLetterForm(templateKey) {
+    const fields = requestLetterFields[templateKey] || [];
+    return '<form id="mebisRequestLetterForm" class="mebis-request-letter-form">' + fields.map(function(field) {
+      const type = field.type === 'date' ? 'date' : (field.type === 'url' ? 'url' : 'text');
+      const maxLength = Number(field.max_length || 255);
+      return `
+        <div class="form-group">
+          <label for="request-letter-${escapeHtml(field.name)}">${escapeHtml(field.label)}</label>
+          <input
+            type="${type}"
+            id="request-letter-${escapeHtml(field.name)}"
+            name="${escapeHtml(field.name)}"
+            class="form-control"
+            value="${escapeHtml(field.default || '')}"
+            placeholder="${escapeHtml(field.placeholder || '')}"
+            maxlength="${maxLength}"
+            required
+          >
+          <small class="text-muted">${escapeHtml(field.context || '')}</small>
+        </div>
+      `;
+    }).join('') + '</form>';
+  }
+
+  function collectRequestLetterInputs() {
+    const form = document.getElementById('mebisRequestLetterForm');
+    if (!form) {
+      return null;
+    }
+
+    const values = {};
+    let firstInvalid = null;
+    Array.from(form.elements).forEach(function(element) {
+      if (!element.name) {
+        return;
+      }
+
+      const value = String(element.value || '').trim();
+      values[element.name] = value;
+      if (!value && !firstInvalid) {
+        firstInvalid = element;
+      }
+    });
+
+    if (firstInvalid) {
+      firstInvalid.focus();
+      Swal.showValidationMessage('Please complete all required fields.');
+      return false;
+    }
+
+    if (values.drn_month && !/^\d{2}$/.test(values.drn_month)) {
+      document.querySelector('[name="drn_month"]')?.focus();
+      Swal.showValidationMessage('DRN Month Code must be exactly two digits.');
+      return false;
+    }
+
+    if (values.source_link && !/^https?:\/\/\S+$/i.test(values.source_link)) {
+      document.querySelector('[name="source_link"]')?.focus();
+      Swal.showValidationMessage('Source Link must be a valid http or https URL.');
+      return false;
+    }
+
+    return values;
+  }
+
+  function filenameFromDisposition(disposition, fallback) {
+    const match = /filename\*=UTF-8''([^;]+)|filename="?([^"]+)"?/i.exec(disposition || '');
+    const raw = match ? (match[1] || match[2] || '') : '';
+    if (!raw) {
+      return fallback;
+    }
+
+    try {
+      return decodeURIComponent(raw);
+    } catch (error) {
+      return raw;
+    }
+  }
+
+  async function downloadRequestLetter(outputToken, templateKey, inputs, templateLabel) {
+    const formData = new FormData();
+    formData.set('csrf_token', requestLetterCsrfToken);
+    formData.set('output_id', outputToken);
+    formData.set('template_key', templateKey);
+    Object.keys(inputs).forEach(function(key) {
+      formData.set(key, inputs[key]);
+    });
+
+    Swal.fire({
+      title: 'Generating Request Letter',
+      html: `
+        <div class="text-left">
+          <p class="mb-2">Preparing the ${escapeHtml(templateLabel)} request letter from the saved name-matching file.</p>
+          <div class="progress" style="height: 0.85rem; border-radius: 999px; overflow: hidden;">
+            <div class="progress-bar progress-bar-striped progress-bar-animated bg-success" role="progressbar" style="width: 100%;"></div>
+          </div>
+        </div>
+      `,
+      allowOutsideClick: false,
+      allowEscapeKey: false,
+      showConfirmButton: false
+    });
+
+    const response = await fetch('request_letter.php', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {
+        'X-Requested-With': 'XMLHttpRequest'
+      },
+      body: formData
+    });
+
+    if (!response.ok) {
+      let message = 'Unable to generate the request letter.';
+      try {
+        const payload = await response.json();
+        message = payload.message || message;
+      } catch (error) {
+      }
+      throw new Error(message);
+    }
+
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filenameFromDisposition(response.headers.get('Content-Disposition'), templateLabel + '_Request_Letter.docx');
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(function() {
+      URL.revokeObjectURL(url);
+    }, 1000);
+  }
+
+  $(document).on('click', '.mebis-request-letter-button', async function() {
+    const button = this;
+    const outputToken = button.getAttribute('data-output-token') || '';
+    const outputFilename = button.getAttribute('data-output-filename') || '';
+    const templateKey = button.getAttribute('data-template-key') || '';
+    const templateLabel = button.getAttribute('data-template-label') || 'Request';
+
+    const result = await Swal.fire({
+      title: 'Generate ' + templateLabel + ' Request Letter',
+      html: '<p class="text-muted text-left mb-3">Saved file: <strong>' + escapeHtml(outputFilename) + '</strong></p>' + buildRequestLetterForm(templateKey),
+      width: 650,
+      showCancelButton: true,
+      confirmButtonText: 'Generate DOCX',
+      cancelButtonText: 'Cancel',
+      focusConfirm: false,
+      preConfirm: collectRequestLetterInputs
+    });
+
+    if (!result.isConfirmed || !result.value) {
+      return;
+    }
+
+    button.disabled = true;
+    try {
+      await downloadRequestLetter(outputToken, templateKey, result.value, templateLabel);
+      Swal.close();
+      await Swal.fire({
+        icon: 'success',
+        title: 'Request Letter Ready',
+        text: 'The generated .docx has been downloaded.'
+      });
+    } catch (error) {
+      Swal.close();
+      await Swal.fire({
+        icon: 'error',
+        title: 'Generation Failed',
+        text: error && error.message ? error.message : 'Unable to generate the request letter.'
+      });
+    } finally {
+      button.disabled = false;
+    }
   });
 });
 

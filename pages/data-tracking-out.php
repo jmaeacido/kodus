@@ -317,6 +317,48 @@
       background: rgba(108, 117, 125, 0.12);
       color: #495057;
     }
+    .kodus-upload-progress {
+      display: none;
+      margin-top: 0.85rem;
+      padding: 0.8rem 0.9rem;
+      border-radius: 14px;
+      border: 1px solid var(--kodus-detail-border, rgba(255, 255, 255, 0.12));
+      background: var(--kodus-detail-panel-strong, rgba(255, 255, 255, 0.08));
+    }
+    .kodus-upload-progress.is-visible {
+      display: block;
+    }
+    .kodus-upload-progress-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+      margin-bottom: 0.55rem;
+      font-size: 0.82rem;
+      font-weight: 700;
+      color: var(--kodus-detail-text, #f8f9fa);
+    }
+    .kodus-upload-progress-track {
+      height: 0.65rem;
+      overflow: hidden;
+      border-radius: 999px;
+      background: rgba(108, 117, 125, 0.24);
+    }
+    .kodus-upload-progress-bar {
+      width: 0%;
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, #0d6efd, #20c997);
+      transition: width 0.18s ease;
+    }
+    body[data-theme="light"] .kodus-upload-progress {
+      background: #ffffff;
+      border-color: rgba(13, 110, 253, 0.14);
+      box-shadow: 0 0.4rem 1rem rgba(13, 110, 253, 0.06);
+    }
+    body[data-theme="light"] .kodus-upload-progress-row {
+      color: #212529;
+    }
     @media (max-width: 576px) {
       .swal2-popup.kodus-form-popup {
         padding: 1.05rem;
@@ -671,6 +713,110 @@ function parseJsonResponse(response) {
     });
 }
 
+function renderUploadProgress(progressId) {
+    return `
+        <div id="${escapeAttribute(progressId)}" class="kodus-upload-progress" aria-live="polite">
+            <div class="kodus-upload-progress-row">
+                <span class="kodus-upload-progress-label">Preparing upload</span>
+                <span class="kodus-upload-progress-value">0%</span>
+            </div>
+            <div class="kodus-upload-progress-track">
+                <div class="kodus-upload-progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></div>
+            </div>
+        </div>
+    `;
+}
+
+function updateUploadProgress(progressId, percent, label) {
+    const progress = document.getElementById(progressId);
+    if (!progress) {
+        return;
+    }
+
+    const normalized = Math.max(0, Math.min(100, Math.round(percent)));
+    const progressBar = progress.querySelector(".kodus-upload-progress-bar");
+    const progressValue = progress.querySelector(".kodus-upload-progress-value");
+    const progressLabel = progress.querySelector(".kodus-upload-progress-label");
+
+    progress.classList.add("is-visible");
+    if (progressBar) {
+        progressBar.style.width = `${normalized}%`;
+        progressBar.setAttribute("aria-valuenow", String(normalized));
+    }
+    if (progressValue) {
+        progressValue.textContent = `${normalized}%`;
+    }
+    if (progressLabel && label) {
+        progressLabel.textContent = label;
+    }
+}
+
+function formatUploadBytes(bytes) {
+    if (bytes >= 1024 * 1024) {
+        return `${(bytes / (1024 * 1024)).toFixed(1).replace(/\.0$/, "")} MB`;
+    }
+    if (bytes >= 1024) {
+        return `${(bytes / 1024).toFixed(1).replace(/\.0$/, "")} KB`;
+    }
+    return `${bytes} bytes`;
+}
+
+function bindUploadProgressFilePreview(fileInputId, progressId) {
+    const fileInput = document.getElementById(fileInputId);
+    if (!fileInput) {
+        return;
+    }
+
+    fileInput.addEventListener("change", () => {
+        const files = Array.from(fileInput.files || []);
+        if (files.length === 0) {
+            const progress = document.getElementById(progressId);
+            progress?.classList.remove("is-visible");
+            return;
+        }
+
+        const totalBytes = files.reduce((sum, file) => sum + (file.size || 0), 0);
+        const label = files.length === 1
+            ? `Ready: ${files[0].name} (${formatUploadBytes(totalBytes)})`
+            : `Ready: ${files.length} files (${formatUploadBytes(totalBytes)})`;
+        updateUploadProgress(progressId, 0, label);
+    });
+}
+
+function submitFormDataWithProgress(url, formData, progressId) {
+    updateUploadProgress(progressId, 0, "Preparing upload");
+
+    return new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open("POST", url, true);
+        xhr.withCredentials = true;
+        xhr.setRequestHeader("X-Requested-With", "XMLHttpRequest");
+
+        xhr.upload.addEventListener("progress", event => {
+            if (event.lengthComputable && event.total > 0) {
+                updateUploadProgress(progressId, (event.loaded / event.total) * 100, "Uploading file");
+            } else {
+                updateUploadProgress(progressId, 35, "Uploading file");
+            }
+        });
+
+        xhr.addEventListener("load", () => {
+            updateUploadProgress(progressId, 100, "Processing upload");
+            const response = {
+                ok: xhr.status >= 200 && xhr.status < 300,
+                status: xhr.status,
+                text: () => Promise.resolve(xhr.responseText || "")
+            };
+
+            parseJsonResponse(response).then(resolve).catch(reject);
+        });
+
+        xhr.addEventListener("error", () => reject(new Error("Network error while uploading.")));
+        xhr.addEventListener("abort", () => reject(new Error("Upload cancelled.")));
+        xhr.send(formData);
+    });
+}
+
 // Function to show the edit form in a SweetAlert2 modal
 function showEditForm(rowData, date_out, date_forwarded) {
     Swal.fire({
@@ -724,6 +870,7 @@ function showEditForm(rowData, date_out, date_forwarded) {
                                         : '<span class="kodus-detail-empty">No file attached</span>'}
                                 </span>
                             </span>
+                            ${renderUploadProgress('editUploadProgress')}
                         </div>
                         <div class="kodus-edit-field">
                             <label>Receiving Office / Personnel</label>
@@ -746,6 +893,7 @@ function showEditForm(rowData, date_out, date_forwarded) {
             desc.focus();
             // Move cursor to the end of the text
             desc.selectionStart = desc.selectionEnd = desc.value.length;
+            bindUploadProgressFilePreview("file", "editUploadProgress");
         },
         preConfirm: () => {
             let formData = new FormData(document.getElementById("editForm"));
@@ -757,12 +905,7 @@ function showEditForm(rowData, date_out, date_forwarded) {
                 formData.append("remove_file", "1");
             }
 
-            return fetch("update_data_out.php", {
-                method: "POST",
-                credentials: "same-origin",
-                body: formData
-            })
-            .then(parseJsonResponse)
+            return submitFormDataWithProgress("update_data_out.php", formData, "editUploadProgress")
             .then(data => {
                 if (!data.success) {
                     throw new Error(data.message);
@@ -822,6 +965,7 @@ document.getElementById("track-documents").addEventListener("click", function ()
                             <label for="file">Upload File</label>
                             <input type="file" id="file" name="file[]" class="form-control" multiple>
                             <small id="incomingFileInfo" class="kodus-form-inline-note"></small>
+                            ${renderUploadProgress('trackUploadProgress')}
                         </div>
                         <div class="kodus-form-field kodus-form-field--full">
                             <label for="remarks">Remarks</label>
@@ -855,6 +999,7 @@ document.getElementById("track-documents").addEventListener("click", function ()
             const $desc = $("#description");
             $desc.trigger("focus"); // Auto-focus description field
             const $suggestions = $("#descSuggestions");
+            bindUploadProgressFilePreview("file", "trackUploadProgress");
 
             // Fetch incoming descriptions
             fetch("fetch_incoming_descriptions.php")
@@ -956,12 +1101,7 @@ document.getElementById("track-documents").addEventListener("click", function ()
         preConfirm: () => {
             let formData = new FormData(document.getElementById("trackForm"));
             appendCsrfToken(formData);
-            return fetch("track_outgoing.php", {
-                method: "POST",
-                credentials: "same-origin",
-                body: formData
-            })
-            .then(parseJsonResponse)
+            return submitFormDataWithProgress("track_outgoing.php", formData, "trackUploadProgress")
             .then(data => {
                 if (!data.success) {
                     throw new Error(data.message || "Tracking failed");

@@ -53,7 +53,7 @@ function app_location_is_valid_longitude(float $longitude): bool
 
 function app_location_session_snapshot(): array
 {
-    $timezone = app_location_normalize_timezone($_SESSION['app_client_timezone'] ?? null);
+    $timezone = app_location_default_timezone();
     $latitude = app_location_normalize_coordinate($_SESSION['app_client_latitude'] ?? null);
     $longitude = app_location_normalize_coordinate($_SESSION['app_client_longitude'] ?? null);
     $capturedAt = isset($_SESSION['app_client_location_captured_at']) && is_numeric($_SESSION['app_client_location_captured_at'])
@@ -79,8 +79,7 @@ function app_location_session_snapshot(): array
 
 function app_current_timezone(): string
 {
-    $snapshot = app_location_session_snapshot();
-    return $snapshot['timezone'] ?? app_location_default_timezone();
+    return app_location_default_timezone();
 }
 
 function app_apply_current_timezone(): string
@@ -292,12 +291,11 @@ function app_describe_client_location(): string
 function app_store_client_location_context(array $input): bool
 {
     $changed = false;
-    $timezone = app_location_normalize_timezone($input['timezone'] ?? null);
     $latitude = app_location_normalize_coordinate($input['latitude'] ?? null);
     $longitude = app_location_normalize_coordinate($input['longitude'] ?? null);
 
-    if ($timezone !== null && ($_SESSION['app_client_timezone'] ?? null) !== $timezone) {
-        $_SESSION['app_client_timezone'] = $timezone;
+    if (isset($_SESSION['app_client_timezone'])) {
+        unset($_SESSION['app_client_timezone']);
         $changed = true;
     }
 

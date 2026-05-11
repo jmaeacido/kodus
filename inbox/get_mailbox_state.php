@@ -22,6 +22,8 @@ $userName = trim((string) ($_SESSION['username'] ?? ''));
 $folder = mailboxGetFolder($_GET['folder'] ?? 'inbox');
 $folderPredicate = mailboxTrashPredicate($folder, 'mr');
 
+mailboxTouchCurrentUserPresence($conn);
+
 if ($userType === 'admin') {
     $stateSql = "
         SELECT
@@ -144,13 +146,13 @@ if ($userType === 'admin') {
             SELECT 1
             FROM contact_message_recipients cmr
             WHERE cmr.message_id = cm.id
-              AND LOWER(cmr.recipient_email) = LOWER(?)
+              AND (cmr.user_id = ? OR LOWER(cmr.recipient_email) = LOWER(?))
         ) OR COALESCE(cm.conversation_type, 'direct') = 'group')
           AND {$folderPredicate}
           AND " . mailboxVisibilityPredicate((int) $userId, 'cm', 'mr') . "
     ";
     $stateStmt = $conn->prepare($stateSql);
-    $stateStmt->bind_param('isss', $userId, $userEmail, $userName, $userEmail);
+    $stateStmt->bind_param('issis', $userId, $userEmail, $userName, $userId, $userEmail);
 
     $unreadSql = "
         SELECT COUNT(*) AS unread_count
@@ -161,7 +163,7 @@ if ($userType === 'admin') {
             SELECT 1
             FROM contact_message_recipients cmr
             WHERE cmr.message_id = cm.id
-              AND LOWER(cmr.recipient_email) = LOWER(?)
+              AND (cmr.user_id = ? OR LOWER(cmr.recipient_email) = LOWER(?))
         ) OR COALESCE(cm.conversation_type, 'direct') = 'group')
           AND COALESCE(mr.is_trashed, 0) = 0
           AND " . mailboxVisibilityPredicate((int) $userId, 'cm', 'mr') . "
@@ -173,7 +175,7 @@ if ($userType === 'admin') {
           AND (mr.is_read IS NULL OR mr.is_read = 0)
     ";
     $unreadStmt = $conn->prepare($unreadSql);
-    $unreadStmt->bind_param('isssi', $userId, $userEmail, $userName, $userEmail, $userId);
+    $unreadStmt->bind_param('issisi', $userId, $userEmail, $userName, $userId, $userEmail, $userId);
 }
 
 $stateStmt->execute();

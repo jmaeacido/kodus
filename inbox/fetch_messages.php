@@ -17,6 +17,8 @@ $userName = trim((string) ($_SESSION['username'] ?? ''));
 $folder = mailboxGetFolder($_GET['folder'] ?? 'inbox');
 $trashPredicate = mailboxTrashPredicate($folder, 'mr');
 
+mailboxTouchCurrentUserPresence($conn);
+
 if ($userType === 'admin') {
     $stmt = $conn->prepare("
         SELECT cm.*,
@@ -184,14 +186,14 @@ if ($userType === 'admin') {
                SELECT 1
                FROM contact_message_recipients cmr
                WHERE cmr.message_id = cm.id
-                 AND LOWER(cmr.recipient_email) = LOWER(?)
+                 AND (cmr.user_id = ? OR LOWER(cmr.recipient_email) = LOWER(?))
            )
            OR COALESCE(cm.conversation_type, 'direct') = 'group')
           AND {$trashPredicate}
           AND " . mailboxVisibilityPredicate((int) $userId, 'cm', 'mr') . "
         ORDER BY latest_activity_at DESC, cm.id DESC
     ");
-    $stmt->bind_param("iisss", $userId, $userId, $userEmail, $userName, $userEmail);
+    $stmt->bind_param("iissis", $userId, $userId, $userEmail, $userName, $userId, $userEmail);
 }
 
 $stmt->execute();

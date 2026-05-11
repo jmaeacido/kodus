@@ -57,6 +57,8 @@ $userName = trim((string) ($_SESSION['username'] ?? ''));
 $items = [];
 $unreadCount = 0;
 
+mailboxTouchCurrentUserPresence($conn);
+
 if ($userType === 'admin') {
     $countSql = "
         SELECT COUNT(*) AS unread
@@ -137,7 +139,7 @@ if ($userType === 'admin') {
             SELECT 1
             FROM contact_message_recipients cmr
             WHERE cmr.message_id = cm.id
-              AND LOWER(cmr.recipient_email) = LOWER(?)
+              AND (cmr.user_id = ? OR LOWER(cmr.recipient_email) = LOWER(?))
         ) OR COALESCE(cm.conversation_type, 'direct') = 'group')
           AND COALESCE(mr.is_trashed, 0) = 0
           AND " . mailboxVisibilityPredicate((int) $userId, 'cm', 'mr') . "
@@ -148,7 +150,7 @@ if ($userType === 'admin') {
           AND (mr.is_read IS NULL OR mr.is_read = 0)
     ";
     $countStmt = $conn->prepare($countSql);
-    $countStmt->bind_param('isssi', $userId, $userEmail, $userName, $userEmail, $userId);
+    $countStmt->bind_param('issisi', $userId, $userEmail, $userName, $userId, $userEmail, $userId);
     $countStmt->execute();
     $countResult = db_stmt_fetch_one_assoc($countStmt);
     $unreadCount = (int) ($countResult['unread'] ?? 0);
@@ -171,7 +173,7 @@ if ($userType === 'admin') {
             SELECT 1
             FROM contact_message_recipients cmr
             WHERE cmr.message_id = cm.id
-              AND LOWER(cmr.recipient_email) = LOWER(?)
+              AND (cmr.user_id = ? OR LOWER(cmr.recipient_email) = LOWER(?))
         ) OR COALESCE(cm.conversation_type, 'direct') = 'group')
           AND COALESCE(mr.is_trashed, 0) = 0
           AND " . mailboxVisibilityPredicate((int) $userId, 'cm', 'mr') . "
@@ -184,7 +186,7 @@ if ($userType === 'admin') {
         LIMIT 5
     ";
     $feedStmt = $conn->prepare($feedSql);
-    $feedStmt->bind_param('isssi', $userId, $userEmail, $userName, $userEmail, $userId);
+    $feedStmt->bind_param('issisi', $userId, $userEmail, $userName, $userId, $userEmail, $userId);
 }
 
 $feedStmt->execute();

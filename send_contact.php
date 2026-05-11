@@ -72,18 +72,24 @@ if ($subject === '') {
     }
 }
 
+if (!empty($_SESSION['user_id'])) {
+    mailboxTouchCurrentUserPresence($conn, true);
+}
+
 // ---------------------------
 // Handle File Upload
 // ---------------------------
 $uploadedFiles = [];
 $filenamesForDB = [];
 $attachmentUploadErrors = [];
+$attachmentUploadMessage = '';
 
 if (!empty($_FILES['attachments']['name'][0])) {
     $uploadResult = mailboxSaveUploadedAttachments($_FILES['attachments'], __DIR__ . '/inbox/uploads/contact_attachments/');
     $uploadedFiles = $uploadResult['paths'];
     $filenamesForDB = $uploadResult['filenames'];
     $attachmentUploadErrors = $uploadResult['errors'];
+    $attachmentUploadMessage = trim((string) ($uploadResult['message'] ?? ''));
 }
 
 if (!empty($attachmentUploadErrors)) {
@@ -92,7 +98,9 @@ if (!empty($attachmentUploadErrors)) {
             @unlink($uploadedFile);
         }
     }
-    $validationMessage = 'The selected attachment could not be uploaded. Please choose supported files up to ' . $attachmentLimits['max_file_size_label'] . ' each and ' . $attachmentLimits['max_total_size_label'] . ' total.';
+    $validationMessage = $attachmentUploadMessage !== ''
+        ? $attachmentUploadMessage
+        : 'The selected attachment could not be uploaded. Please choose supported files up to ' . $attachmentLimits['max_file_size_label'] . ' each and ' . $attachmentLimits['max_total_size_label'] . ' total.';
     send_contact_respond([
         'success' => false,
         'title' => 'Attachment not uploaded',
@@ -109,7 +117,9 @@ $hasAttachments = !empty($filenamesForDB);
 
 if (empty($message) && !$hasAttachments) {
     $validationMessage = !empty($attachmentUploadErrors)
-        ? 'The selected attachment could not be uploaded. Please choose supported files up to ' . $attachmentLimits['max_file_size_label'] . ' each and ' . $attachmentLimits['max_total_size_label'] . ' total.'
+        ? ($attachmentUploadMessage !== ''
+            ? $attachmentUploadMessage
+            : 'The selected attachment could not be uploaded. Please choose supported files up to ' . $attachmentLimits['max_file_size_label'] . ' each and ' . $attachmentLimits['max_total_size_label'] . ' total.')
         : 'Your chat needs either text or at least one attachment.';
     send_contact_respond([
         'success' => false,
@@ -137,9 +147,9 @@ $stmt->close();
 if (!empty($_SESSION['user_id'])) {
     $senderId = $_SESSION['user_id'];
     $stmt = $conn->prepare("
-        INSERT INTO message_reads (message_id, user_id, is_read, read_at)
-        VALUES (?, ?, 1, NOW())
-        ON DUPLICATE KEY UPDATE is_read = 1, read_at = NOW()
+        INSERT INTO message_reads (message_id, user_id, is_read, read_at, last_read_reply_id)
+        VALUES (?, ?, 1, NOW(), 0)
+        ON DUPLICATE KEY UPDATE is_read = 1, read_at = NOW(), last_read_reply_id = 0
     ");
     $stmt->bind_param("ii", $messageId, $senderId);
     $stmt->execute();

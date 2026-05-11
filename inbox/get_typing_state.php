@@ -19,6 +19,8 @@ if ($userId <= 0 || $messageId <= 0) {
     exit;
 }
 
+mailboxTouchCurrentUserPresence($conn);
+
 if (!mailboxCanAccessMessage($conn, $messageId, $userType, $userEmail, $userName)) {
     echo json_encode(['success' => true, 'typing' => []]);
     exit;

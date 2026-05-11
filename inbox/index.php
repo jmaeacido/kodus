@@ -194,14 +194,14 @@ if ($userType === 'admin') {
                SELECT 1
                FROM contact_message_recipients cmr
                WHERE cmr.message_id = cm.id
-                 AND LOWER(cmr.recipient_email) = LOWER(?)
+                 AND (cmr.user_id = ? OR LOWER(cmr.recipient_email) = LOWER(?))
            )
            OR COALESCE(cm.conversation_type, 'direct') = 'group')
           AND {$trashPredicate}
           AND " . mailboxVisibilityPredicate((int) $userId, 'cm', 'mr') . "
         ORDER BY latest_activity_at DESC, cm.id DESC
     ");
-    $stmt->bind_param("iisss", $userId, $userId, $userEmail, $currentUsername, $userEmail);
+    $stmt->bind_param("iissis", $userId, $userId, $userEmail, $currentUsername, $userId, $userEmail);
 }
 
 $stmt->execute();
@@ -259,12 +259,12 @@ if ($userType === 'admin') {
             SELECT 1
             FROM contact_message_recipients cmr
             WHERE cmr.message_id = cm.id
-              AND LOWER(cmr.recipient_email) = LOWER(?)
+              AND (cmr.user_id = ? OR LOWER(cmr.recipient_email) = LOWER(?))
         ) OR COALESCE(cm.conversation_type, 'direct') = 'group')
           AND COALESCE(mr.is_trashed, 0) = 1
           AND " . mailboxVisibilityPredicate((int) $userId, 'cm', 'mr') . "
     ");
-    $trashCountStmt->bind_param("isss", $userId, $userEmail, $currentUsername, $userEmail);
+    $trashCountStmt->bind_param("issis", $userId, $userEmail, $currentUsername, $userId, $userEmail);
 }
 
 $trashCountStmt->execute();
@@ -3496,6 +3496,17 @@ $composeCsrfToken = security_get_csrf_token();
     .mailbox-app .chat-bubble-body {
       font-size: 0.97rem;
       line-height: 1.55;
+    }
+
+    .mailbox-app .chat-seen-receipt {
+      align-self: flex-end;
+      max-width: min(72%, 36rem);
+      margin: -0.35rem 0.25rem 0.55rem auto;
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: var(--messenger-muted);
+      opacity: 0.82;
+      text-align: right;
     }
 
     .mailbox-app .attachments .font-weight-bold.small.mb-2 {
@@ -7820,6 +7831,8 @@ $(document).on('submit', '#replyForm', function(e) {
                             $(`#messageList .message-item[data-id="${lastOpenedId}"]`).attr('data-unread', '0');
                             initializeThreadExperience();
                             normalizeBubbleThreadMenu();
+                            syncVisibleMessengerPresence();
+                            notifyParentKodusBubbleThreadState();
                             scrollConversationToBottomOnOpen();
                             $('#replyText').trigger('input').focus();
                         });

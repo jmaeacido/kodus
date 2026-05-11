@@ -57,11 +57,11 @@ if ($userType === 'admin') {
               SELECT 1
               FROM contact_message_recipients cmr
               WHERE cmr.message_id = contact_messages.id
-                AND LOWER(cmr.recipient_email) = LOWER(?)
+                AND (cmr.user_id = ? OR LOWER(cmr.recipient_email) = LOWER(?))
           ))
         LIMIT 1
     ");
-    $accessStmt->bind_param("isss", $messageId, $userEmail, $userName, $userEmail);
+    $accessStmt->bind_param("issis", $messageId, $userEmail, $userName, $userId, $userEmail);
 }
 
 $accessStmt->execute();

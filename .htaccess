@@ -1,6 +1,18 @@
 RewriteEngine On
 Options -Indexes
 
+<IfModule mod_php.c>
+    php_value upload_max_filesize 64M
+    php_value post_max_size 80M
+    php_value max_file_uploads 50
+</IfModule>
+
+<IfModule php_module>
+    php_value upload_max_filesize 64M
+    php_value post_max_size 80M
+    php_value max_file_uploads 50
+</IfModule>
+
 # Keep local dev hosts flexible, but force canonical HTTPS for deployed hosts.
 RewriteCond %{HTTP_HOST} !^(localhost|127\.0\.0\.1|::1)(:\d+)?$ [NC]
 RewriteCond %{HTTP_HOST} !\.test(?::\d+)?$ [NC]

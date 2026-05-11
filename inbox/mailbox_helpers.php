@@ -45,6 +45,12 @@ function mailboxEnsureSchema(mysqli $conn): void
         }
     }
 
+    if (!in_array('last_read_reply_id', $columns, true)) {
+        if (!$conn->query("ALTER TABLE message_reads ADD COLUMN last_read_reply_id INT NOT NULL DEFAULT 0 AFTER read_at")) {
+            throw new RuntimeException('Unable to add mailbox read cursor: ' . $conn->error);
+        }
+    }
+
     $messageColumns = [];
     $messageStmt = $conn->prepare("
         SELECT COLUMN_NAME
@@ -513,6 +519,50 @@ function mailboxGroupPresence(mysqli $conn, int $messageId, int $excludeUserId =
     return $best;
 }
 
+function mailboxTouchCurrentUserPresence(mysqli $conn, bool $forceBroadcast = false): void
+{
+    $userId = $_SESSION['user_id'] ?? null;
+    if (!is_numeric($userId)) {
+        return;
+    }
+
+    $userId = (int) $userId;
+    if ($userId <= 0) {
+        return;
+    }
+
+    $now = date('Y-m-d H:i:s');
+    $stmt = $conn->prepare('UPDATE users SET last_activity = ?, is_online = 1 WHERE id = ?');
+    if ($stmt) {
+        $stmt->bind_param('si', $now, $userId);
+        $stmt->execute();
+        $stmt->close();
+    }
+
+    $lastBroadcast = (int) ($_SESSION['presence_broadcast_at'] ?? 0);
+    if (!$forceBroadcast && time() - $lastBroadcast < 20) {
+        return;
+    }
+
+    $_SESSION['presence_broadcast_at'] = time();
+    if (!function_exists('kodus_socket_broadcast')) {
+        $socketHelper = dirname(__DIR__) . '/socket_helpers.php';
+        if (is_file($socketHelper)) {
+            require_once $socketHelper;
+        }
+    }
+
+    if (function_exists('kodus_socket_broadcast')) {
+        kodus_socket_broadcast('kodus.presence', 'presence.changed', [
+            'user_id' => $userId,
+            'online' => true,
+            'status' => 'online',
+            'last_active_at' => $now,
+            'presence_class' => 'online',
+        ]);
+    }
+}
+
 function mailboxGetFolder(?string $rawFolder): string
 {
     return strtolower(trim((string) $rawFolder)) === 'trash' ? 'trash' : 'inbox';
@@ -695,7 +745,7 @@ function mailboxCanAccessMessage(mysqli $conn, int $messageId, ?string $userType
                   SELECT 1
                   FROM contact_message_recipients cmr
                   WHERE cmr.message_id = contact_messages.id
-                    AND LOWER(cmr.recipient_email) = LOWER(?)
+                    AND (cmr.user_id = ? OR LOWER(cmr.recipient_email) = LOWER(?))
               )
           )
           LIMIT 1
@@ -704,7 +754,7 @@ function mailboxCanAccessMessage(mysqli $conn, int $messageId, ?string $userType
         if (!$stmt) {
             return false;
         }
-        $stmt->bind_param('iisss', $messageId, $sessionUserId, $userEmail, $userName, $userEmail);
+        $stmt->bind_param('iissis', $messageId, $sessionUserId, $userEmail, $userName, $sessionUserId, $userEmail);
     }
 
     $stmt->execute();
@@ -1000,15 +1050,91 @@ function mailboxAllowedAttachmentMimeExtensions(): array
     ];
 }
 
+function mailboxParseSizeToBytes($value): int
+{
+    $raw = trim((string) $value);
+    if ($raw === '') {
+        return 0;
+    }
+
+    $unit = strtolower(substr($raw, -1));
+    $number = (float) $raw;
+    if ($number <= 0) {
+        return 0;
+    }
+
+    if ($unit === 'g') {
+        $number *= 1024 * 1024 * 1024;
+    } elseif ($unit === 'm') {
+        $number *= 1024 * 1024;
+    } elseif ($unit === 'k') {
+        $number *= 1024;
+    }
+
+    return (int) floor($number);
+}
+
+function mailboxFormatBytes(int $bytes): string
+{
+    if ($bytes >= 1048576) {
+        $mb = $bytes / 1048576;
+        return rtrim(rtrim(number_format($mb, $mb >= 10 || fmod($mb, 1.0) === 0.0 ? 0 : 1), '0'), '.') . ' MB';
+    }
+
+    return max(1, (int) ceil($bytes / 1024)) . ' KB';
+}
+
 function mailboxAttachmentLimits(): array
 {
+    $configuredMaxFileSize = 67108864;
+    $configuredMaxTotalSize = 83886080;
+    $uploadIniLimit = mailboxParseSizeToBytes(ini_get('upload_max_filesize'));
+    $postIniLimit = mailboxParseSizeToBytes(ini_get('post_max_size'));
+
+    $effectiveMaxFileSize = $configuredMaxFileSize;
+    if ($uploadIniLimit > 0) {
+        $effectiveMaxFileSize = min($effectiveMaxFileSize, $uploadIniLimit);
+    }
+    if ($postIniLimit > 0) {
+        $effectiveMaxFileSize = min($effectiveMaxFileSize, $postIniLimit);
+    }
+
+    $effectiveMaxTotalSize = $configuredMaxTotalSize;
+    if ($postIniLimit > 0) {
+        $effectiveMaxTotalSize = min($effectiveMaxTotalSize, $postIniLimit);
+    }
+
     return [
-        'max_file_size' => 67108864,
-        'max_total_size' => 83886080,
+        'max_file_size' => $effectiveMaxFileSize,
+        'max_total_size' => $effectiveMaxTotalSize,
         'max_file_count' => 50,
-        'max_file_size_label' => '64 MB',
-        'max_total_size_label' => '80 MB',
+        'max_file_size_label' => mailboxFormatBytes($effectiveMaxFileSize),
+        'max_total_size_label' => mailboxFormatBytes($effectiveMaxTotalSize),
+        'configured_max_file_size' => $configuredMaxFileSize,
+        'configured_max_total_size' => $configuredMaxTotalSize,
+        'upload_max_filesize' => ini_get('upload_max_filesize'),
+        'post_max_size' => ini_get('post_max_size'),
     ];
+}
+
+function mailboxUploadErrorMessage(int $errorCode, string $fileName, array $limits): string
+{
+    $safeName = trim($fileName) !== '' ? $fileName : 'The selected file';
+
+    if ($errorCode === UPLOAD_ERR_INI_SIZE || $errorCode === UPLOAD_ERR_FORM_SIZE) {
+        return $safeName . ' exceeds the server upload limit. The current effective limit is '
+            . $limits['max_file_size_label'] . ' per file and ' . $limits['max_total_size_label'] . ' total.';
+    }
+
+    if ($errorCode === UPLOAD_ERR_PARTIAL) {
+        return $safeName . ' was only partially uploaded. Please try again.';
+    }
+
+    if ($errorCode === UPLOAD_ERR_NO_TMP_DIR || $errorCode === UPLOAD_ERR_CANT_WRITE || $errorCode === UPLOAD_ERR_EXTENSION) {
+        return $safeName . ' could not be saved by the server. Please try again later.';
+    }
+
+    return $safeName . ' could not be uploaded. Please choose a supported file within the size limit.';
 }
 
 function mailboxNormalizeUploadedFilesArray(array $files): array
@@ -1120,6 +1246,17 @@ function mailboxSaveUploadedAttachments(array $files, string $uploadDir, ?int $m
     if (!is_dir($uploadDir)) {
         mkdir($uploadDir, 0777, true);
     }
+    @chmod($uploadDir, 02775);
+
+    if (!is_dir($uploadDir) || !is_writable($uploadDir)) {
+        return [
+            'paths' => [],
+            'filenames' => [],
+            'errors' => array_column(mailboxNormalizeUploadedFilesArray($files), 'name'),
+            'error_messages' => ['The upload folder is not writable by the web server. Please check folder ownership or permissions.'],
+            'message' => 'The upload folder is not writable by the web server. Please check folder ownership or permissions.',
+        ];
+    }
 
     $limits = mailboxAttachmentLimits();
     $maxSize = $maxSize ?? (int) $limits['max_file_size'];
@@ -1129,6 +1266,7 @@ function mailboxSaveUploadedAttachments(array $files, string $uploadDir, ?int $m
     $uploadedFiles = [];
     $filenamesForDB = [];
     $errors = [];
+    $errorMessages = [];
     $normalizedFiles = array_values(array_filter(
         mailboxNormalizeUploadedFilesArray($files),
         static fn (array $file): bool => $file['error'] !== UPLOAD_ERR_NO_FILE && $file['name'] !== ''
@@ -1139,6 +1277,8 @@ function mailboxSaveUploadedAttachments(array $files, string $uploadDir, ?int $m
             'paths' => [],
             'filenames' => [],
             'errors' => array_column($normalizedFiles, 'name'),
+            'error_messages' => ['You can attach up to ' . $maxFileCount . ' files at a time.'],
+            'message' => 'You can attach up to ' . $maxFileCount . ' files at a time.',
         ];
     }
 
@@ -1148,12 +1288,15 @@ function mailboxSaveUploadedAttachments(array $files, string $uploadDir, ?int $m
             'paths' => [],
             'filenames' => [],
             'errors' => array_column($normalizedFiles, 'name'),
+            'error_messages' => ['These attachments total ' . mailboxFormatBytes($totalSize) . '. Keep each send to ' . $limits['max_total_size_label'] . ' or less.'],
+            'message' => 'These attachments total ' . mailboxFormatBytes($totalSize) . '. Keep each send to ' . $limits['max_total_size_label'] . ' or less.',
         ];
     }
 
     foreach ($normalizedFiles as $file) {
         if ($file['error'] !== UPLOAD_ERR_OK || $file['size'] <= 0 || $file['tmp_name'] === '' || !is_uploaded_file($file['tmp_name'])) {
             $errors[] = $file['name'];
+            $errorMessages[] = mailboxUploadErrorMessage((int) $file['error'], (string) $file['name'], $limits);
             continue;
         }
 
@@ -1166,6 +1309,11 @@ function mailboxSaveUploadedAttachments(array $files, string $uploadDir, ?int $m
             || !in_array($extension, $allowedMimeToExtensions[$detectedMime], true)
         ) {
             $errors[] = $file['name'];
+            if ($file['size'] > $maxSize) {
+                $errorMessages[] = (string) $file['name'] . ' is ' . mailboxFormatBytes((int) $file['size']) . '. Each file must be ' . $limits['max_file_size_label'] . ' or smaller.';
+            } else {
+                $errorMessages[] = (string) $file['name'] . ' is not a supported attachment type.';
+            }
             continue;
         }
 
@@ -1178,12 +1326,17 @@ function mailboxSaveUploadedAttachments(array $files, string $uploadDir, ?int $m
             $filenamesForDB[] = $filename;
         } else {
             $errors[] = $file['name'];
+            $errorMessages[] = (string) $file['name'] . ' could not be saved by the server. Please try again later.';
         }
     }
+
+    $errorMessages = array_values(array_unique(array_filter($errorMessages)));
 
     return [
         'paths' => $uploadedFiles,
         'filenames' => $filenamesForDB,
         'errors' => $errors,
+        'error_messages' => $errorMessages,
+        'message' => $errorMessages[0] ?? '',
     ];
 }

@@ -34,6 +34,8 @@ if ($userId <= 0 || $messageId <= 0) {
     exit;
 }
 
+mailboxTouchCurrentUserPresence($conn, $isTyping);
+
 if (!mailboxCanAccessMessage($conn, $messageId, $userType, $userEmail, $userName)) {
     http_response_code(403);
     echo json_encode(['success' => false, 'error' => 'You are not allowed to update typing for this conversation.']);

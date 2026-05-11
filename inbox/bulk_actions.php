@@ -86,7 +86,7 @@ if ($userType === 'admin') {
                   SELECT 1
                   FROM contact_message_recipients cmr
                   WHERE cmr.message_id = cm.id
-                    AND LOWER(cmr.recipient_email) = LOWER(?)
+                    AND (cmr.user_id = ? OR LOWER(cmr.recipient_email) = LOWER(?))
               )
           )
     ";
@@ -97,8 +97,8 @@ if ($userType === 'admin') {
         exit;
     }
 
-    $params = array_merge($messageIds, [$userEmail, $userName, $userEmail]);
-    $bindTypes = $types . 'sss';
+    $params = array_merge($messageIds, [$userEmail, $userName, $userId, $userEmail]);
+    $bindTypes = $types . 'ssis';
 }
 
 $bindValues = [$bindTypes];
@@ -130,16 +130,18 @@ $conn->begin_transaction();
 try {
     if ($action === 'mark_read') {
         $markStmt = $conn->prepare("
-            INSERT INTO message_reads (message_id, user_id, is_read, read_at)
-            VALUES (?, ?, 1, NOW())
-            ON DUPLICATE KEY UPDATE is_read = 1, read_at = NOW()
+            INSERT INTO message_reads (message_id, user_id, is_read, read_at, last_read_reply_id)
+            SELECT ?, ?, 1, NOW(), COALESCE(MAX(cr.id), 0)
+            FROM contact_replies cr
+            WHERE cr.message_id = ?
+            ON DUPLICATE KEY UPDATE is_read = 1, read_at = NOW(), last_read_reply_id = VALUES(last_read_reply_id)
         ");
         if (!$markStmt) {
             throw new RuntimeException('Unable to prepare the mark read statement.');
         }
 
         foreach ($allowedIds as $messageId) {
-            $markStmt->bind_param('ii', $messageId, $userId);
+            $markStmt->bind_param('iii', $messageId, $userId, $messageId);
             if (!$markStmt->execute()) {
                 throw new RuntimeException('Unable to mark the selected conversations as read.');
             }

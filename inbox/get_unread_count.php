@@ -15,6 +15,8 @@ $userType = $_SESSION['user_type'] ?? null;
 $userName = trim((string) ($_SESSION['username'] ?? ''));
 $unreadCount = 0;
 
+mailboxTouchCurrentUserPresence($conn);
+
 if ($userType === 'admin') {
     // Admin: count any accessible thread that this admin has not read yet.
     $sql = "
@@ -64,7 +66,7 @@ if ($userType === 'admin') {
             SELECT 1
             FROM contact_message_recipients cmr
             WHERE cmr.message_id = cm.id
-              AND LOWER(cmr.recipient_email) = LOWER(?)
+              AND (cmr.user_id = ? OR LOWER(cmr.recipient_email) = LOWER(?))
         ) OR COALESCE(cm.conversation_type, 'direct') = 'group')
           AND COALESCE(mr.is_trashed, 0) = 0
           AND " . mailboxVisibilityPredicate((int) $userId, 'cm', 'mr') . "
@@ -77,7 +79,7 @@ if ($userType === 'admin') {
     ";
     $stmt = $conn->prepare($sql);
     if ($stmt) {
-        $stmt->bind_param("isssi", $userId, $userEmail, $userName, $userEmail, $userId);
+        $stmt->bind_param("issisi", $userId, $userEmail, $userName, $userId, $userEmail, $userId);
         $stmt->execute();
         if ($row = db_stmt_fetch_one_assoc($stmt)) {
             $unreadCount = (int)$row['unread'];

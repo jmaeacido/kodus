@@ -22,6 +22,8 @@ $userType = $_SESSION['user_type'] ?? null;
 $userEmail = $_SESSION['email'] ?? null;
 $userName = trim((string) ($_SESSION['username'] ?? ''));
 
+mailboxTouchCurrentUserPresence($conn);
+
 if ($userType === 'admin') {
     $accessStmt = $conn->prepare("
         SELECT cm.id
@@ -52,13 +54,13 @@ if ($userType === 'admin') {
               SELECT 1
               FROM contact_message_recipients cmr
               WHERE cmr.message_id = contact_messages.id
-                AND LOWER(cmr.recipient_email) = LOWER(?)
+                AND (cmr.user_id = ? OR LOWER(cmr.recipient_email) = LOWER(?))
           )
           OR COALESCE(conversation_type, 'direct') = 'group')
           AND " . mailboxThreadAccessPredicate('contact_messages') . "
         LIMIT 1
     ");
-    $accessStmt->bind_param("isssi", $messageId, $userEmail, $userName, $userEmail, $userId);
+    $accessStmt->bind_param("issisi", $messageId, $userEmail, $userName, $userId, $userEmail, $userId);
 }
 
 $accessStmt->execute();
@@ -71,14 +73,24 @@ if (!$isAllowed) {
     exit;
 }
 
+$latestReplyId = 0;
+$cursorStmt = $conn->prepare('SELECT COALESCE(MAX(id), 0) AS latest_reply_id FROM contact_replies WHERE message_id = ?');
+if ($cursorStmt) {
+    $cursorStmt->bind_param('i', $messageId);
+    $cursorStmt->execute();
+    $cursorRow = db_stmt_fetch_one_assoc($cursorStmt) ?: [];
+    $latestReplyId = (int) ($cursorRow['latest_reply_id'] ?? 0);
+    $cursorStmt->close();
+}
+
 // Mark the original message (thread) as read for this user
 $stmt = $conn->prepare("
-    INSERT INTO message_reads (message_id, user_id, is_read, read_at)
-    VALUES (?, ?, 1, NOW())
-    ON DUPLICATE KEY UPDATE is_read = 1, read_at = NOW()
+    INSERT INTO message_reads (message_id, user_id, is_read, read_at, last_read_reply_id)
+    VALUES (?, ?, 1, NOW(), ?)
+    ON DUPLICATE KEY UPDATE is_read = 1, read_at = NOW(), last_read_reply_id = VALUES(last_read_reply_id)
 ");
 if ($stmt) {
-    $stmt->bind_param("ii", $messageId, $userId);
+    $stmt->bind_param("iii", $messageId, $userId, $latestReplyId);
     $stmt->execute();
     $stmt->close();
 }

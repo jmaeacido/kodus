@@ -107,7 +107,7 @@ if (isset($_SESSION['user_id'])) {
                 SELECT 1
                 FROM contact_message_recipients cmr
                 WHERE cmr.message_id = cm.id
-                  AND LOWER(cmr.recipient_email) = LOWER(?)
+                  AND (cmr.user_id = ? OR LOWER(cmr.recipient_email) = LOWER(?))
             ) OR COALESCE(cm.conversation_type, 'direct') = 'group')
               AND COALESCE(mr.is_trashed, 0) = 0
               AND " . mailboxVisibilityPredicate((int) $userId, 'cm', 'mr') . "
@@ -119,7 +119,7 @@ if (isset($_SESSION['user_id'])) {
               AND (mr.is_read IS NULL OR mr.is_read = 0)
         ";
         $stmt = $conn->prepare($sql);
-        $stmt->bind_param("isssi", $userId, $userEmail, $userName, $userEmail, $userId);
+        $stmt->bind_param("issisi", $userId, $userEmail, $userName, $userId, $userEmail, $userId);
         $stmt->execute();
         if ($row = db_stmt_fetch_one_assoc($stmt)) {
             $unreadCount = (int)$row['unread'];
@@ -876,7 +876,7 @@ if (isset($_SESSION['user_id']) && is_numeric($_SESSION['user_id'])) {
                           SELECT 1
                           FROM contact_message_recipients cmr
                           WHERE cmr.message_id = cm.id
-                            AND LOWER(cmr.recipient_email) = LOWER(?)
+                            AND (cmr.user_id = ? OR LOWER(cmr.recipient_email) = LOWER(?))
                       ) OR COALESCE(cm.conversation_type, 'direct') = 'group')
                         AND COALESCE(mr.is_trashed, 0) = 0
                         AND " . mailboxVisibilityPredicate((int) $userId, 'cm', 'mr') . "
@@ -890,7 +890,7 @@ if (isset($_SESSION['user_id']) && is_numeric($_SESSION['user_id'])) {
                       LIMIT 5
                   ";
                   $stmt = $conn->prepare($sql);
-                  $stmt->bind_param("isssi", $userId, $userEmail, $userName, $userEmail, $userId);
+                  $stmt->bind_param("issisi", $userId, $userEmail, $userName, $userId, $userEmail, $userId);
               }
 
               $stmt->execute();

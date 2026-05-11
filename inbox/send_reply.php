@@ -70,6 +70,8 @@ if ($senderId <= 0 || !$senderEmail) {
     exit;
 }
 
+mailboxTouchCurrentUserPresence($conn, true);
+
 $messageAccessSql = "
     SELECT id, user_email, user_name, subject, message, attachment, conversation_type
     FROM contact_messages
@@ -100,12 +102,12 @@ if ($senderType === 'admin') {
         SELECT 1
         FROM contact_message_recipients cmr
         WHERE cmr.message_id = contact_messages.id
-          AND LOWER(cmr.recipient_email) = LOWER(?)
+          AND (cmr.user_id = ? OR LOWER(cmr.recipient_email) = LOWER(?))
     ) OR COALESCE(conversation_type, 'direct') = 'group')
     AND " . mailboxThreadAccessPredicate('contact_messages') . "
     LIMIT 1";
     $accessStmt = $conn->prepare($messageAccessSql);
-    $accessStmt->bind_param("isssi", $id, $senderEmail, $senderUsername, $senderEmail, $senderId);
+    $accessStmt->bind_param("issisi", $id, $senderEmail, $senderUsername, $senderId, $senderEmail, $senderId);
 }
 
 $accessStmt->execute();
@@ -217,12 +219,14 @@ if ($quoteTargetType === '' || $quoteAuthor === null || $quoteExcerpt === null) 
 $uploadedFiles = [];
 $filenamesForDB = [];
 $attachmentUploadErrors = [];
+$attachmentUploadMessage = '';
 
 if (!empty($_FILES['replyAttachments']['name'][0])) {
     $uploadResult = mailboxSaveUploadedAttachments($_FILES['replyAttachments'], __DIR__ . '/uploads/reply_attachments/');
     $uploadedFiles = $uploadResult['paths'];
     $filenamesForDB = $uploadResult['filenames'];
     $attachmentUploadErrors = $uploadResult['errors'];
+    $attachmentUploadMessage = trim((string) ($uploadResult['message'] ?? ''));
 }
 
 if (!empty($attachmentUploadErrors)) {
@@ -234,7 +238,9 @@ if (!empty($attachmentUploadErrors)) {
     $buf = ob_get_clean();
     echo json_encode([
         'status' => 'error',
-        'message' => 'The selected attachment could not be uploaded. Please choose supported files up to ' . $attachmentLimits['max_file_size_label'] . ' each and ' . $attachmentLimits['max_total_size_label'] . ' total.',
+        'message' => $attachmentUploadMessage !== ''
+            ? $attachmentUploadMessage
+            : 'The selected attachment could not be uploaded. Please choose supported files up to ' . $attachmentLimits['max_file_size_label'] . ' each and ' . $attachmentLimits['max_total_size_label'] . ' total.',
         'debug' => $buf ?: null
     ]);
     exit;
@@ -245,7 +251,9 @@ $hasAttachments = !empty($filenamesForDB);
 if ($reply === '' && !$hasAttachments) {
     $buf = ob_get_clean();
     $message = !empty($attachmentUploadErrors)
-        ? 'The selected attachment could not be uploaded. Please choose supported files up to ' . $attachmentLimits['max_file_size_label'] . ' each and ' . $attachmentLimits['max_total_size_label'] . ' total.'
+        ? ($attachmentUploadMessage !== ''
+            ? $attachmentUploadMessage
+            : 'The selected attachment could not be uploaded. Please choose supported files up to ' . $attachmentLimits['max_file_size_label'] . ' each and ' . $attachmentLimits['max_total_size_label'] . ' total.')
         : 'Your reply needs either text or at least one attachment.';
     echo json_encode([
         'status' => 'error',
@@ -274,12 +282,12 @@ $stmt->close();
 // Mark the thread as read for sender
 // ---------------------------
 $stmt = $conn->prepare("
-    INSERT INTO message_reads (message_id, user_id, is_read, is_trashed, read_at, trashed_at)
-    VALUES (?, ?, 1, 0, NOW(), NULL)
-    ON DUPLICATE KEY UPDATE is_read=1, is_trashed=0, read_at=NOW(), trashed_at=NULL
+    INSERT INTO message_reads (message_id, user_id, is_read, is_trashed, read_at, last_read_reply_id, trashed_at)
+    VALUES (?, ?, 1, 0, NOW(), ?, NULL)
+    ON DUPLICATE KEY UPDATE is_read=1, is_trashed=0, read_at=NOW(), last_read_reply_id=VALUES(last_read_reply_id), trashed_at=NULL
 ");
 if ($stmt) {
-    $stmt->bind_param("ii", $id, $senderId);
+    $stmt->bind_param("iii", $id, $senderId, $replyId);
     $stmt->execute();
     $stmt->close();
 }

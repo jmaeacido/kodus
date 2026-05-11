@@ -40,7 +40,7 @@ $stmt = $conn->prepare("
               SELECT 1
               FROM contact_message_recipients cmr
               WHERE cmr.message_id = cm.id
-                AND LOWER(cmr.recipient_email) = LOWER(?)
+                AND (cmr.user_id = ? OR LOWER(cmr.recipient_email) = LOWER(?))
           )))
       )
     LIMIT 1
@@ -50,7 +50,7 @@ if (!$stmt) {
     security_send_json(['success' => false, 'error' => 'Unable to prepare reply delete request.'], 500);
 }
 
-$stmt->bind_param('isssss', $replyId, $userType, $userEmail, $userType, $userEmail, $userEmail);
+$stmt->bind_param('issssis', $replyId, $userType, $userEmail, $userType, $userEmail, $userId, $userEmail);
 $stmt->execute();
 $reply = db_stmt_fetch_one_assoc($stmt);
 $stmt->close();

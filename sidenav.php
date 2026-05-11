@@ -448,14 +448,16 @@ if (isset($_SESSION['user_id']) && is_numeric($_SESSION['user_id'])) {
       position: absolute;
       top: -0.4rem;
       right: -0.35rem;
-      display: none;
+      display: inline-flex;
       opacity: 0;
+      pointer-events: none;
       transition: opacity 0.15s ease;
     }
 
     .kodus-chat-bubble.is-minimized:hover .kodus-chat-bubble__actions,
     .kodus-chat-bubble.is-minimized:focus-within .kodus-chat-bubble__actions {
       opacity: 1;
+      pointer-events: auto;
     }
 
     .kodus-chat-bubble.is-minimized .kodus-chat-bubble__actions button {
@@ -1402,6 +1404,7 @@ let topbarSeenAppNotificationIds = <?= json_encode(array_values(array_map(
 ))) ?>;
 let mailBellAudioContext = null;
 let mailBellUnlocked = false;
+let topbarMailNotificationPollTimer = null;
 let topbarAppNotificationPollTimer = null;
 
 function kodusDebugLog() {
@@ -2153,6 +2156,17 @@ function refreshUnreadCount() {
     .catch(err => kodusDebugLog("Unread count fetch failed:", err));
 }
 
+function startMailNotificationFallbackPolling() {
+  if (topbarMailNotificationPollTimer) {
+    return;
+  }
+
+  refreshUnreadCount();
+  topbarMailNotificationPollTimer = window.setInterval(function() {
+    refreshUnreadCount();
+  }, 15000);
+}
+
 function showAppAlert(item) {
   const stack = document.getElementById('appAlertStack');
   if (!stack || !item) {
@@ -2365,11 +2379,14 @@ function startAppNotificationFallbackPolling() {
 }
 
 startAppNotificationFallbackPolling();
+startMailNotificationFallbackPolling();
 document.addEventListener('visibilitychange', function() {
   if (!document.hidden) {
+    refreshUnreadCount();
     refreshAppNotifications();
   }
 });
+window.addEventListener('focus', refreshUnreadCount);
 window.addEventListener('focus', refreshAppNotifications);
 window.addEventListener('resize', enforceKodusChatBubbleOverflow, { passive: true });
 window.addEventListener('message', function(event) {

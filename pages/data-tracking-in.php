@@ -2,8 +2,10 @@
 session_start();
   include('../header.php');
   include('../sidenav.php');
+  require_once __DIR__ . '/tracking_recipient_helpers.php';
 
   $userType = $_SESSION['user_type'] ?? 'user';
+  $trackingRecipientOptions = isset($conn) && $conn instanceof mysqli ? tracking_fetch_recipient_options($conn) : [];
 ?>
 
 <script>
@@ -16,6 +18,8 @@ session_start();
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>KODUS | Incoming</title>
+  <link rel="stylesheet" href="<?php echo $app_root; ?>plugins/select2/css/select2.min.css">
+  <link rel="stylesheet" href="<?php echo $app_root; ?>plugins/select2-bootstrap4-theme/select2-bootstrap4.min.css">
   <style>
     .document-modal {
       text-align: left;
@@ -134,13 +138,50 @@ session_start();
       background: #0d6efd;
       border-color: #0d6efd;
     }
+    #incoming-table th.tracking-file-column,
+    #incoming-table td.tracking-file-column {
+      width: 15rem;
+      min-width: 11rem;
+      max-width: 15rem;
+      white-space: normal !important;
+    }
+    .tracking-file-list {
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      gap: 0.22rem;
+      max-width: 100%;
+      max-height: 4.85rem;
+      overflow-y: auto;
+      text-align: left;
+    }
+    .tracking-file-link {
+      display: block;
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      line-height: 1.25;
+    }
+    .tracking-file-more {
+      display: inline-block;
+      margin-top: 0.08rem;
+      color: #6c757d;
+      font-size: 0.72rem;
+      font-weight: 700;
+    }
     .swal2-popup.kodus-form-popup {
       width: min(760px, 94vw);
+      height: auto;
+      max-height: calc(100vh - 2rem);
       padding: 1.35rem;
       border-radius: 22px;
       color: var(--kodus-detail-text, #f8f9fa);
       background: var(--kodus-detail-hero-end, #162034);
       box-shadow: var(--kodus-detail-shadow, 0 18px 40px rgba(15, 23, 42, 0.12));
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
     }
     .swal2-popup.kodus-form-popup .swal2-title,
     .swal2-popup.kodus-form-popup .swal2-html-container {
@@ -148,6 +189,19 @@ session_start();
     }
     .swal2-popup.kodus-form-popup .swal2-html-container {
       margin-top: 0.75rem;
+      flex: 1 1 auto;
+      min-height: 0;
+      max-height: none;
+      overflow-y: auto;
+      padding-right: 0.25rem;
+    }
+    .swal2-popup.kodus-form-popup .swal2-actions {
+      flex: 0 0 auto;
+      z-index: 2;
+      margin: 0.85rem 0 0;
+      padding-top: 0.85rem;
+      width: 100%;
+      background: linear-gradient(180deg, rgba(22, 32, 52, 0), var(--kodus-detail-hero-end, #162034) 34%);
     }
     .kodus-form-shell {
       text-align: left;
@@ -250,6 +304,161 @@ session_start();
       line-height: 1.45;
       color: var(--kodus-detail-muted, rgba(255, 255, 255, 0.7));
     }
+    .kodus-form-shell .select2-container {
+      width: 100% !important;
+    }
+    .kodus-form-shell .select2-container--bootstrap4 .select2-selection--multiple {
+      min-height: 52px;
+      padding: 0.32rem 0.44rem;
+      border-radius: 12px;
+      border: 1px solid var(--kodus-detail-border, rgba(255, 255, 255, 0.12));
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.06));
+      color: var(--kodus-detail-text, #f8f9fa);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+      transition: border-color 0.16s ease, box-shadow 0.16s ease, background 0.16s ease;
+    }
+    .kodus-form-shell .select2-container--bootstrap4.select2-container--focus .select2-selection--multiple,
+    .kodus-form-shell .select2-container--bootstrap4.select2-container--open .select2-selection--multiple {
+      border-color: var(--kodus-detail-link, #0d6efd);
+      box-shadow: 0 0 0 0.18rem rgba(13, 110, 253, 0.18);
+    }
+    .kodus-form-shell .select2-container--bootstrap4 .select2-selection--multiple .select2-selection__rendered {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.35rem;
+      width: 100%;
+      min-height: 36px;
+      padding: 0;
+      box-sizing: border-box;
+      overflow: hidden;
+    }
+    .kodus-form-shell .select2-container--bootstrap4 .select2-selection--multiple .select2-selection__choice {
+      display: inline-flex;
+      align-items: center;
+      flex: 0 1 auto;
+      min-width: 0;
+      min-height: 30px;
+      margin: 0;
+      padding: 0.22rem 0.5rem;
+      border: 1px solid rgba(96, 165, 250, 0.34);
+      border-radius: 999px;
+      background: rgba(37, 99, 235, 0.2);
+      color: var(--kodus-detail-text, #f8f9fa);
+      font-size: 0.82rem;
+      line-height: 1.25;
+      max-width: 100%;
+      overflow: hidden;
+      white-space: normal;
+    }
+    .kodus-form-shell .select2-container--bootstrap4 .select2-selection--multiple .select2-selection__choice__remove {
+      flex: 0 0 auto;
+      margin-right: 0.32rem;
+      color: rgba(255, 255, 255, 0.78);
+      text-shadow: none;
+    }
+    .kodus-form-shell .select2-container--bootstrap4 .select2-selection--multiple .select2-selection__choice__display {
+      display: inline-flex;
+      min-width: 0;
+      max-width: 100%;
+      overflow: hidden;
+    }
+    .kodus-form-shell .select2-container--bootstrap4 .select2-selection--multiple .select2-search--inline {
+      flex: 1 1 8rem;
+      min-width: min(8rem, 100%);
+      max-width: 100%;
+    }
+    .kodus-form-shell .select2-container--bootstrap4 .select2-search__field {
+      width: 100% !important;
+      min-width: min(8rem, 100%);
+      max-width: 100%;
+      margin-top: 0;
+      color: var(--kodus-detail-text, #f8f9fa) !important;
+    }
+    .swal2-container .select2-dropdown {
+      z-index: 1070;
+      overflow: hidden;
+      border: 1px solid var(--kodus-detail-border, rgba(255, 255, 255, 0.14));
+      border-radius: 12px;
+      background: var(--kodus-detail-hero-end, #162034);
+      color: var(--kodus-detail-text, #f8f9fa);
+      box-shadow: 0 18px 38px rgba(2, 6, 23, 0.34);
+    }
+    .swal2-container .select2-search--dropdown {
+      padding: 0.55rem;
+      background: rgba(255, 255, 255, 0.04);
+    }
+    .swal2-container .select2-search--dropdown .select2-search__field {
+      border-radius: 10px;
+      border: 1px solid var(--kodus-detail-border, rgba(255, 255, 255, 0.14));
+      background: rgba(15, 23, 42, 0.42);
+      color: var(--kodus-detail-text, #f8f9fa);
+    }
+    .swal2-container .select2-results__option {
+      padding: 0.58rem 0.72rem;
+      color: var(--kodus-detail-text, #f8f9fa);
+    }
+    .swal2-container .select2-results__option[aria-selected="true"] {
+      background: rgba(96, 165, 250, 0.16);
+    }
+    .swal2-container .select2-results__option--highlighted[aria-selected] {
+      background: rgba(13, 110, 253, 0.32);
+      color: #ffffff;
+    }
+    .kodus-recipient-option,
+    .kodus-recipient-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.55rem;
+      min-width: 0;
+      max-width: 100%;
+    }
+    .kodus-recipient-chip {
+      flex: 1 1 auto;
+    }
+    .kodus-recipient-avatar {
+      width: 1.85rem;
+      height: 1.85rem;
+      flex: 0 0 auto;
+      border-radius: 999px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, #0d6efd, #20c997);
+      color: #ffffff;
+      font-size: 0.72rem;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+    }
+    .kodus-recipient-copy {
+      min-width: 0;
+      max-width: 100%;
+      flex: 1 1 auto;
+      display: inline-flex;
+      flex-direction: column;
+      line-height: 1.22;
+    }
+    .kodus-recipient-name,
+    .kodus-recipient-email {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .kodus-recipient-name {
+      font-weight: 700;
+    }
+    .kodus-recipient-email {
+      font-size: 0.76rem;
+      color: var(--kodus-detail-muted, rgba(255, 255, 255, 0.68));
+    }
+    .kodus-recipient-chip .kodus-recipient-avatar {
+      width: 1.35rem;
+      height: 1.35rem;
+      font-size: 0.62rem;
+    }
+    .kodus-recipient-chip .kodus-recipient-email {
+      display: none;
+    }
     .kodus-form-meta {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
@@ -302,13 +511,59 @@ session_start();
       box-shadow: 0 0.4rem 1rem rgba(13, 110, 253, 0.06);
     }
     body[data-theme="light"] .kodus-form-shell .form-control,
-    body[data-theme="light"] .kodus-form-shell textarea {
+    body[data-theme="light"] .kodus-form-shell textarea,
+    body[data-theme="light"] .kodus-form-shell .select2-container--bootstrap4 .select2-selection--multiple {
       background: #ffffff;
       border-color: rgba(13, 110, 253, 0.14);
       color: #212529;
     }
+    body[data-theme="light"] .kodus-form-shell .select2-container--bootstrap4 .select2-selection--multiple {
+      background: linear-gradient(180deg, #ffffff, #f8fbff);
+      box-shadow: 0 0.4rem 1rem rgba(13, 110, 253, 0.06);
+    }
+    body[data-theme="light"] .kodus-form-shell .select2-container--bootstrap4 .select2-selection--multiple .select2-selection__choice {
+      border-color: rgba(13, 110, 253, 0.22);
+      background: rgba(13, 110, 253, 0.1);
+      color: #1f2937;
+    }
+    body[data-theme="light"] .kodus-form-shell .select2-container--bootstrap4 .select2-selection--multiple .select2-selection__choice__remove {
+      color: #495057;
+    }
+    body[data-theme="light"] .kodus-form-shell .select2-container--bootstrap4 .select2-search__field {
+      color: #212529 !important;
+    }
+    body[data-theme="light"] .swal2-container .select2-dropdown {
+      background: #ffffff;
+      color: #212529;
+      border-color: rgba(13, 110, 253, 0.14);
+      box-shadow: 0 18px 38px rgba(15, 23, 42, 0.16);
+    }
+    body[data-theme="light"] .swal2-container .select2-search--dropdown {
+      background: #f8fbff;
+    }
+    body[data-theme="light"] .swal2-container .select2-search--dropdown .select2-search__field {
+      background: #ffffff;
+      color: #212529;
+      border-color: rgba(13, 110, 253, 0.16);
+    }
+    body[data-theme="light"] .swal2-container .select2-results__option {
+      color: #212529;
+    }
+    body[data-theme="light"] .swal2-container .select2-results__option[aria-selected="true"] {
+      background: rgba(13, 110, 253, 0.08);
+    }
+    body[data-theme="light"] .swal2-container .select2-results__option--highlighted[aria-selected] {
+      background: rgba(13, 110, 253, 0.15);
+      color: #0f172a;
+    }
+    body[data-theme="light"] .kodus-recipient-email {
+      color: #6c757d;
+    }
     body[data-theme="light"] .kodus-form-confirm {
       background: linear-gradient(135deg, #0d6efd, #1a73e8);
+    }
+    body[data-theme="light"] .swal2-popup.kodus-form-popup .swal2-actions {
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0), #ffffff 34%);
     }
     body[data-theme="light"] .kodus-form-cancel {
       background: rgba(108, 117, 125, 0.12);
@@ -415,7 +670,7 @@ session_start();
                     <th style="max-width:11%;">DTN / DRN</th>
                     <th style="max-width:20%;">Description</th>
                     <th style="max-width:14%;">Remarks</th>
-                    <th style="max-width:21%;">File</th>
+                    <th class="tracking-file-column" style="max-width:21%;">File</th>
                     <th style="max-width:8%;">Date Forwarded to the RRP Focal/DRRS Head</th>
                     <th style="max-width:10%;">User Log</th>
                     <th style="max-width:10%;">Status</th>
@@ -458,10 +713,13 @@ session_start();
 <script src="<?php echo $app_root; ?>plugins/datatables-buttons/js/buttons.print.min.js"></script>
 <script src="<?php echo $app_root; ?>plugins/datatables-buttons/js/buttons.colVis.min.js"></script>
 <script src="../plugins/sweetalert2/sweetalert2.min.js"></script>
+<script src="<?php echo $app_root; ?>plugins/select2/js/select2.full.min.js"></script>
 <!-- AdminLTE App -->
 <script src="<?php echo $app_root; ?>dist/js/adminlte.min.js"></script>
 
 <script>
+const trackingRecipientOptions = <?php echo json_encode($trackingRecipientOptions, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>;
+
 function escapeHtml(value) {
     return $('<div>').text(value ?? '').html();
 }
@@ -481,8 +739,30 @@ function renderFileLink(fileName) {
     return files.map(file => {
         const safeName = escapeHtml(file);
         const safeUrl = encodeURIComponent(file).replace(/%2F/g, '/');
-        return `<a class="kodus-detail-link d-inline-block mr-2" onclick="openPopup('uploads/${safeUrl}')" href="javascript:void(0)">${safeName}</a>`;
+        const popupUrl = `uploads/${safeUrl}`;
+        return `<a class="kodus-detail-link d-inline-block mr-2" data-url="${escapeAttribute(popupUrl)}" onclick="openPopup(this.dataset.url)" href="javascript:void(0)">${safeName}</a>`;
     }).join('');
+}
+
+function renderTrackingFileCell(fileName) {
+    const normalized = String(fileName ?? '').trim();
+    if (normalized === '') {
+        return '<span class="kodus-detail-empty">No file</span>';
+    }
+
+    const files = normalized.split(',').map(file => file.trim()).filter(Boolean);
+    const visibleFiles = files.slice(0, 4);
+    const links = visibleFiles.map(file => {
+        const safeName = escapeHtml(file);
+        const safeUrl = encodeURIComponent(file).replace(/%2F/g, '/');
+        const popupUrl = `uploads/${safeUrl}`;
+        return `<a class="tracking-file-link" title="${escapeAttribute(file)}" data-url="${escapeAttribute(popupUrl)}" onclick="openPopup(this.dataset.url)" href="javascript:void(0)">${safeName}</a>`;
+    }).join('');
+    const more = files.length > visibleFiles.length
+        ? `<span class="tracking-file-more">+${files.length - visibleFiles.length} more</span>`
+        : '';
+
+    return `<div class="tracking-file-list">${links}${more}</div>`;
 }
 
 function escapeAttribute(value) {
@@ -508,6 +788,124 @@ function renderFriendlyFormShell(options) {
             ${sections}
         </form>
     `;
+}
+
+function splitRecipientValue(value) {
+    return String(value || '').split(/[;,]/).map(item => item.trim()).filter(Boolean);
+}
+
+function renderReceivingOfficeField(options = {}) {
+    const required = options.required ? 'required' : '';
+    const help = options.help || 'Select KODUS users or type external emails, offices, or personnel. Only valid emails receive email notices.';
+    const optionHtml = trackingRecipientOptions.map(recipient => {
+        const label = escapeHtml(recipient.label || recipient.email || '');
+        return `<option value="${escapeAttribute(recipient.label || recipient.email || '')}" data-email="${escapeAttribute(recipient.email || '')}" data-name="${escapeAttribute(recipient.name || '')}">${label}</option>`;
+    }).join('');
+
+    return `
+        <label for="receiving_office_recipients">Receiving Office / Personnel</label>
+        <select id="receiving_office_recipients" name="receiving_office_recipients[]" class="form-control kodus-recipient-picker" multiple ${required}>
+            ${optionHtml}
+        </select>
+        <input type="hidden" id="receiving_office" name="receiving_office" ${required}>
+        <span class="kodus-form-help">${escapeHtml(help)}</span>
+    `;
+}
+
+function recipientInitials(name, email) {
+    const source = String(name || email || '').trim();
+    const parts = source.split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) {
+        return (parts[0][0] + parts[1][0]).toUpperCase();
+    }
+    return source.slice(0, 2).toUpperCase() || 'R';
+}
+
+function renderRecipientVisual(option, compact = false) {
+    if (!option.id) {
+        return option.text;
+    }
+
+    const dataset = option.element ? option.element.dataset : {};
+    const label = dataset.name || option.text || '';
+    const email = dataset.email || (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(option.text || '') ? option.text : '');
+    const initials = recipientInitials(label, email);
+    const className = compact ? 'kodus-recipient-chip' : 'kodus-recipient-option';
+
+    return $(`
+        <span class="${className}">
+            <span class="kodus-recipient-avatar">${escapeHtml(initials)}</span>
+            <span class="kodus-recipient-copy">
+                <span class="kodus-recipient-name">${escapeHtml(label || option.text || '')}</span>
+                ${email ? `<span class="kodus-recipient-email">${escapeHtml(email)}</span>` : ''}
+            </span>
+        </span>
+    `);
+}
+
+function syncReceivingOfficeField() {
+    const picker = document.getElementById('receiving_office_recipients');
+    const hidden = document.getElementById('receiving_office');
+    if (!picker || !hidden) {
+        return '';
+    }
+
+    if (window.jQuery) {
+        const pendingTerm = $('.select2-search__field').map(function() {
+            return String(this.value || '').trim();
+        }).get().find(Boolean);
+        if (pendingTerm && !Array.from(picker.options).some(option => option.value === pendingTerm)) {
+            picker.add(new Option(pendingTerm, pendingTerm, true, true));
+            $('.select2-search__field').val('');
+        } else if (pendingTerm) {
+            Array.from(picker.options).forEach(option => {
+                if (option.value === pendingTerm) {
+                    option.selected = true;
+                }
+            });
+            $('.select2-search__field').val('');
+        }
+    }
+
+    const values = Array.from(picker.selectedOptions || []).map(option => String(option.value || option.text || '').trim()).filter(Boolean);
+    hidden.value = values.join(', ');
+    return hidden.value;
+}
+
+function bindReceivingOfficePicker(initialValue = '') {
+    const picker = $('#receiving_office_recipients');
+    if (!picker.length) {
+        return;
+    }
+
+    splitRecipientValue(initialValue).forEach(value => {
+        if (!picker.find('option').filter(function() { return this.value === value; }).length) {
+            picker.append(new Option(value, value, true, true));
+        } else {
+            picker.find('option').filter(function() { return this.value === value; }).prop('selected', true);
+        }
+    });
+
+    if ($.fn.select2) {
+        picker.select2({
+            theme: 'bootstrap4',
+            width: '100%',
+            tags: true,
+            tokenSeparators: [',', ';'],
+            dropdownParent: $('.swal2-popup'),
+            placeholder: 'Select users or type recipients',
+            templateResult: option => renderRecipientVisual(option, false),
+            templateSelection: option => renderRecipientVisual(option, true),
+            escapeMarkup: markup => markup,
+            createTag: function(params) {
+                const term = $.trim(params.term || '');
+                return term ? { id: term, text: term, newTag: true } : null;
+            }
+        });
+    }
+
+    picker.on('change select2:select select2:unselect', syncReceivingOfficeField);
+    syncReceivingOfficeField();
 }
 
 function renderIncomingDetails(rowData) {
@@ -607,6 +1005,7 @@ function openIncomingDetails(rowData) {
 
       let table = $("#incoming-table").DataTable({
           "responsive": false,
+          "autoWidth": false,
           "processing": false, // Show the processing indicator
           "serverSide": true, // Enable server-side processing
           "ajax": {
@@ -638,7 +1037,13 @@ function openIncomingDetails(rowData) {
             { "data": "tracking_number" },
             { "data": "description" },
             { "data": "remarks" },
-            { "data": "file_name" },
+            {
+                "data": "file_name",
+                "className": "tracking-file-column",
+                "render": function(data, type) {
+                    return type === "display" ? renderTrackingFileCell(data) : data;
+                }
+            },
             { "data": "focal" },
             { "data": "user_log" },
             { "data": "status" }
@@ -648,6 +1053,9 @@ function openIncomingDetails(rowData) {
           "lengthMenu": [[10,25,50,100,-1],[10,25,50,100,"All"]],
           "paging": true,
           "scrollX": true,
+          "columnDefs": [
+              { "targets": 5, "width": "15rem", "className": "tracking-file-column" }
+          ],
           //"dom": 'Bfrtip',
           //"buttons": ["copy", "csv", "excel", "pdf", "print", "colvis"]
       });
@@ -768,6 +1176,29 @@ function updateUploadProgress(progressId, percent, label) {
     }
 }
 
+function setUploadReadyProgress(progressId, label) {
+    const progress = document.getElementById(progressId);
+    if (!progress) {
+        return;
+    }
+
+    const progressBar = progress.querySelector(".kodus-upload-progress-bar");
+    const progressValue = progress.querySelector(".kodus-upload-progress-value");
+    const progressLabel = progress.querySelector(".kodus-upload-progress-label");
+
+    progress.classList.add("is-visible");
+    if (progressBar) {
+        progressBar.style.width = "0%";
+        progressBar.setAttribute("aria-valuenow", "0");
+    }
+    if (progressValue) {
+        progressValue.textContent = "Ready";
+    }
+    if (progressLabel) {
+        progressLabel.textContent = label;
+    }
+}
+
 function formatUploadBytes(bytes) {
     if (bytes >= 1024 * 1024) {
         return `${(bytes / (1024 * 1024)).toFixed(1).replace(/\.0$/, "")} MB`;
@@ -794,30 +1225,87 @@ function bindUploadProgressFilePreview(fileInputId, progressId) {
 
         const totalBytes = files.reduce((sum, file) => sum + (file.size || 0), 0);
         const label = files.length === 1
-            ? `Ready: ${files[0].name} (${formatUploadBytes(totalBytes)})`
-            : `Ready: ${files.length} files (${formatUploadBytes(totalBytes)})`;
-        updateUploadProgress(progressId, 0, label);
+            ? `Selected: ${files[0].name} (${formatUploadBytes(totalBytes)})`
+            : `Selected: ${files.length} files (${formatUploadBytes(totalBytes)})`;
+        setUploadReadyProgress(progressId, label);
     });
 }
 
+function validateTrackingFormBeforeUpload(formId, progressId) {
+    const form = document.getElementById(formId);
+    if (!form) {
+        return false;
+    }
+
+    const invalidField = Array.from(form.querySelectorAll("[required]")).find(field => {
+        return !String(field.value || "").trim();
+    });
+
+    if (!invalidField) {
+        return true;
+    }
+
+    const progress = document.getElementById(progressId);
+    progress?.classList.remove("is-visible");
+    invalidField.focus();
+    Swal.showValidationMessage("Please complete the required fields before uploading.");
+    return false;
+}
+
 function submitFormDataWithProgress(url, formData, progressId) {
-    updateUploadProgress(progressId, 0, "Preparing upload");
+    updateUploadProgress(progressId, 3, "Preparing upload");
 
     return new Promise((resolve, reject) => {
         const xhr = new XMLHttpRequest();
+        let progressTimer = null;
+        let simulatedPercent = 3;
+
+        const stopProgressTimer = () => {
+            if (progressTimer) {
+                window.clearInterval(progressTimer);
+                progressTimer = null;
+            }
+        };
+
+        const startProgressTimer = () => {
+            stopProgressTimer();
+            progressTimer = window.setInterval(() => {
+                simulatedPercent = Math.min(88, simulatedPercent + (simulatedPercent < 35 ? 7 : 3));
+                updateUploadProgress(progressId, simulatedPercent, "Uploading file");
+                if (simulatedPercent >= 88) {
+                    stopProgressTimer();
+                }
+            }, 350);
+        };
+
         xhr.open("POST", url, true);
         xhr.withCredentials = true;
         xhr.setRequestHeader("X-Requested-With", "XMLHttpRequest");
 
+        xhr.upload.addEventListener("loadstart", () => {
+            simulatedPercent = Math.max(simulatedPercent, 8);
+            updateUploadProgress(progressId, simulatedPercent, "Uploading file");
+            startProgressTimer();
+        });
+
         xhr.upload.addEventListener("progress", event => {
             if (event.lengthComputable && event.total > 0) {
-                updateUploadProgress(progressId, (event.loaded / event.total) * 100, "Uploading file");
+                simulatedPercent = Math.min(90, Math.max(simulatedPercent, (event.loaded / event.total) * 90));
+                updateUploadProgress(progressId, simulatedPercent, "Uploading file");
             } else {
-                updateUploadProgress(progressId, 35, "Uploading file");
+                simulatedPercent = Math.max(simulatedPercent, 35);
+                updateUploadProgress(progressId, simulatedPercent, "Uploading file");
             }
         });
 
+        xhr.upload.addEventListener("load", () => {
+            simulatedPercent = Math.max(simulatedPercent, 92);
+            updateUploadProgress(progressId, simulatedPercent, "Processing upload");
+            stopProgressTimer();
+        });
+
         xhr.addEventListener("load", () => {
+            stopProgressTimer();
             updateUploadProgress(progressId, 100, "Processing upload");
             const response = {
                 ok: xhr.status >= 200 && xhr.status < 300,
@@ -828,9 +1316,16 @@ function submitFormDataWithProgress(url, formData, progressId) {
             parseJsonResponse(response).then(resolve).catch(reject);
         });
 
-        xhr.addEventListener("error", () => reject(new Error("Network error while uploading.")));
-        xhr.addEventListener("abort", () => reject(new Error("Upload cancelled.")));
+        xhr.addEventListener("error", () => {
+            stopProgressTimer();
+            reject(new Error("Network error while uploading."));
+        });
+        xhr.addEventListener("abort", () => {
+            stopProgressTimer();
+            reject(new Error("Upload cancelled."));
+        });
         xhr.send(formData);
+        startProgressTimer();
     });
 }
 
@@ -973,9 +1468,7 @@ $(document).on("click", ".forward-btn", function() {
                     <p class="kodus-form-section-note">A clear destination helps the next handler identify the document quickly.</p>
                     <div class="kodus-form-grid">
                         <div class="kodus-form-field">
-                            <label for="receiving_office">Receiving Office / Personnel</label>
-                            <input type="text" id="receiving_office" name="receiving_office" class="form-control" required>
-                            <span class="kodus-form-help">Example: Procurement Section, DRRS Head, or a named staff member.</span>
+                            ${renderReceivingOfficeField({ required: true })}
                         </div>
                         <div class="kodus-form-field">
                             <label for="date_forwarded">Date & Time Forwarded</label>
@@ -997,9 +1490,15 @@ $(document).on("click", ".forward-btn", function() {
                 const localValue = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
                 forwardedAt.value = localValue;
             }
-            document.getElementById("receiving_office")?.focus();
+            bindReceivingOfficePicker();
+            $('#receiving_office_recipients').select2('open');
         },
         preConfirm: () => {
+            syncReceivingOfficeField();
+            if (!String(document.getElementById("receiving_office")?.value || '').trim()) {
+                Swal.showValidationMessage("Please enter or select at least one receiving office/personnel.");
+                return false;
+            }
             const formData = new FormData(document.getElementById("forwardForm"));
             appendCsrfToken(formData);
             formData.append("id", rowData.id);
@@ -1080,6 +1579,7 @@ document.getElementById("track-documents").addEventListener("click", function ()
             `
         }),
         showCancelButton: true,
+        showLoaderOnConfirm: true,
         confirmButtonText: '<i class="fas fa-paper-plane mr-1"></i> Save Document',
         cancelButtonText: 'Cancel',
         focusConfirm: false,
@@ -1088,6 +1588,10 @@ document.getElementById("track-documents").addEventListener("click", function ()
             bindUploadProgressFilePreview("file", "trackUploadProgress");
         },
         preConfirm: () => {
+            if (!validateTrackingFormBeforeUpload("trackForm", "trackUploadProgress")) {
+                return false;
+            }
+
             let formData = new FormData(document.getElementById("trackForm"));
             appendCsrfToken(formData);
             

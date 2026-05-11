@@ -5,6 +5,7 @@ require_once __DIR__ . '/../auth_helpers.php';
 require_once __DIR__ . '/../socket_helpers.php';
 require_once __DIR__ . '/../app_notification_helpers.php';
 require_once __DIR__ . '/document_upload_helpers.php';
+require_once __DIR__ . '/tracking_recipient_helpers.php';
 header('Content-Type: application/json'); 
 
 require_once __DIR__ . '/../config.php';
@@ -23,14 +24,15 @@ try {
     $date_out = $_POST['date_out'] ?? null;
     $description = $_POST['description'] ?? null;
     $remarks = $_POST['remarks'] ?? null;
-    $receiving_office = $_POST['receiving_office'] ?? null;
+    $recipientData = tracking_normalize_recipient_inputs($_POST);
+    $receiving_office = $recipientData['display'] !== '' ? $recipientData['display'] : ($_POST['receiving_office'] ?? null);
     $date_forwarded = !empty($_POST['date_forwarded']) ? $_POST['date_forwarded'] : null; 
 
     if (!$id) {
         throw new Exception("Invalid request. Missing document ID.");
     }
 
-    $existingStmt = $conn->prepare("SELECT id, date_out, description, remarks, receiving_office, date_forwarded, file_name, file_size, file_type, upload_time FROM outgoing WHERE id = ?");
+    $existingStmt = $conn->prepare("SELECT id, date_out, tracking_number, description, remarks, receiving_office, date_forwarded, file_name, file_size, file_type, upload_time FROM outgoing WHERE id = ?");
     $existingStmt->bind_param("i", $id);
     $existingStmt->execute();
     $existingRecord = db_stmt_fetch_one_assoc($existingStmt);
@@ -157,7 +159,37 @@ try {
             tracking_delete_files_if_unreferenced($conn, $existingFileName);
         }
 
-        echo json_encode(['success' => true, 'message' => 'Document updated successfully.']);
+        $mailResult = ['sent' => 0, 'failed' => 0];
+        $kodusAlertResult = ['notifications' => 0, 'messages' => 0];
+        if ($recipientData['emails'] !== [] && trim((string) ($existingRecord['receiving_office'] ?? '')) !== trim((string) $receiving_office)) {
+            $mailResult = tracking_send_document_recipient_emails($conn, $recipientData['emails'], [
+                'context' => 'Updated outgoing document',
+                'tracking_number' => (string) ($existingRecord['tracking_number'] ?? ''),
+                'description' => (string) $description,
+                'remarks' => (string) $remarks,
+                'receiving_office' => (string) $receiving_office,
+                'date_forwarded' => (string) ($date_forwarded ?: $date_out),
+                'url' => app_notification_build_url('pages/data-tracking-out'),
+            ]);
+            $kodusAlertResult = tracking_send_document_recipient_kodus_alerts($conn, $recipientData['emails'], [
+                'context' => 'Updated outgoing document',
+                'tracking_number' => (string) ($existingRecord['tracking_number'] ?? ''),
+                'description' => (string) $description,
+                'remarks' => (string) $remarks,
+                'receiving_office' => (string) $receiving_office,
+                'date_forwarded' => (string) ($date_forwarded ?: $date_out),
+                'url' => app_notification_build_url('pages/data-tracking-out'),
+            ]);
+        }
+
+        echo json_encode([
+            'success' => true,
+            'message' => 'Document updated successfully.',
+            'mail_sent' => $mailResult['sent'],
+            'mail_failed' => $mailResult['failed'],
+            'notifications_sent' => $kodusAlertResult['notifications'],
+            'messenger_sent' => $kodusAlertResult['messages'],
+        ]);
     } else {
         if ($fileName) {
             tracking_cleanup_saved_paths($uploadedFiles['paths'] ?? []);

@@ -3,6 +3,7 @@ require_once __DIR__ . '/../security.php';
 security_bootstrap_session();
 require_once __DIR__ . '/../auth_helpers.php';
 require_once __DIR__ . '/../socket_helpers.php';
+require_once __DIR__ . '/tracking_recipient_helpers.php';
 include('../config.php'); // Database connection
 
 header('Content-Type: application/json');
@@ -20,7 +21,7 @@ if(!isset($_SESSION['user_id'])){
 }
 
 // Required POST fields
-$required = ['id','tracking_number','description','receiving_office','date_forwarded'];
+$required = ['id','tracking_number','description','date_forwarded'];
 foreach($required as $field){
     if(empty($_POST[$field])){
         echo json_encode(['success' => false, 'message' => "Field $field is required"]);
@@ -34,8 +35,13 @@ $tracking_number = $_POST['tracking_number'];
 $description = $_POST['description'];
 $remarks = $_POST['remarks'] ?? '';
 $file_name = $_POST['file_name'] ?? '';
-$receiving_office = $_POST['receiving_office'];
+$recipientData = tracking_normalize_recipient_inputs($_POST);
+$receiving_office = $recipientData['display'];
 $date_forwarded = $_POST['date_forwarded'];
+if ($receiving_office === '') {
+    echo json_encode(['success' => false, 'message' => 'Field receiving_office is required']);
+    exit;
+}
 
 // Get user info
 $user_id = $_SESSION['user_id'];
@@ -107,7 +113,33 @@ try {
         'actor_id' => (int) $user_id,
     ]);
 
-    echo json_encode(['success' => true, 'message' => 'Document forwarded successfully']);
+    $mailResult = tracking_send_document_recipient_emails($conn, $recipientData['emails'], [
+        'context' => 'Forwarded document',
+        'tracking_number' => $tracking_number,
+        'description' => $description,
+        'remarks' => $remarks,
+        'receiving_office' => $receiving_office,
+        'date_forwarded' => $date_forwarded,
+        'url' => app_notification_build_url('pages/data-tracking-out'),
+    ]);
+    $kodusAlertResult = tracking_send_document_recipient_kodus_alerts($conn, $recipientData['emails'], [
+        'context' => 'Forwarded document',
+        'tracking_number' => $tracking_number,
+        'description' => $description,
+        'remarks' => $remarks,
+        'receiving_office' => $receiving_office,
+        'date_forwarded' => $date_forwarded,
+        'url' => app_notification_build_url('pages/data-tracking-out'),
+    ]);
+
+    echo json_encode([
+        'success' => true,
+        'message' => 'Document forwarded successfully',
+        'mail_sent' => $mailResult['sent'],
+        'mail_failed' => $mailResult['failed'],
+        'notifications_sent' => $kodusAlertResult['notifications'],
+        'messenger_sent' => $kodusAlertResult['messages'],
+    ]);
 
 } catch(Exception $e) {
     $conn->rollback();

@@ -5,6 +5,7 @@ require_once __DIR__ . '/../auth_helpers.php';
 require_once __DIR__ . '/../socket_helpers.php';
 require_once __DIR__ . '/../app_notification_helpers.php';
 require_once __DIR__ . '/document_upload_helpers.php';
+require_once __DIR__ . '/tracking_recipient_helpers.php';
 $user_log = $_SESSION['username'] ?? 'Unknown';
 
 header('Content-Type: application/json');
@@ -28,7 +29,8 @@ try {
     $date_out = $_POST["date_out"];
     $description = trim($_POST["description"]);
     $remarks = $_POST["remarks"] ?? "";
-    $receiving_office = $_POST['receiving_office'];
+    $recipientData = tracking_normalize_recipient_inputs($_POST);
+    $receiving_office = $recipientData['display'];
     $date_forwarded = !empty($_POST['date_forwarded']) ? $_POST['date_forwarded'] : null; 
 
     $uploadedFiles = tracking_save_uploaded_files('file');
@@ -116,6 +118,29 @@ try {
         'tracking_number' => $tracking_number,
         'actor_id' => (int) ($_SESSION['user_id'] ?? 0),
     ]);
+
+    $mailResult = tracking_send_document_recipient_emails($conn, $recipientData['emails'], [
+        'context' => 'Outgoing document',
+        'tracking_number' => $tracking_number,
+        'description' => $description,
+        'remarks' => $remarks,
+        'receiving_office' => $receiving_office,
+        'date_forwarded' => $date_forwarded ?: $date_out,
+        'url' => app_notification_build_url('pages/data-tracking-out'),
+    ]);
+    $response['mail_sent'] = $mailResult['sent'];
+    $response['mail_failed'] = $mailResult['failed'];
+    $kodusAlertResult = tracking_send_document_recipient_kodus_alerts($conn, $recipientData['emails'], [
+        'context' => 'Outgoing document',
+        'tracking_number' => $tracking_number,
+        'description' => $description,
+        'remarks' => $remarks,
+        'receiving_office' => $receiving_office,
+        'date_forwarded' => $date_forwarded ?: $date_out,
+        'url' => app_notification_build_url('pages/data-tracking-out'),
+    ]);
+    $response['notifications_sent'] = $kodusAlertResult['notifications'];
+    $response['messenger_sent'] = $kodusAlertResult['messages'];
 
 } catch (Exception $e) {
     if (isset($uploadedFiles) && is_array($uploadedFiles)) {

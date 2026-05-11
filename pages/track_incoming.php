@@ -4,6 +4,7 @@ security_bootstrap_session();
 require_once __DIR__ . '/../auth_helpers.php';
 require_once __DIR__ . '/../socket_helpers.php';
 require_once __DIR__ . '/../app_notification_helpers.php';
+require_once __DIR__ . '/document_upload_helpers.php';
 
 $user_log = $_SESSION['username'] ?? 'Unknown';
 
@@ -14,7 +15,9 @@ auth_handle_page_access($conn);
 auth_apply_security_headers();
 security_enforce_same_origin();
 security_require_method(['POST']);
+tracking_reject_oversized_post();
 security_require_csrf_token();
+tracking_ensure_file_columns($conn, 'incoming');
 
 $response = ["success" => false, "message" => ""];
 
@@ -27,56 +30,11 @@ try {
     $description = $_POST["description"];
     $remarks = $_POST["remarks"] ?? "";
 
-    $uploadDir = "uploads/";
-    $fileName = null;
-    $fileType = null;
-    $fileSize = null;
+    $uploadedFiles = tracking_save_uploaded_files('file');
+    $fileName = $uploadedFiles['file_name'];
+    $fileType = $uploadedFiles['file_type'];
+    $fileSize = $uploadedFiles['file_size'];
     $uploadTime = date("Y-m-d H:i:s");
-
-    if (!empty($_FILES["file"]["name"])) {
-        $fileTmpPath = $_FILES["file"]["tmp_name"];
-        $originalFileName = basename($_FILES["file"]["name"]);
-        $fileExtension = strtolower(pathinfo($originalFileName, PATHINFO_EXTENSION));
-        $baseName = pathinfo($originalFileName, PATHINFO_FILENAME);
-
-        // 🔹 Sanitize base name
-        $sanitizedBaseName = preg_replace("/[^A-Za-z0-9_\-]/", "_", $baseName);
-
-        // 🔹 Enforce max length
-        $maxBaseLength = 80;
-        if (strlen($sanitizedBaseName) > $maxBaseLength) {
-            $sanitizedBaseName = substr($sanitizedBaseName, 0, $maxBaseLength);
-        }
-
-        // 🔹 Add timestamp
-        $timestamp = date("Ymd_His");
-        $fileName = strtolower($sanitizedBaseName . "_" . $timestamp . "." . $fileExtension);
-
-        $fileType = security_detect_upload_mime($fileTmpPath);
-        $fileSize = $_FILES["file"]["size"];
-
-        $allowedTypes = [
-            'pdf' => ['application/pdf'],
-            'doc' => ['application/msword'],
-            'docx' => ['application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
-            'jpg' => ['image/jpeg'],
-            'jpeg' => ['image/jpeg'],
-            'png' => ['image/png'],
-            'xlsx' => ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'],
-            'xlsm' => ['application/vnd.ms-excel.sheet.macroEnabled.12'],
-        ];
-        if (!isset($allowedTypes[$fileExtension]) || !in_array($fileType, $allowedTypes[$fileExtension], true)) {
-            throw new Exception("Invalid file type. Allowed: PDF, DOC, DOCX, JPG, PNG, XLSX, XLSM.");
-        }
-
-        if (!is_dir($uploadDir)) {
-            mkdir($uploadDir, 0755, true);
-        }
-
-        if (!move_uploaded_file($fileTmpPath, $uploadDir . $fileName)) {
-            throw new Exception("File upload failed.");
-        }
-    }
 
     $tempTrackingNumber = "TEMP";
 
@@ -86,9 +44,10 @@ try {
     if (!$stmt) {
         throw new Exception("Database prepare error: " . $conn->error);
     }
-    $stmt->bind_param("ssssissss", $date_received, $description, $fileName, $fileType, $fileSize, $uploadTime, $remarks, $tempTrackingNumber, $user_log);
+    $stmt->bind_param("sssssssss", $date_received, $description, $fileName, $fileType, $fileSize, $uploadTime, $remarks, $tempTrackingNumber, $user_log);
 
     if (!$stmt->execute()) {
+        tracking_cleanup_saved_paths($uploadedFiles['paths']);
         throw new Exception("Database error: " . $stmt->error);
     }
 
@@ -103,6 +62,7 @@ try {
     $updateStmt->bind_param("si", $tracking_number, $insertedId);
 
     if (!$updateStmt->execute()) {
+        tracking_cleanup_saved_paths($uploadedFiles['paths']);
         throw new Exception("Database update error: " . $updateStmt->error);
     }
 
@@ -127,6 +87,9 @@ try {
         'actor_id' => (int) ($_SESSION['user_id'] ?? 0),
     ]);
 } catch (Exception $e) {
+    if (isset($uploadedFiles) && is_array($uploadedFiles)) {
+        tracking_cleanup_saved_paths($uploadedFiles['paths'] ?? []);
+    }
     $response["message"] = $e->getMessage();
 }
 

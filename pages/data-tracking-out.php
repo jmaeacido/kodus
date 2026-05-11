@@ -365,7 +365,7 @@
             <input type="hidden" id="user-type" value="<?= htmlspecialchars($userType ?? '') ?>">
             <div id="track-documents-container" style="display: none;">
               <button id="track-documents" class="btn btn-outline-primary btn-xs kodus-track-btn">Track Outgoing Documents</button>
-            </div>
+            </div><br>
             <div class="table-container kodus-table-scroll" style="--kodus-table-min-width: 1150px;">
               <table id="Outgoing-table" class="table table-bordered table-striped" style="text-align: center; width: 100%; table-layout: auto;">
                 <thead style="font-size: 10px;">
@@ -437,9 +437,12 @@ function renderFileLink(fileName) {
         return '<span class="kodus-detail-empty">No file attached</span>';
     }
 
-    const safeName = escapeHtml(normalized);
-    const safeUrl = encodeURIComponent(normalized).replace(/%2F/g, '/');
-    return `<a class="kodus-detail-link" onclick="openPopup('uploads/${safeUrl}')" href="javascript:void(0)">${safeName}</a>`;
+    const files = normalized.split(',').map(file => file.trim()).filter(Boolean);
+    return files.map(file => {
+        const safeName = escapeHtml(file);
+        const safeUrl = encodeURIComponent(file).replace(/%2F/g, '/');
+        return `<a class="kodus-detail-link d-inline-block mr-2" onclick="openPopup('uploads/${safeUrl}')" href="javascript:void(0)">${safeName}</a>`;
+    }).join('');
 }
 
 function escapeAttribute(value) {
@@ -709,14 +712,14 @@ function showEditForm(rowData, date_out, date_forwarded) {
                     <div class="kodus-edit-grid">
                         <div class="kodus-edit-field kodus-edit-field--full">
                             <label>Attachment</label>
-                            <input type="file" id="file" name="file" class="form-control">
+                            <input type="file" id="file" name="file[]" class="form-control" multiple>
                             <span class="kodus-edit-help">
-                                Current file:
+                                Current file(s):
                                 <span class="kodus-edit-inline-file">
                                     ${rowData.file_name 
-                                        ? `<a class="kodus-detail-link" onclick="openPopup('uploads/${rowData.file_name}')" href="javascript:void(0)">${rowData.file_name}</a>
+                                        ? `${renderFileLink(rowData.file_name)}
                                            <label class="kodus-edit-check">
-                                               <input type="checkbox" id="remove_file" name="remove_file" value="1"> Remove file
+                                               <input type="checkbox" id="remove_file" name="remove_file" value="1"> Remove file(s)
                                            </label>`
                                         : '<span class="kodus-detail-empty">No file attached</span>'}
                                 </span>
@@ -817,7 +820,7 @@ document.getElementById("track-documents").addEventListener("click", function ()
                         </div>
                         <div class="kodus-form-field">
                             <label for="file">Upload File</label>
-                            <input type="file" id="file" name="file" class="form-control">
+                            <input type="file" id="file" name="file[]" class="form-control" multiple>
                             <small id="incomingFileInfo" class="kodus-form-inline-note"></small>
                         </div>
                         <div class="kodus-form-field kodus-form-field--full">
@@ -936,11 +939,7 @@ document.getElementById("track-documents").addEventListener("click", function ()
                 $suggestions.hide();
 
                 $("#incomingFileInfo")
-                    .html(`Incoming file: <u>${item.file_name}</u> (click to preview)<br><span style="color:gray;">No need to upload a file, the incoming one will be used.</span>`)
-                    .off("click")
-                    .on("click", function () {
-                        openPopup("uploads/" + item.file_name);
-                    })
+                    .html(`Incoming file(s): ${renderFileLink(item.file_name)}<br><span style="color:gray;">No need to upload a file, the incoming one will be used.</span>`)
                     .show();
 
                 $("#file").prop("disabled", true);
@@ -957,7 +956,7 @@ document.getElementById("track-documents").addEventListener("click", function ()
         preConfirm: () => {
             let formData = new FormData(document.getElementById("trackForm"));
             appendCsrfToken(formData);
-            return fetch("track_Outgoing.php", {
+            return fetch("track_outgoing.php", {
                 method: "POST",
                 credentials: "same-origin",
                 body: formData

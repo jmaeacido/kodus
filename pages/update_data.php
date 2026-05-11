@@ -4,6 +4,7 @@ security_bootstrap_session();
 require_once __DIR__ . '/../auth_helpers.php';
 require_once __DIR__ . '/../socket_helpers.php';
 require_once __DIR__ . '/../app_notification_helpers.php';
+require_once __DIR__ . '/document_upload_helpers.php';
 header('Content-Type: application/json');
 
 require_once __DIR__ . '/../config.php';
@@ -12,7 +13,9 @@ auth_handle_page_access($conn);
 auth_apply_security_headers();
 security_enforce_same_origin();
 security_require_method(['POST']);
+tracking_reject_oversized_post();
 security_require_csrf_token();
+tracking_ensure_file_columns($conn, 'incoming');
 
 try {
     $id = $_POST['id'] ?? null;
@@ -36,7 +39,6 @@ try {
         throw new Exception("Document not found.");
     }
 
-    $uploadDir = "uploads/";
     $fileName = null;
     $fileType = null;
     $fileSize = null;
@@ -44,58 +46,17 @@ try {
     $fileAction = "keep";
 
     $existingFileName = (string) ($existingRecord['file_name'] ?? '');
-    $existingFilePath = $existingFileName !== '' ? $uploadDir . $existingFileName : null;
     $newFilePath = null;
+    $uploadedFiles = ['paths' => []];
 
     if ($removeFile === 1) {
         $fileAction = "remove";
-    } elseif (!empty($_FILES["file"]["name"])) {
-        $fileTmpPath = $_FILES["file"]["tmp_name"];
-        $originalFileName = basename($_FILES["file"]["name"]);
-        $fileExtension = strtolower(pathinfo($originalFileName, PATHINFO_EXTENSION));
-        $baseName = pathinfo($originalFileName, PATHINFO_FILENAME);
-
-        // 🔹 Sanitize base name
-        $sanitizedBaseName = preg_replace("/[^A-Za-z0-9_\-]/", "_", $baseName);
-
-        // 🔹 Enforce max length
-        $maxBaseLength = 80;
-        if (strlen($sanitizedBaseName) > $maxBaseLength) {
-            $sanitizedBaseName = substr($sanitizedBaseName, 0, $maxBaseLength);
-        }
-
-        // 🔹 Add timestamp
-        $timestamp = date("Ymd_His");
-        $fileName = strtolower($sanitizedBaseName . "_" . $timestamp . "." . $fileExtension);
-
-        $fileType = security_detect_upload_mime($fileTmpPath);
-        $fileSize = $_FILES["file"]["size"];
+    } elseif (tracking_has_uploaded_files('file')) {
+        $uploadedFiles = tracking_save_uploaded_files('file');
+        $fileName = $uploadedFiles['file_name'];
+        $fileType = $uploadedFiles['file_type'];
+        $fileSize = $uploadedFiles['file_size'];
         $uploadTime = date("Y-m-d H:i:s");
-
-        $allowedTypes = [
-            'pdf' => ['application/pdf'],
-            'doc' => ['application/msword'],
-            'docx' => ['application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
-            'jpg' => ['image/jpeg'],
-            'jpeg' => ['image/jpeg'],
-            'png' => ['image/png'],
-            'xlsx' => ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'],
-            'xlsm' => ['application/vnd.ms-excel.sheet.macroEnabled.12'],
-        ];
-        if (!isset($allowedTypes[$fileExtension]) || !in_array($fileType, $allowedTypes[$fileExtension], true)) {
-            throw new Exception("Invalid file type. Allowed: PDF, DOC, DOCX, JPG, PNG, XLSX, XLSM.");
-        }
-
-        if (!is_dir($uploadDir)) {
-            mkdir($uploadDir, 0755, true);
-        }
-
-        $newFilePath = $uploadDir . $fileName;
-
-        if (!move_uploaded_file($fileTmpPath, $newFilePath)) {
-            throw new Exception("File upload failed.");
-        }
-
         $fileAction = "upload";
     }
 
@@ -112,7 +73,7 @@ try {
     } elseif ($fileAction === "upload") {
         $sql .= ", file_name = ?, file_size = ?, file_type = ?, upload_time = ?";
         $params = array_merge($params, [$fileName, $fileSize, $fileType, $uploadTime]);
-        $types .= "siss";
+        $types .= "ssss";
     }
 
     $sql .= " WHERE id = ?";
@@ -182,16 +143,14 @@ try {
             'actor_id' => (int) ($_SESSION['user_id'] ?? 0),
         ]);
 
-        if ($fileAction === "remove" && $existingFilePath && file_exists($existingFilePath)) {
-            @unlink($existingFilePath);
-        } elseif ($fileAction === "upload" && $existingFilePath && file_exists($existingFilePath)) {
-            @unlink($existingFilePath);
+        if ($fileAction === "remove" || $fileAction === "upload") {
+            tracking_delete_files_if_unreferenced($conn, $existingFileName);
         }
 
         echo json_encode(['success' => true, 'message' => 'Document updated successfully.']);
     } else {
-        if ($fileAction === "upload" && $newFilePath && file_exists($newFilePath)) {
-            @unlink($newFilePath);
+        if ($fileAction === "upload") {
+            tracking_cleanup_saved_paths($uploadedFiles['paths'] ?? []);
         }
         throw new Exception("Database error: " . $stmt->error);
     }
@@ -199,9 +158,7 @@ try {
     $stmt->close();
     $conn->close();
 } catch (Exception $e) {
-    if (isset($newFilePath) && is_string($newFilePath) && $newFilePath !== '' && file_exists($newFilePath)) {
-        @unlink($newFilePath);
-    }
+    tracking_cleanup_saved_paths($uploadedFiles['paths'] ?? []);
     echo json_encode(['success' => false, 'message' => $e->getMessage()]);
 }
 ?>

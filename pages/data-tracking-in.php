@@ -363,7 +363,7 @@ session_start();
             <input type="hidden" id="user-type" value="<?= htmlspecialchars($userType ?? '') ?>">
             <div id="track-documents-container" style="display: none;">
               <button id="track-documents" class="btn btn-outline-primary btn-xs kodus-track-btn">Track Incoming Documents</button>
-            </div>
+            </div><br>
             <div class="table-container kodus-table-scroll" style="--kodus-table-min-width: 1200px;">
               <table id="incoming-table" class="table table-bordered table-striped" style="text-align: center; width: max-content; width: 100%; table-layout: auto;">
                 <thead style="font-size: 10px;">
@@ -435,9 +435,12 @@ function renderFileLink(fileName) {
         return '<span class="kodus-detail-empty">No file attached</span>';
     }
 
-    const safeName = escapeHtml(normalized);
-    const safeUrl = encodeURIComponent(normalized).replace(/%2F/g, '/');
-    return `<a class="kodus-detail-link" onclick="openPopup('uploads/${safeUrl}')" href="javascript:void(0)">${safeName}</a>`;
+    const files = normalized.split(',').map(file => file.trim()).filter(Boolean);
+    return files.map(file => {
+        const safeName = escapeHtml(file);
+        const safeUrl = encodeURIComponent(file).replace(/%2F/g, '/');
+        return `<a class="kodus-detail-link d-inline-block mr-2" onclick="openPopup('uploads/${safeUrl}')" href="javascript:void(0)">${safeName}</a>`;
+    }).join('');
 }
 
 function escapeAttribute(value) {
@@ -726,14 +729,14 @@ function showEditForm(rowData, date_received, focal) {
                     <div class="kodus-edit-grid">
                         <div class="kodus-edit-field kodus-edit-field--full">
                             <label>Attachment</label>
-                            <input type="file" id="file" name="file" class="form-control">
+                            <input type="file" id="file" name="file[]" class="form-control" multiple>
                             <span class="kodus-edit-help">
-                                Current file:
+                                Current file(s):
                                 <span class="kodus-edit-inline-file">
                                     ${rowData.file_name 
-                                        ? `<a class="kodus-detail-link" onclick="openPopup('uploads/${rowData.file_name}')" href="javascript:void(0)">${rowData.file_name}</a>
+                                        ? `${renderFileLink(rowData.file_name)}
                                            <label class="kodus-edit-check">
-                                               <input type="checkbox" id="remove_file" name="remove_file" value="1"> Remove file
+                                               <input type="checkbox" id="remove_file" name="remove_file" value="1"> Remove file(s)
                                            </label>`
                                         : '<span class="kodus-detail-empty">No file attached</span>'}
                                 </span>
@@ -921,8 +924,8 @@ document.getElementById("track-documents").addEventListener("click", function ()
                     <div class="kodus-form-grid">
                         <div class="kodus-form-field">
                             <label for="file">Upload File</label>
-                            <input type="file" id="file" name="file" class="form-control">
-                            <span class="kodus-form-help">Optional. Attach a soft copy to make future review faster.</span>
+                            <input type="file" id="file" name="file[]" class="form-control" multiple>
+                            <span class="kodus-form-help">Optional. Attach one or more soft copies to make future review faster.</span>
                         </div>
                         <div class="kodus-form-field kodus-form-field--full">
                             <label for="remarks">Remarks</label>

@@ -230,6 +230,28 @@ function mebis_consolidator_store_job_files(array $files): array
     return [$token, $stored];
 }
 
+function mebis_consolidator_status_path(string $token): string
+{
+    return mebis_consolidator_jobs_dir() . '/status_' . preg_replace('/[^a-f0-9]/i', '', $token) . '.json';
+}
+
+function mebis_consolidator_write_job_status(string $token, array $payload): void
+{
+    $status = array_merge([
+        'job_token' => preg_replace('/[^a-f0-9]/i', '', $token),
+        'status' => 'queued',
+        'progress' => 5,
+        'current_step' => 'Queued',
+        'message' => 'Waiting for the background generator to start.',
+        'updated_at' => date(DATE_ATOM),
+    ], $payload);
+
+    $json = json_encode($status);
+    if (is_string($json)) {
+        @file_put_contents(mebis_consolidator_status_path($token), $json, LOCK_EX);
+    }
+}
+
 function mebis_consolidator_cleanup_job_files(string $token): void
 {
     $dir = mebis_consolidator_jobs_dir() . '/' . preg_replace('/[^a-f0-9]/i', '', $token);
@@ -345,12 +367,19 @@ try {
 
     if (mebis_is_ajax_request() && function_exists('fastcgi_finish_request')) {
         [$jobToken, $storedFiles] = mebis_consolidator_store_job_files($mebisFiles);
+        mebis_consolidator_write_job_status($jobToken, [
+            'status' => 'queued',
+            'progress' => 5,
+            'current_step' => 'Queued',
+            'message' => 'Waiting for the background generator to start.',
+        ]);
         ignore_user_abort(true);
         http_response_code(202);
         header('Content-Type: application/json');
         header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
         echo json_encode([
             'success' => true,
+            'job_token' => $jobToken,
             'message' => sprintf(
                 '%d workbook%s queued for background name-matching template generation. A notification will appear when the CSV is ready.',
                 count($storedFiles),
@@ -365,7 +394,21 @@ try {
         fastcgi_finish_request();
 
         try {
+            mebis_consolidator_write_job_status($jobToken, [
+                'status' => 'processing',
+                'progress' => 35,
+                'current_step' => 'Generating CSV',
+                'message' => 'Matching records and preparing the CSV file...',
+            ]);
             $result = mebis_generate_consolidated_template($conn instanceof mysqli ? $conn : null, $storedFiles, $createdBy);
+            mebis_consolidator_write_job_status($jobToken, [
+                'status' => 'completed',
+                'progress' => 100,
+                'current_step' => 'Completed',
+                'message' => sprintf('MEBIS name-matching CSV saved with %d rows.', (int) $result['rows']),
+                'rows' => (int) $result['rows'],
+                'token' => (string) $result['token'],
+            ]);
             if ($conn instanceof mysqli) {
                 app_notification_create($conn, [
                     'category' => 'mebis_name_matching',
@@ -380,6 +423,12 @@ try {
                 ]);
             }
         } catch (Throwable $backgroundException) {
+            mebis_consolidator_write_job_status($jobToken, [
+                'status' => 'failed',
+                'progress' => 100,
+                'current_step' => 'Failed',
+                'message' => 'Template generation failed: ' . $backgroundException->getMessage(),
+            ]);
             if ($conn instanceof mysqli) {
                 app_notification_create($conn, [
                     'category' => 'mebis_name_matching',

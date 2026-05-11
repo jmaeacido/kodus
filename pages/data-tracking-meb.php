@@ -330,6 +330,7 @@ unset($_SESSION['meb_import_flash']);
   const canEditMebRecords = <?php echo $canEditMebRecords ? 'true' : 'false'; ?>;
   const selectedFiscalYear = <?php echo json_encode($selectedFiscalYear); ?>;
   const importFlash = <?php echo json_encode($importFlash); ?>;
+  const kodusCsrfToken = <?php echo json_encode(security_get_csrf_token()); ?>;
 
   function displayFileName() {
     const fileInput = document.getElementById('excelFile');
@@ -411,7 +412,7 @@ unset($_SESSION['meb_import_flash']);
         title: 'Importing Workbook',
         html: `
           <div class="text-left">
-            <p class="mb-2">Please keep this tab open while we upload and import the Excel workbook.</p>
+            <p class="mb-2">Please keep this tab open while the workbook uploads. Importing will continue in the background.</p>
             <div class="d-flex justify-content-between align-items-center mb-2">
               <strong id="mebImportProgressStatus">Preparing upload...</strong>
               <span id="mebImportProgressValue">8%</span>
@@ -458,8 +459,8 @@ unset($_SESSION['meb_import_flash']);
         });
 
         xhr.upload.addEventListener('load', function () {
-          updateImportProgress(Math.max(importProgressValue, 74), 'Upload complete. Importing rows...');
-          startImportProgressRamp(94, 'Validating headers and saving records...');
+          updateImportProgress(Math.max(importProgressValue, 74), 'Upload complete. Queueing background import...');
+          startImportProgressRamp(90, 'Starting background importer...');
         });
 
         xhr.addEventListener('load', function () {
@@ -486,7 +487,7 @@ unset($_SESSION['meb_import_flash']);
             return;
           }
 
-          updateImportProgress(100, 'Import complete.');
+          updateImportProgress(Math.max(importProgressValue, 90), 'Background import started.');
           window.setTimeout(function () {
             resolve(payload);
           }, 220);
@@ -518,6 +519,149 @@ unset($_SESSION['meb_import_flash']);
       });
     }
 
+    function ensureImportStatusPanel() {
+      let panel = document.getElementById('mebImportJobPanel');
+      if (panel) {
+        return panel;
+      }
+
+      const cardHeader = importForm.closest('.card-header');
+      panel = document.createElement('div');
+      panel.id = 'mebImportJobPanel';
+      panel.className = 'alert alert-info mt-2 mb-0';
+      panel.style.display = 'none';
+      panel.innerHTML = `
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <strong id="mebImportJobMessage">MEB import is running in the background.</strong>
+          <span id="mebImportJobProgress">0%</span>
+        </div>
+        <div class="progress" style="height: 0.65rem;">
+          <div id="mebImportJobProgressBar" class="progress-bar progress-bar-striped progress-bar-animated bg-info" role="progressbar" style="width:0%;" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></div>
+        </div>
+        <div class="mt-2 d-none" id="mebImportJobActions">
+          <a class="btn btn-success btn-sm" id="mebImportJobBatch" href="#">View imported batch</a>
+        </div>
+      `;
+      if (cardHeader && cardHeader.parentNode) {
+        cardHeader.parentNode.insertBefore(panel, cardHeader.nextSibling);
+      }
+
+      return panel;
+    }
+
+    function updateImportStatusPanel(job) {
+      const panel = ensureImportStatusPanel();
+      const progress = Math.max(0, Math.min(100, Number(job && job.progress ? job.progress : 0)));
+      const status = String(job && job.status ? job.status : 'queued');
+      const message = document.getElementById('mebImportJobMessage');
+      const label = document.getElementById('mebImportJobProgress');
+      const bar = document.getElementById('mebImportJobProgressBar');
+      const actions = document.getElementById('mebImportJobActions');
+      const batch = document.getElementById('mebImportJobBatch');
+
+      panel.style.display = '';
+      panel.className = status === 'failed' ? 'alert alert-danger mt-2 mb-0' : (status === 'completed' ? 'alert alert-success mt-2 mb-0' : 'alert alert-info mt-2 mb-0');
+      if (message) {
+        message.textContent = job.message || (status === 'completed' ? 'Import complete.' : 'MEB import is running in the background.');
+      }
+      if (label) {
+        label.textContent = `${Math.round(progress)}%`;
+      }
+      if (bar) {
+        bar.className = status === 'failed' ? 'progress-bar bg-danger' : (status === 'completed' ? 'progress-bar bg-success' : 'progress-bar progress-bar-striped progress-bar-animated bg-info');
+        bar.style.width = `${progress}%`;
+        bar.setAttribute('aria-valuenow', String(Math.round(progress)));
+      }
+      if (actions && batch) {
+        if (status === 'completed' && job.batch_url) {
+          actions.classList.remove('d-none');
+          batch.href = job.batch_url;
+        } else {
+          actions.classList.add('d-none');
+        }
+      }
+    }
+
+    async function fetchImportJob(jobToken) {
+      const response = await fetch(`meb_import_status?job=${encodeURIComponent(jobToken)}`, {
+        credentials: 'same-origin',
+        headers: {
+          Accept: 'application/json'
+        }
+      });
+      const payload = await response.json().catch(function () {
+        return null;
+      });
+      if (!response.ok || !payload || payload.success !== true) {
+        throw new Error(payload && payload.message ? payload.message : 'Unable to check import progress.');
+      }
+      return payload;
+    }
+
+    function waitForImportJob(jobToken) {
+      return new Promise(function (resolve, reject) {
+        const startedAt = Date.now();
+        const poll = async function () {
+          try {
+            const payload = await fetchImportJob(jobToken);
+            const job = payload.job || {};
+            updateImportStatusPanel(job);
+            updateImportProgress(job.progress || importProgressValue, job.current_step || job.message || 'Importing records...');
+
+            if (job.status === 'completed') {
+              clearImportProgressTimer();
+              updateImportProgress(100, 'Import complete.');
+              resolve(job);
+              return;
+            }
+
+            if (job.status === 'failed') {
+              reject(new Error(job.message || 'MEB import failed.'));
+              return;
+            }
+
+            if (Date.now() - startedAt > 600000) {
+              reject(new Error('Import is still running. Please check notifications shortly.'));
+              return;
+            }
+
+            window.setTimeout(poll, 1600);
+          } catch (error) {
+            reject(error);
+          }
+        };
+
+        poll();
+      });
+    }
+
+    async function restoreLatestImportJob() {
+      try {
+        const response = await fetch('meb_import_status', {
+          credentials: 'same-origin',
+          headers: {
+            Accept: 'application/json'
+          }
+        });
+        const payload = await response.json().catch(function () {
+          return null;
+        });
+        const job = payload && payload.success === true ? payload.job : null;
+        if (!job || !job.job_token) {
+          return;
+        }
+        if (['queued', 'processing'].includes(String(job.status || ''))) {
+          updateImportStatusPanel(job);
+          waitForImportJob(job.job_token).catch(function () {});
+        } else if (job.status === 'completed' || job.status === 'failed') {
+          updateImportStatusPanel(job);
+        }
+      } catch (error) {
+      }
+    }
+
+    restoreLatestImportJob();
+
     importForm.addEventListener('submit', async function (event) {
       event.preventDefault();
 
@@ -537,8 +681,20 @@ unset($_SESSION['meb_import_flash']);
       try {
         openImportProgressModal();
         const payload = await submitImportRequest(formData);
-
-        window.location.href = payload.redirect || 'data-tracking-meb';
+        const job = payload.job || {};
+        if (!job.job_token) {
+          throw new Error(payload.message || 'Import job was not created.');
+        }
+        updateImportStatusPanel(job);
+        startImportProgressRamp(94, 'Importing records in the background...');
+        const completedJob = await waitForImportJob(job.job_token);
+        Swal.close();
+        await Swal.fire({
+          icon: 'success',
+          title: 'Import Complete',
+          text: completedJob.message || 'MEB records were imported successfully.'
+        });
+        window.location.href = completedJob.batch_url || 'data-tracking-meb';
       } catch (error) {
         clearImportProgressTimer();
         importSubmit.disabled = false;
@@ -612,7 +768,7 @@ unset($_SESSION['meb_import_flash']);
         title: 'Generating Profile File',
         html: `
           <div class="text-left">
-            <p class="mb-2">Please keep this tab open while we build the Partner-Beneficiaries Profile workbook.</p>
+            <p class="mb-2">Your workbook is being generated in the background. KODUS will notify you when it is ready.</p>
             <div class="d-flex justify-content-between align-items-center mb-2">
               <strong id="mebProfileProgressStatus">Preparing export...</strong>
               <span id="mebProfileProgressValue">10%</span>
@@ -639,110 +795,139 @@ unset($_SESSION['meb_import_flash']);
       });
     }
 
-    function resolveDownloadFilename(xhr) {
-      const disposition = xhr.getResponseHeader('Content-Disposition') || '';
-      const utf8Match = disposition.match(/filename\*=UTF-8''([^;]+)/i);
-      if (utf8Match && utf8Match[1]) {
-        return decodeURIComponent(utf8Match[1]);
+    function ensureProfileStatusPanel() {
+      let panel = document.getElementById('mebProfileJobPanel');
+      if (panel) {
+        return panel;
       }
 
-      const plainMatch = disposition.match(/filename="?([^"]+)"?/i);
-      if (plainMatch && plainMatch[1]) {
-        return plainMatch[1];
+      const cardHeader = generateProfileButton.closest('.card-header');
+      panel = document.createElement('div');
+      panel.id = 'mebProfileJobPanel';
+      panel.className = 'alert alert-info mt-2 mb-0';
+      panel.style.display = 'none';
+      panel.innerHTML = `
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <strong id="mebProfileJobMessage">Profile file generation is running in the background.</strong>
+          <span id="mebProfileJobProgress">0%</span>
+        </div>
+        <div class="progress" style="height: 0.65rem;">
+          <div id="mebProfileJobProgressBar" class="progress-bar progress-bar-striped progress-bar-animated bg-info" role="progressbar" style="width:0%;" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></div>
+        </div>
+        <div class="mt-2 d-none" id="mebProfileJobActions">
+          <a class="btn btn-success btn-sm" id="mebProfileJobDownload" href="#">Download profile file</a>
+        </div>
+      `;
+      if (cardHeader && cardHeader.parentNode) {
+        cardHeader.parentNode.insertBefore(panel, cardHeader.nextSibling);
       }
 
-      return 'Partner-Beneficiaries_Profile.xlsx';
+      return panel;
     }
 
-    function triggerBlobDownload(blob, filename) {
-      const downloadUrl = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = downloadUrl;
-      link.download = filename;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.setTimeout(function () {
-        window.URL.revokeObjectURL(downloadUrl);
-      }, 1000);
+    function updateProfileStatusPanel(job) {
+      const panel = ensureProfileStatusPanel();
+      const progress = Math.max(0, Math.min(100, Number(job && job.progress ? job.progress : 0)));
+      const message = document.getElementById('mebProfileJobMessage');
+      const label = document.getElementById('mebProfileJobProgress');
+      const bar = document.getElementById('mebProfileJobProgressBar');
+      const actions = document.getElementById('mebProfileJobActions');
+      const download = document.getElementById('mebProfileJobDownload');
+      const status = String(job && job.status ? job.status : 'queued');
+
+      panel.style.display = '';
+      panel.className = status === 'failed' ? 'alert alert-danger mt-2 mb-0' : (status === 'completed' ? 'alert alert-success mt-2 mb-0' : 'alert alert-info mt-2 mb-0');
+      if (message) {
+        message.textContent = job.message || (status === 'completed' ? 'Profile file is ready.' : 'Profile file generation is running in the background.');
+      }
+      if (label) {
+        label.textContent = `${Math.round(progress)}%`;
+      }
+      if (bar) {
+        bar.className = status === 'failed' ? 'progress-bar bg-danger' : (status === 'completed' ? 'progress-bar bg-success' : 'progress-bar progress-bar-striped progress-bar-animated bg-info');
+        bar.style.width = `${progress}%`;
+        bar.setAttribute('aria-valuenow', String(Math.round(progress)));
+      }
+      if (actions && download) {
+        if (status === 'completed' && job.download_url) {
+          actions.classList.remove('d-none');
+          download.href = job.download_url;
+        } else {
+          actions.classList.add('d-none');
+        }
+      }
     }
 
-    function requestProfileFile() {
+    async function parseJsonResponse(response) {
+      const payload = await response.json().catch(function () {
+        return null;
+      });
+      if (!response.ok || !payload || payload.success !== true) {
+        throw new Error(payload && payload.message ? payload.message : 'Unable to generate the profile workbook.');
+      }
+      return payload;
+    }
+
+    async function startProfileJob() {
+      const formData = new FormData();
+      formData.set('csrf_token', kodusCsrfToken);
+      const response = await fetch('profile_export_start', {
+        method: 'POST',
+        body: formData,
+        credentials: 'same-origin',
+        headers: {
+          Accept: 'application/json'
+        }
+      });
+
+      return parseJsonResponse(response);
+    }
+
+    async function fetchProfileJob(jobToken) {
+      const response = await fetch(`profile_export_status?job=${encodeURIComponent(jobToken)}`, {
+        credentials: 'same-origin',
+        headers: {
+          Accept: 'application/json'
+        }
+      });
+
+      return parseJsonResponse(response);
+    }
+
+    function waitForProfileJob(jobToken) {
       return new Promise(function (resolve, reject) {
-        const xhr = new XMLHttpRequest();
-        let settled = false;
+        const startedAt = Date.now();
+        const poll = async function () {
+          try {
+            const payload = await fetchProfileJob(jobToken);
+            const job = payload.job || {};
+            updateProfileStatusPanel(job);
+            updateProfileProgress(job.progress || profileProgressValue, job.current_step || job.message || 'Generating profile file...');
 
-        xhr.open('GET', 'export_profile', true);
-        xhr.withCredentials = true;
-        xhr.responseType = 'blob';
+            if (job.status === 'completed') {
+              clearProfileProgressTimer();
+              updateProfileProgress(100, 'Workbook ready.');
+              resolve(job);
+              return;
+            }
 
-        xhr.addEventListener('readystatechange', function () {
-          if (xhr.readyState >= 2 && profileProgressValue < 28) {
-            updateProfileProgress(28, 'Export started. Gathering records...');
-            startProfileProgressRamp(92, 'Formatting workbook and preparing download...');
+            if (job.status === 'failed') {
+              reject(new Error(job.message || 'Profile file generation failed.'));
+              return;
+            }
+
+            if (Date.now() - startedAt > 600000) {
+              reject(new Error('Profile generation is still running. Please check notifications shortly.'));
+              return;
+            }
+
+            window.setTimeout(poll, 1600);
+          } catch (error) {
+            reject(error);
           }
-        });
+        };
 
-        xhr.addEventListener('progress', function (event) {
-          if (!event.lengthComputable) {
-            return;
-          }
-
-          const percent = 28 + Math.round((event.loaded / event.total) * 64);
-          updateProfileProgress(Math.max(profileProgressValue, percent), 'Streaming workbook...');
-        });
-
-        xhr.addEventListener('load', function () {
-          if (settled) {
-            return;
-          }
-
-          settled = true;
-          clearProfileProgressTimer();
-
-          if (xhr.status < 200 || xhr.status >= 300) {
-            reject(new Error('Unable to generate the profile workbook.'));
-            return;
-          }
-
-          const contentType = xhr.getResponseHeader('Content-Type') || '';
-          if (contentType.indexOf('application/json') !== -1 || contentType.indexOf('text/html') !== -1) {
-            reject(new Error('The server returned an unexpected response while generating the workbook.'));
-            return;
-          }
-
-          updateProfileProgress(100, 'Workbook ready.');
-          window.setTimeout(function () {
-            resolve({
-              blob: xhr.response,
-              filename: resolveDownloadFilename(xhr)
-            });
-          }, 220);
-        });
-
-        xhr.addEventListener('error', function () {
-          if (settled) {
-            return;
-          }
-
-          settled = true;
-          clearProfileProgressTimer();
-          reject(new Error('Unable to generate the profile workbook.'));
-        });
-
-        xhr.addEventListener('abort', function () {
-          if (settled) {
-            return;
-          }
-
-          settled = true;
-          clearProfileProgressTimer();
-          reject(new Error('Profile generation was cancelled.'));
-        });
-
-        updateProfileProgress(14, 'Starting export...');
-        startProfileProgressRamp(24, 'Starting export...');
-        xhr.send();
+        poll();
       });
     }
 
@@ -751,9 +936,21 @@ unset($_SESSION['meb_import_flash']);
 
       try {
         openProfileProgressModal();
-        const result = await requestProfileFile();
+        updateProfileProgress(14, 'Queueing background generator...');
+        startProfileProgressRamp(28, 'Queueing background generator...');
+        const payload = await startProfileJob();
+        const job = payload.job || {};
+        if (!job.job_token) {
+          throw new Error(payload.message || 'Profile generation job was not created.');
+        }
+        updateProfileStatusPanel(job);
+        updateProfileProgress(Math.max(24, job.progress || 0), 'Background generator started...');
+        startProfileProgressRamp(94, 'Generating workbook in the background...');
+        const completedJob = await waitForProfileJob(job.job_token);
         Swal.close();
-        triggerBlobDownload(result.blob, result.filename);
+        if (completedJob.download_url) {
+          window.location.href = completedJob.download_url;
+        }
       } catch (error) {
         clearProfileProgressTimer();
         Swal.close();

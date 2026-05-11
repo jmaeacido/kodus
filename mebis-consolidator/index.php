@@ -810,6 +810,7 @@ document.addEventListener('DOMContentLoaded', function() {
       if (isQueued) {
         window.dispatchEvent(new CustomEvent('mebis-name-job-queued', {
           detail: {
+            jobToken: payload.job_token || '',
             message: payload.message || 'Name-matching CSV generation started in the background.'
           }
         }));
@@ -854,6 +855,7 @@ document.addEventListener('DOMContentLoaded', function() {
   let progressTimer = null;
   let progress = 5;
   let notificationTimer = null;
+  let statusTimer = null;
 
   if (!panel || !message || !badge || !step || !progressLabel || !progressBar || !actions || !clearButton) {
     return;
@@ -873,16 +875,100 @@ document.addEventListener('DOMContentLoaded', function() {
     actions.hidden = false;
   }
 
-  function startBackgroundIndicator(statusMessage) {
-    progress = 8;
-    renderProcessing(statusMessage);
+  function renderCompleted(job) {
+    stopTimers();
+    progress = 100;
+    panel.classList.add('is-visible', 'is-completed');
+    panel.classList.remove('is-failed');
+    badge.className = 'badge badge-success';
+    badge.textContent = 'Completed';
+    message.textContent = (job && job.message) || 'Name-matching CSV generation is complete.';
+    step.textContent = 'Completed';
+    progressLabel.textContent = '100%';
+    progressBar.className = 'progress-bar bg-success';
+    progressBar.style.width = '100%';
+    progressBar.setAttribute('aria-valuenow', '100');
+    actions.hidden = false;
+  }
 
+  function renderFailed(job) {
+    stopTimers();
+    progress = 100;
+    panel.classList.add('is-visible', 'is-failed');
+    panel.classList.remove('is-completed');
+    badge.className = 'badge badge-danger';
+    badge.textContent = 'Failed';
+    message.textContent = (job && job.message) || 'Name-matching CSV generation failed.';
+    step.textContent = 'Failed';
+    progressLabel.textContent = '100%';
+    progressBar.className = 'progress-bar bg-danger';
+    progressBar.style.width = '100%';
+    progressBar.setAttribute('aria-valuenow', '100');
+    actions.hidden = false;
+  }
+
+  function stopTimers() {
     if (progressTimer) {
       window.clearInterval(progressTimer);
+      progressTimer = null;
     }
     if (notificationTimer) {
       window.clearInterval(notificationTimer);
+      notificationTimer = null;
     }
+    if (statusTimer) {
+      window.clearInterval(statusTimer);
+      statusTimer = null;
+    }
+  }
+
+  async function pollJobStatus(jobToken) {
+    if (!jobToken) {
+      return;
+    }
+
+    try {
+      const response = await fetch('job_status?job=' + encodeURIComponent(jobToken), {
+        credentials: 'same-origin',
+        headers: {
+          Accept: 'application/json'
+        }
+      });
+      const payload = await response.json();
+      if (!response.ok || !payload || payload.success !== true || !payload.job) {
+        return;
+      }
+
+      const job = payload.job;
+      const status = String(job.status || '');
+      progress = Math.max(progress, Math.max(0, Math.min(100, Number(job.progress || 0))));
+
+      if (status === 'completed') {
+        renderCompleted(job);
+        if (window.refreshAppNotifications) {
+          window.refreshAppNotifications();
+        }
+        return;
+      }
+
+      if (status === 'failed') {
+        renderFailed(job);
+        if (window.refreshAppNotifications) {
+          window.refreshAppNotifications();
+        }
+        return;
+      }
+
+      renderProcessing(job.message || job.current_step || '');
+    } catch (error) {
+    }
+  }
+
+  function startBackgroundIndicator(statusMessage, jobToken) {
+    progress = 8;
+    renderProcessing(statusMessage);
+
+    stopTimers();
 
     progressTimer = window.setInterval(function () {
       if (progress < 94) {
@@ -896,22 +982,23 @@ document.addEventListener('DOMContentLoaded', function() {
         window.refreshAppNotifications();
       }
     }, 5000);
+
+    if (jobToken) {
+      pollJobStatus(jobToken);
+      statusTimer = window.setInterval(function () {
+        pollJobStatus(jobToken);
+      }, 1600);
+    }
   }
 
   window.addEventListener('mebis-name-job-queued', function (event) {
     const statusMessage = event.detail && event.detail.message ? String(event.detail.message) : '';
-    startBackgroundIndicator(statusMessage);
+    const jobToken = event.detail && event.detail.jobToken ? String(event.detail.jobToken) : '';
+    startBackgroundIndicator(statusMessage, jobToken);
   });
 
   clearButton.addEventListener('click', function () {
-    if (progressTimer) {
-      window.clearInterval(progressTimer);
-      progressTimer = null;
-    }
-    if (notificationTimer) {
-      window.clearInterval(notificationTimer);
-      notificationTimer = null;
-    }
+    stopTimers();
     panel.classList.remove('is-visible', 'is-completed', 'is-failed');
   });
 }());

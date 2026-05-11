@@ -241,17 +241,17 @@ if ($canViewOperations) {
                   <?php if ($canViewOperations): ?>
                   <div class="hero-summary-tile">
                     <small>Tracked Fund Items</small>
-                    <strong><?php echo number_format((int) $fundSummary['items']); ?></strong>
+                    <strong id="heroFundItems"><?php echo number_format((int) $fundSummary['items']); ?></strong>
                     <span class="text-muted small">Objects in the annual matrix</span>
                   </div>
                   <div class="hero-summary-tile">
                     <small>Adjusted Appropriation</small>
-                    <strong>PHP <?php echo number_format((float) $fundSummary['adjusted'], 2); ?></strong>
+                    <strong id="heroFundAdjusted">PHP <?php echo number_format((float) $fundSummary['adjusted'], 2); ?></strong>
                     <span class="text-muted small">Current budget alignment</span>
                   </div>
                   <div class="hero-summary-tile">
                     <small>Fund Utilization</small>
-                    <strong><?php echo number_format((float) $fundSummary['utilization'], 2); ?>%</strong>
+                    <strong id="heroFundUtilization"><?php echo number_format((float) $fundSummary['utilization'], 2); ?>%</strong>
                     <span class="text-muted small">Based on obligations</span>
                   </div>
                   <?php else: ?>
@@ -309,7 +309,7 @@ if ($canViewOperations) {
               <div class="info-box-content"><span class="info-box-text">Provinces</span><span id="provCount" class="info-box-number skeleton">0</span><span class="text-muted small">Regional footprint</span></div>
             </div>
           </div>
-        </div>
+        </div><br>
 
         <div class="row">
           <div id="dashboardSideColumn" class="<?php echo $isUserDashboard ? 'col-12' : 'col-lg-4'; ?>">
@@ -331,17 +331,17 @@ if ($canViewOperations) {
               <div class="card-body">
                 <p class="text-muted mb-3">Quick summary for fiscal year <?php echo htmlspecialchars($selectedYear, ENT_QUOTES, 'UTF-8'); ?>.</p>
                 <div class="fund-summary-grid">
-                  <div class="fund-summary-kpi"><small>Tracked Items</small><strong><?php echo number_format((int) $fundSummary['items']); ?></strong></div>
-                  <div class="fund-summary-kpi"><small>Adjusted Appropriation</small><strong>PHP <?php echo number_format((float) $fundSummary['adjusted'], 2); ?></strong></div>
-                  <div class="fund-summary-kpi"><small>Total Obligations</small><strong>PHP <?php echo number_format((float) $fundSummary['obligations'], 2); ?></strong></div>
-                  <div class="fund-summary-kpi"><small>Total Disbursement</small><strong>PHP <?php echo number_format((float) $fundSummary['disbursement'], 2); ?></strong></div>
+                  <div class="fund-summary-kpi"><small>Tracked Items</small><strong id="fundItems"><?php echo number_format((int) $fundSummary['items']); ?></strong></div>
+                  <div class="fund-summary-kpi"><small>Adjusted Appropriation</small><strong id="fundAdjusted">PHP <?php echo number_format((float) $fundSummary['adjusted'], 2); ?></strong></div>
+                  <div class="fund-summary-kpi"><small>Total Obligations</small><strong id="fundObligations">PHP <?php echo number_format((float) $fundSummary['obligations'], 2); ?></strong></div>
+                  <div class="fund-summary-kpi"><small>Total Disbursement</small><strong id="fundDisbursement">PHP <?php echo number_format((float) $fundSummary['disbursement'], 2); ?></strong></div>
                 </div>
                 <div class="mt-3">
                   <small class="text-muted d-block mb-1">Utilization Rate</small>
                   <div class="progress" style="height: .85rem; border-radius: 999px;">
-                    <div class="progress-bar bg-success" role="progressbar" style="width: <?php echo htmlspecialchars((string) max(0, min(100, round((float) $fundSummary['utilization'], 2))), ENT_QUOTES, 'UTF-8'); ?>%;" aria-valuenow="<?php echo htmlspecialchars((string) round((float) $fundSummary['utilization'], 2), ENT_QUOTES, 'UTF-8'); ?>" aria-valuemin="0" aria-valuemax="100"></div>
+                    <div id="fundUtilizationBar" class="progress-bar bg-success" role="progressbar" style="width: <?php echo htmlspecialchars((string) max(0, min(100, round((float) $fundSummary['utilization'], 2))), ENT_QUOTES, 'UTF-8'); ?>%;" aria-valuenow="<?php echo htmlspecialchars((string) round((float) $fundSummary['utilization'], 2), ENT_QUOTES, 'UTF-8'); ?>" aria-valuemin="0" aria-valuemax="100"></div>
                   </div>
-                  <strong class="d-block mt-2"><?php echo number_format((float) $fundSummary['utilization'], 2); ?>%</strong>
+                  <strong id="fundUtilizationText" class="d-block mt-2"><?php echo number_format((float) $fundSummary['utilization'], 2); ?>%</strong>
                 </div>
               </div>
             </div>
@@ -488,8 +488,11 @@ if ($canViewOperations) {
 <script>
   const charts = {};
   const isAdminDashboard = <?= $isAdminDashboard ? 'true' : 'false' ?>;
+  const canViewOperations = <?= $canViewOperations ? 'true' : 'false' ?>;
   function n(v){ return new Intl.NumberFormat().format(Number(v || 0)); }
   function p(v){ return `${Number(v || 0).toFixed(1)}%`; }
+  function money(v){ return `PHP ${new Intl.NumberFormat(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(v || 0))}`; }
+  function p2(v){ return `${Number(v || 0).toFixed(2)}%`; }
   function dark(){ return document.body.dataset.theme === 'dark' || document.body.classList.contains('dark-mode'); }
   function textColor(){ return dark() ? '#f8f9fa' : '#212529'; }
   function gridColor(){ return dark() ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.08)'; }
@@ -536,9 +539,12 @@ if ($canViewOperations) {
   function knobDraw(){ if (this.$.data('skin') !== 'tron') return; let a=this.angle(this.cv), sa=this.startAngle, sat=this.startAngle, ea, eat=sat+a; this.g.lineWidth=this.lineWidth; if(this.o.cursor){ sat=eat-.3; eat=eat+.3; } if(this.o.displayPrevious){ ea=this.startAngle+this.angle(this.value); if(this.o.cursor){ sa=ea-.3; ea=ea+.3; } this.g.beginPath(); this.g.strokeStyle=this.previousColor; this.g.arc(this.xy,this.xy,this.radius-this.lineWidth,sa,ea,false); this.g.stroke(); } this.g.beginPath(); this.g.strokeStyle=this.o.fgColor; this.g.arc(this.xy,this.xy,this.radius-this.lineWidth,sat,eat,false); this.g.stroke(); this.g.lineWidth=2; this.g.beginPath(); this.g.strokeStyle=this.o.fgColor; this.g.arc(this.xy,this.xy,this.radius-this.lineWidth+1+this.lineWidth*2/3,0,2*Math.PI,false); this.g.stroke(); return false; }
   function buildTopSectors(r){ const sectors=[['4Ps',r.fourPs_count],['Farmers (F)',r.farmer_count],['Fisher-folks (FF)',r.fisherfolk_count],['Informal Sector (IS)',r.is_count],['Indigenous People (IP)',r.ip_count],['Senior Citizen (SC)',r.sc_count],['Solo Parent (SP)',r.sp_count],['Lactating Women (LW)',r.lw_count],['Pregnant Women (PW)',r.pw_count],['PWD',r.pwd_count],['OSY',r.osy_count],['FR',r.fr_count],['YB/PWUD',r.ybDs_count],['LGBTQIA+',r.lgbtqia_count]].map(([label,count]) => [label, Number(count || 0)]).sort((a,b) => b[1]-a[1]).slice(0,5); const list = $('#topSectorList').empty(); sectors.forEach(([label,count], index) => list.append(`<li class="list-group-item d-flex justify-content-between align-items-center"><span>${index+1}. ${label}</span><span class="badge badge-primary badge-pill">${n(count)}</span></li>`)); }
   function updateKnobs(r){ const max = Math.max(r.female_nhts1_count||0, r.male_nhts1_count||0, r.female_nhts2_count||0, r.male_nhts2_count||0, 1); ['#nhts1FemaleKnob','#nhts1MaleKnob','#nhts2FemaleKnob','#nhts2MaleKnob'].forEach(id => $(id).trigger('configure',{max})); $('#nhts1FemaleKnob').val(r.female_nhts1_count||0).trigger('change'); $('#nhts1MaleKnob').val(r.male_nhts1_count||0).trigger('change'); $('#nhts2FemaleKnob').val(r.female_nhts2_count||0).trigger('change'); $('#nhts2MaleKnob').val(r.male_nhts2_count||0).trigger('change'); }
-  function render(r){ const bene = Number(r.beneficiary_count||0), female = Number(r.female_count||0), male = Number(r.male_count||0), poor = Number(r.nhts1_count||0), nonPoor = Number(r.nhts2_count||0); setValue('#beneCount', n(bene)); setValue('#barCount', n(r.barangay_count||0)); setValue('#muniCount', n(r.municipality_count||0)); setValue('#provCount', n(r.province_count||0)); setValue('#nhtsPoorCount', n(poor)); setValue('#nhtsNonPoorCount', n(nonPoor)); setValue('#femaleCountSummary', n(female)); setValue('#maleCountSummary', n(male)); setValue('#coverageRate', p(bene ? ((poor + nonPoor) / bene) * 100 : 0)); setValue('#femaleShare', p(bene ? (female / bene) * 100 : 0)); $('#dashboardRefreshTime').text(new Date().toLocaleString()); putChart('sex','sexChart',{ type:'doughnut', data:{ labels:['Female','Male'], datasets:[{ data:[female,male], backgroundColor:['#e83e8c','#0d6efd'], borderWidth:0 }] }, options:{ maintainAspectRatio:false, responsive:true, plugins:{ legend:{ position:'bottom', labels:{ color:textColor() }}}}}); putChart('class','donutChart',{ type:'doughnut', data:{ labels:['Listahanan 3 (P)','LSWDO Assessment (NON)'], datasets:[{ data:[poor,nonPoor], backgroundColor:['#fd7e14','#20c997'], borderWidth:0 }] }, options:{ maintainAspectRatio:false, responsive:true, plugins:{ legend:{ position:'bottom', labels:{ color:textColor() }}}}}); putChart('sector','sectorChart',{ type:'bar', data:{ labels:['4Ps','Farmers (F)','Fisher-folks (FF)','Informal Sector (IS)','Indigenous People (IP)','Senior Citizen (SC)','Solo Parent (SP)','Lactating Women (LW)','Pregnant Women (PW)','PWD','OSY','FR','YB/PWUD','LGBTQIA+'], datasets:[{ label:'Beneficiaries', data:[r.fourPs_count||0,r.farmer_count||0,r.fisherfolk_count||0,r.is_count||0,r.ip_count||0,r.sc_count||0,r.sp_count||0,r.lw_count||0,r.pw_count||0,r.pwd_count||0,r.osy_count||0,r.fr_count||0,r.ybDs_count||0,r.lgbtqia_count||0], backgroundColor:['#0d6efd','#20c997','#ffc107','#6610f2','#6f42c1','#fd7e14','#198754','#e83e8c','#dc3545','#17a2b8','#0dcaf0','#d63384','#1982c4','#2a9d8f'], borderRadius:8 }] }, options:{ maintainAspectRatio:false, responsive:true, plugins:{ legend:{ display:false } }, scales:{ x:{ ticks:{ color:textColor(), maxRotation:35, minRotation:20 }, grid:{ display:false } }, y:{ beginAtZero:true, ticks:{ color:textColor() }, grid:{ color:gridColor() } } } }}); updateKnobs(r); buildTopSectors(r); requestAnimationFrame(() => alignAdminSectorChartHeight()); }
-  function loadDashboard(){ $('#dashboardRefreshTime').text('Refreshing...'); $.getJSON('get_data.php').done(function(r){ if(r.error){ $('#dashboardRefreshTime').text(r.error); return; } render(r); }).fail(function(){ $('#dashboardRefreshTime').text('Unable to load dashboard data'); }); }
-  $(function(){ $('.knob').knob({ draw: knobDraw }); loadDashboard(); $('#refreshDashboardBtn').on('click', loadDashboard); $(window).on('resize', function(){ requestAnimationFrame(() => alignAdminSectorChartHeight()); }); });
+  function renderFundSummary(summary){ if (!summary) return; const utilization = Number(summary.utilization || 0); const boundedUtilization = Math.max(0, Math.min(100, utilization)); $('#heroFundItems, #fundItems').text(n(summary.items || 0)); $('#heroFundAdjusted, #fundAdjusted').text(money(summary.adjusted || 0)); $('#fundObligations').text(money(summary.obligations || 0)); $('#fundDisbursement').text(money(summary.disbursement || 0)); $('#heroFundUtilization, #fundUtilizationText').text(p2(utilization)); $('#fundUtilizationBar').css('width', `${boundedUtilization.toFixed(2)}%`).attr('aria-valuenow', utilization.toFixed(2)); }
+  function render(r){ const bene = Number(r.beneficiary_count||0), female = Number(r.female_count||0), male = Number(r.male_count||0), poor = Number(r.nhts1_count||0), nonPoor = Number(r.nhts2_count||0); setValue('#beneCount', n(bene)); setValue('#barCount', n(r.barangay_count||0)); setValue('#muniCount', n(r.municipality_count||0)); setValue('#provCount', n(r.province_count||0)); setValue('#nhtsPoorCount', n(poor)); setValue('#nhtsNonPoorCount', n(nonPoor)); setValue('#femaleCountSummary', n(female)); setValue('#maleCountSummary', n(male)); setValue('#coverageRate', p(bene ? ((poor + nonPoor) / bene) * 100 : 0)); setValue('#femaleShare', p(bene ? (female / bene) * 100 : 0)); renderFundSummary(r.fund_summary); $('#dashboardRefreshTime').text(new Date().toLocaleString()); putChart('sex','sexChart',{ type:'doughnut', data:{ labels:['Female','Male'], datasets:[{ data:[female,male], backgroundColor:['#e83e8c','#0d6efd'], borderWidth:0 }] }, options:{ maintainAspectRatio:false, responsive:true, plugins:{ legend:{ position:'bottom', labels:{ color:textColor() }}}}}); putChart('class','donutChart',{ type:'doughnut', data:{ labels:['Listahanan 3 (P)','LSWDO Assessment (NON)'], datasets:[{ data:[poor,nonPoor], backgroundColor:['#fd7e14','#20c997'], borderWidth:0 }] }, options:{ maintainAspectRatio:false, responsive:true, plugins:{ legend:{ position:'bottom', labels:{ color:textColor() }}}}}); putChart('sector','sectorChart',{ type:'bar', data:{ labels:['4Ps','Farmers (F)','Fisher-folks (FF)','Informal Sector (IS)','Indigenous People (IP)','Senior Citizen (SC)','Solo Parent (SP)','Lactating Women (LW)','Pregnant Women (PW)','PWD','OSY','FR','YB/PWUD','LGBTQIA+'], datasets:[{ label:'Beneficiaries', data:[r.fourPs_count||0,r.farmer_count||0,r.fisherfolk_count||0,r.is_count||0,r.ip_count||0,r.sc_count||0,r.sp_count||0,r.lw_count||0,r.pw_count||0,r.pwd_count||0,r.osy_count||0,r.fr_count||0,r.ybDs_count||0,r.lgbtqia_count||0], backgroundColor:['#0d6efd','#20c997','#ffc107','#6610f2','#6f42c1','#fd7e14','#198754','#e83e8c','#dc3545','#17a2b8','#0dcaf0','#d63384','#1982c4','#2a9d8f'], borderRadius:8 }] }, options:{ maintainAspectRatio:false, responsive:true, plugins:{ legend:{ display:false } }, scales:{ x:{ ticks:{ color:textColor(), maxRotation:35, minRotation:20 }, grid:{ display:false } }, y:{ beginAtZero:true, ticks:{ color:textColor() }, grid:{ color:gridColor() } } } }}); updateKnobs(r); buildTopSectors(r); requestAnimationFrame(() => alignAdminSectorChartHeight()); }
+  function loadDashboard(statusText){ $('#dashboardRefreshTime').text(statusText || 'Refreshing...'); $.getJSON('get_data.php').done(function(r){ if(r.error){ $('#dashboardRefreshTime').text(r.error); return; } render(r); }).fail(function(){ $('#dashboardRefreshTime').text('Unable to load dashboard data'); }); }
+  const refreshFromSocket = (function(){ let timer = null; return function(){ if (timer) return; timer = window.setTimeout(function(){ timer = null; loadDashboard('Updating...'); }, 250); }; }());
+  function watchDashboardSockets(){ if (!window.KODUSLiveRefresh || typeof window.KODUSLiveRefresh.watchSocket !== 'function') return; window.KODUSLiveRefresh.watchSocket({ key:'home-meb-dashboard', channel:'kodus.meb', events:['meb.changed','meb.validation.changed'], onMessage: refreshFromSocket }); if (canViewOperations) { window.KODUSLiveRefresh.watchSocket({ key:'home-fund-dashboard', channel:'kodus.fund_monitoring', events:['fund_monitoring.changed'], onMessage: refreshFromSocket }); } }
+  $(function(){ $('.knob').knob({ draw: knobDraw }); loadDashboard(); watchDashboardSockets(); $('#refreshDashboardBtn').on('click', function(){ loadDashboard(); }); $(window).on('resize', function(){ requestAnimationFrame(() => alignAdminSectorChartHeight()); }); });
 </script>
 </body>
 </html>

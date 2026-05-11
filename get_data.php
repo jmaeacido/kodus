@@ -2,10 +2,12 @@
 require_once __DIR__ . '/security.php';
 security_bootstrap_session();
 require_once __DIR__ . '/auth_helpers.php';
+require_once __DIR__ . '/fund_monitoring_helpers.php';
 include('config.php');
 
 auth_handle_page_access($conn);
 auth_apply_security_headers();
+header('Content-Type: application/json');
 
 // Make sure a fiscal year was selected
 if (!isset($_SESSION['selected_year'])) {
@@ -14,6 +16,7 @@ if (!isset($_SESSION['selected_year'])) {
 }
 
 $year = (int) $_SESSION['selected_year'];
+$canViewOperations = auth_can_view_operations();
 
 // SQL with time_stamp filter
 $sql = "SELECT
@@ -58,6 +61,34 @@ $row = db_stmt_fetch_one_assoc($stmt);
 if ($row) {
     foreach ($row as $key => $value) {
         $row[$key] = (int) $value;
+    }
+
+    if ($canViewOperations) {
+        $fundSummary = [
+            'items' => 0,
+            'adjusted' => 0.0,
+            'obligations' => 0.0,
+            'disbursement' => 0.0,
+            'utilization' => 0.0,
+        ];
+
+        $fundItems = fund_monitoring_list_items_with_entries($conn, $year);
+        foreach ($fundItems as $fundItem) {
+            $adjusted = (float) ($fundItem['adjusted_appropriation'] ?? 0);
+            $fundSummary['items']++;
+            $fundSummary['adjusted'] += $adjusted;
+
+            foreach (($fundItem['monthly'] ?? []) as $monthlyValues) {
+                $fundSummary['obligations'] += (float) ($monthlyValues['obligations'] ?? 0);
+                $fundSummary['disbursement'] += (float) ($monthlyValues['disbursement'] ?? 0);
+            }
+        }
+
+        if ($fundSummary['adjusted'] > 0) {
+            $fundSummary['utilization'] = ($fundSummary['obligations'] / $fundSummary['adjusted']) * 100;
+        }
+
+        $row['fund_summary'] = $fundSummary;
     }
 
     echo json_encode($row);

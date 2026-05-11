@@ -5,6 +5,7 @@ security_require_csrf_token();
 security_require_method(['POST']);
 
 require_once '../config.php';
+require_once __DIR__ . '/../socket_helpers.php';
 require_once __DIR__ . '/../fund_monitoring_helpers.php';
 
 $redirectTarget = 'fund-monitoring';
@@ -19,6 +20,15 @@ function fund_monitoring_set_flash(string $type, string $message): void
         'type' => $type,
         'message' => $message,
     ];
+}
+
+function fund_monitoring_broadcast_change(int $selectedYear, string $action, int $userId, array $extra = []): void
+{
+    kodus_socket_broadcast('kodus.fund_monitoring', 'fund_monitoring.changed', array_merge([
+        'action' => $action,
+        'fiscal_year' => $selectedYear,
+        'actor_id' => $userId,
+    ], $extra));
 }
 
 if ($userId <= 0 || $selectedYear <= 0) {
@@ -51,6 +61,11 @@ if ($action === 'save_month_entries') {
     }
 
     $success = fund_monitoring_save_month_entries($conn, $selectedYear, $month, $entries, $userId);
+    if ($success) {
+        fund_monitoring_broadcast_change($selectedYear, 'monthly_entries_saved', $userId, [
+            'month' => max(1, min(12, $month)),
+        ]);
+    }
     fund_monitoring_set_flash($success ? 'success' : 'danger', $success ? 'Monthly fund utilization data saved successfully.' : 'Unable to save the selected monthly updates.');
     header('Location: ' . $redirectTarget . '?month=' . max(1, min(12, $month)));
     exit;
@@ -59,6 +74,9 @@ if ($action === 'save_month_entries') {
 if ($action === 'save_object_code') {
     $objectCodeName = trim((string) ($_POST['object_code_name'] ?? ''));
     $success = fund_monitoring_add_object_code($conn, $selectedYear, $objectCodeName, $userId);
+    if ($success) {
+        fund_monitoring_broadcast_change($selectedYear, 'object_code_saved', $userId);
+    }
     fund_monitoring_set_flash($success ? 'success' : 'danger', $success ? 'Object code added to this fiscal year.' : 'Unable to save the object code.');
     header('Location: ' . $redirectTarget);
     exit;
@@ -93,6 +111,11 @@ if ($action === 'save_item') {
     );
 
     fund_monitoring_set_flash($success ? 'success' : 'danger', $success ? 'Fund monitoring item saved successfully.' : 'Unable to save the fund monitoring item. Please complete all required fields.');
+    if ($success) {
+        fund_monitoring_broadcast_change($selectedYear, 'item_saved', $userId, [
+            'record_id' => $recordId,
+        ]);
+    }
     header('Location: ' . $redirectTarget);
     exit;
 }

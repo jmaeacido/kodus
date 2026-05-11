@@ -114,6 +114,29 @@ $dedupGeneratedFiles = dedup_template_list_outputs(
       min-width: 760px;
       white-space: nowrap;
     }
+
+    .dedup-job-status-panel {
+      display: none;
+      border-left: 4px solid #17a2b8;
+    }
+
+    .dedup-job-status-panel.is-visible {
+      display: block;
+    }
+
+    .dedup-job-status-panel.is-completed {
+      border-left-color: #28a745;
+    }
+
+    .dedup-job-status-panel.is-failed {
+      border-left-color: #dc3545;
+    }
+
+    .dedup-job-status-panel .progress {
+      height: 0.65rem;
+      border-radius: 999px;
+      overflow: hidden;
+    }
   </style>
 </head>
 <body>
@@ -172,6 +195,49 @@ $dedupGeneratedFiles = dedup_template_list_outputs(
               </div>
             </div>
           </form>
+        </div>
+      </div>
+
+      <div class="card dedup-job-status-panel" id="dedupJobStatusPanel" aria-live="polite">
+        <div class="card-body">
+          <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center">
+            <div>
+              <h5 class="mb-1" id="dedupJobStatusTitle">Background Generation</h5>
+              <div class="text-muted" id="dedupJobStatusMessage">Checking latest job status...</div>
+            </div>
+            <span class="badge badge-info mt-2 mt-md-0" id="dedupJobStatusBadge">Queued</span>
+          </div>
+          <div class="mt-3">
+            <div class="d-flex justify-content-between align-items-center mb-1">
+              <span id="dedupJobStatusStep">Queued</span>
+              <strong id="dedupJobStatusProgress">0%</strong>
+            </div>
+            <div class="progress">
+              <div
+                class="progress-bar progress-bar-striped progress-bar-animated bg-info"
+                id="dedupJobStatusProgressBar"
+                role="progressbar"
+                style="width: 0%;"
+                aria-valuemin="0"
+                aria-valuemax="100"
+                aria-valuenow="0"
+              ></div>
+            </div>
+          </div>
+          <div class="mt-3" id="dedupJobStatusActions" hidden>
+            <a class="btn btn-sm btn-success" id="dedupJobViewResults" href="#" hidden>
+              <i class="fas fa-list mr-1"></i>
+              View Results
+            </a>
+            <button type="button" class="btn btn-sm btn-outline-danger ml-1" id="dedupJobCancelButton">
+              <i class="fas fa-times mr-1"></i>
+              Cancel
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-secondary ml-1" id="dedupJobClearButton">
+              <i class="fas fa-eraser mr-1"></i>
+              Clear
+            </button>
+          </div>
         </div>
       </div>
 
@@ -516,7 +582,18 @@ $dedupGeneratedFiles = dedup_template_list_outputs(
           try {
               openRunProgressModal();
               const payload = await submitDeduplicationRequest(formData);
-              window.location.href = payload.redirect || `progress_status.php?job=${encodeURIComponent(payload.job_id || '')}`;
+              Swal.close();
+              form.reset();
+              window.dispatchEvent(new CustomEvent('deduplication-job-queued', {
+                  detail: {
+                      jobId: payload.job_id || ''
+                  }
+              }));
+              await Swal.fire({
+                  icon: 'success',
+                  title: 'Deduplication Started',
+                  text: payload.message || 'Deduplication job started in the background.'
+              });
           } catch (error) {
               Swal.close();
               await Swal.fire({
@@ -529,6 +606,221 @@ $dedupGeneratedFiles = dedup_template_list_outputs(
                   submitButton.disabled = false;
               }
           }
+      });
+  }());
+
+  (function () {
+      const panel = document.getElementById('dedupJobStatusPanel');
+      const message = document.getElementById('dedupJobStatusMessage');
+      const badge = document.getElementById('dedupJobStatusBadge');
+      const step = document.getElementById('dedupJobStatusStep');
+      const progressLabel = document.getElementById('dedupJobStatusProgress');
+      const progressBar = document.getElementById('dedupJobStatusProgressBar');
+      const actions = document.getElementById('dedupJobStatusActions');
+      const viewResults = document.getElementById('dedupJobViewResults');
+      const cancelButton = document.getElementById('dedupJobCancelButton');
+      const clearButton = document.getElementById('dedupJobClearButton');
+      let activeJobId = '';
+      let pollTimer = null;
+
+      if (!panel || !message || !badge || !step || !progressLabel || !progressBar || !actions || !viewResults || !cancelButton || !clearButton) {
+          return;
+      }
+
+      function statusLabel(status) {
+          const labels = {
+              pending: 'Queued',
+              processing: 'Processing',
+              done: 'Completed',
+              failed: 'Failed',
+              cancelled: 'Canceled',
+              canceled: 'Canceled'
+          };
+
+          return labels[status] || 'Queued';
+      }
+
+      function badgeClass(status) {
+          if (status === 'done') {
+              return 'badge badge-success';
+          }
+          if (status === 'failed') {
+              return 'badge badge-danger';
+          }
+          if (status === 'cancelled' || status === 'canceled') {
+              return 'badge badge-secondary';
+          }
+          if (status === 'processing') {
+              return 'badge badge-primary';
+          }
+          return 'badge badge-info';
+      }
+
+      function progressClass(status) {
+          if (status === 'done') {
+              return 'progress-bar bg-success';
+          }
+          if (status === 'failed') {
+              return 'progress-bar bg-danger';
+          }
+          if (status === 'cancelled' || status === 'canceled') {
+              return 'progress-bar bg-secondary';
+          }
+          return 'progress-bar progress-bar-striped progress-bar-animated bg-info';
+      }
+
+      function statusMessage(status, progress) {
+          if (status === 'done') {
+              return 'Deduplication complete.';
+          }
+          if (status === 'failed') {
+              return 'Deduplication failed. Please check logs.';
+          }
+          if (status === 'cancelled' || status === 'canceled') {
+              return 'Deduplication was canceled.';
+          }
+          if (status === 'pending') {
+              return 'Waiting for the background generator to start.';
+          }
+          return progress >= 100 ? 'Finalizing results...' : 'Comparing beneficiary records in the background.';
+      }
+
+      function renderStatus(job) {
+          if (!job) {
+              return;
+          }
+
+          const status = String(job.status || 'pending').toLowerCase();
+          const progress = Math.max(0, Math.min(100, Number(job.progress || 0)));
+          const isTerminal = ['done', 'failed', 'cancelled', 'canceled'].includes(status);
+
+          panel.classList.add('is-visible');
+          panel.classList.toggle('is-completed', status === 'done');
+          panel.classList.toggle('is-failed', status === 'failed');
+          badge.className = badgeClass(status);
+          badge.textContent = statusLabel(status);
+          message.textContent = statusMessage(status, progress);
+          step.textContent = statusLabel(status);
+          progressLabel.textContent = `${Math.round(progress)}%`;
+          progressBar.className = progressClass(status);
+          progressBar.style.width = `${progress}%`;
+          progressBar.setAttribute('aria-valuenow', String(Math.round(progress)));
+          actions.hidden = false;
+          viewResults.hidden = status !== 'done';
+          viewResults.href = activeJobId ? `results.php?job=${encodeURIComponent(activeJobId)}` : '#';
+          cancelButton.disabled = isTerminal;
+          cancelButton.hidden = isTerminal;
+          clearButton.hidden = !isTerminal;
+
+          if (window.refreshAppNotifications && isTerminal) {
+              window.refreshAppNotifications();
+          }
+      }
+
+      function refreshStatus(jobId) {
+          if (!jobId) {
+              return Promise.resolve(null);
+          }
+
+          return fetch(`status_api.php?job=${encodeURIComponent(jobId)}`, {
+              headers: {
+                  'Accept': 'application/json',
+                  'X-Requested-With': 'XMLHttpRequest'
+              },
+              credentials: 'same-origin'
+          })
+              .then(function (response) {
+                  return response.json();
+              })
+              .then(function (job) {
+                  renderStatus(job);
+                  return job;
+              })
+              .catch(function () {
+                  return null;
+              });
+      }
+
+      function schedulePolling(jobId) {
+          activeJobId = jobId || activeJobId;
+          if (!activeJobId) {
+              return;
+          }
+
+          if (pollTimer) {
+              window.clearInterval(pollTimer);
+          }
+
+          refreshStatus(activeJobId);
+          pollTimer = window.setInterval(function () {
+              refreshStatus(activeJobId).then(function (job) {
+                  const status = job && job.status ? String(job.status).toLowerCase() : '';
+                  if (['done', 'failed', 'cancelled', 'canceled'].includes(status)) {
+                      window.clearInterval(pollTimer);
+                      pollTimer = null;
+                      loadRecentDeduplications();
+                  }
+              });
+          }, 1800);
+      }
+
+      function cancelActiveJob() {
+          if (!activeJobId || cancelButton.disabled) {
+              return;
+          }
+
+          cancelButton.disabled = true;
+          const body = new URLSearchParams();
+          body.append('job', activeJobId);
+          body.append('csrf_token', <?= json_encode(security_get_csrf_token()) ?>);
+
+          fetch('cancel_job.php', {
+              method: 'POST',
+              headers: {
+                  'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                  'Accept': 'text/plain, application/json',
+                  'X-Requested-With': 'XMLHttpRequest'
+              },
+              credentials: 'same-origin',
+              body: body.toString()
+          })
+              .then(function () {
+                  return refreshStatus(activeJobId);
+              })
+              .catch(function () {
+                  cancelButton.disabled = false;
+                  if (typeof Swal !== 'undefined') {
+                      Swal.fire({
+                          icon: 'error',
+                          title: 'Cancel Failed',
+                          text: 'Unable to cancel the background job.'
+                      });
+                  }
+              });
+      }
+
+      window.addEventListener('deduplication-job-queued', function (event) {
+          const jobId = event.detail && event.detail.jobId ? String(event.detail.jobId) : '';
+          if (!jobId) {
+              return;
+          }
+
+          activeJobId = jobId;
+          renderStatus({
+              status: 'pending',
+              progress: 0
+          });
+          schedulePolling(jobId);
+      });
+
+      cancelButton.addEventListener('click', cancelActiveJob);
+      clearButton.addEventListener('click', function () {
+          if (pollTimer) {
+              window.clearInterval(pollTimer);
+              pollTimer = null;
+          }
+          activeJobId = '';
+          panel.classList.remove('is-visible', 'is-completed', 'is-failed');
       });
   }());
 

@@ -1040,26 +1040,27 @@ if (isset($_SESSION['user_id']) && is_numeric($_SESSION['user_id'])) {
           <?php
             $today = date('Y-m-d');
             $currentTimezoneOffset = app_timezone_offset_string();
+            $calendarBadgeUserId = isset($_SESSION['user_id']) ? (int) $_SESSION['user_id'] : 0;
 
-            // Use clear and explicit comparison for safety
             $query = $conn->prepare("
               SELECT COUNT(*) AS event_count 
               FROM events 
               WHERE DATE(CONVERT_TZ(start, @@session.time_zone, ?)) <= ? 
                 AND DATE(CONVERT_TZ(end, @@session.time_zone, ?)) >= ?
                 AND deleted_at is NULL
+                AND (is_private = 0 OR created_by = ?)
             ");
-            $query->bind_param("ssss", $currentTimezoneOffset, $today, $currentTimezoneOffset, $today);
+            $query->bind_param("ssssi", $currentTimezoneOffset, $today, $currentTimezoneOffset, $today, $calendarBadgeUserId);
             $query->execute();
             $row = db_stmt_fetch_one_assoc($query) ?: [];
-            $event_count = $row['event_count'] ?? 0;
+            $event_count = (int) ($row['event_count'] ?? 0);
           ?>
             <li class="nav-item">
               <a href="<?php echo $app_root; ?>pages/calendar" class="nav-link <?= ($current_page == 'calendar.php') ? 'active' : ''; ?>">
                 <i class="nav-icon far fa-calendar-alt"></i>
                 <p>
                   Calendar
-                  <?php if ($event_count !== 0):?>
+                  <?php if ($event_count > 0):?>
                   <span class="badge badge-info right"><?php echo $event_count; ?></span>
                   <?php endif;?>
                 </p>

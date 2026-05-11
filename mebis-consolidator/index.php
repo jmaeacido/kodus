@@ -215,6 +215,29 @@ foreach ($savedOutputs as $entry) {
     body[data-theme="dark"] .mebis-missing-file {
       color: #fbbf24;
     }
+
+    .mebis-name-job-status-panel {
+      display: none;
+      border-left: 4px solid #17a2b8;
+    }
+
+    .mebis-name-job-status-panel.is-visible {
+      display: block;
+    }
+
+    .mebis-name-job-status-panel.is-completed {
+      border-left-color: #28a745;
+    }
+
+    .mebis-name-job-status-panel.is-failed {
+      border-left-color: #dc3545;
+    }
+
+    .mebis-name-job-status-panel .progress {
+      height: 0.65rem;
+      border-radius: 999px;
+      overflow: hidden;
+    }
   </style>
 </head>
 <body>
@@ -292,6 +315,41 @@ foreach ($savedOutputs as $entry) {
                 Generate Name-Matching CSV
               </button>
             </form>
+          </div>
+        </div>
+
+        <div class="card mebis-name-job-status-panel" id="mebisNameJobStatusPanel" aria-live="polite">
+          <div class="card-body">
+            <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center">
+              <div>
+                <h5 class="mb-1" id="mebisNameJobStatusTitle">Background Generation</h5>
+                <div class="text-muted" id="mebisNameJobStatusMessage">Checking latest job status...</div>
+              </div>
+              <span class="badge badge-info mt-2 mt-md-0" id="mebisNameJobStatusBadge">Queued</span>
+            </div>
+            <div class="mt-3">
+              <div class="d-flex justify-content-between align-items-center mb-1">
+                <span id="mebisNameJobStatusStep">Queued</span>
+                <strong id="mebisNameJobStatusProgress">0%</strong>
+              </div>
+              <div class="progress">
+                <div
+                  class="progress-bar progress-bar-striped progress-bar-animated bg-info"
+                  id="mebisNameJobStatusProgressBar"
+                  role="progressbar"
+                  style="width: 0%;"
+                  aria-valuemin="0"
+                  aria-valuemax="100"
+                  aria-valuenow="0"
+                ></div>
+              </div>
+            </div>
+            <div class="mt-3" id="mebisNameJobStatusActions" hidden>
+              <button type="button" class="btn btn-sm btn-outline-secondary" id="mebisNameJobClearButton">
+                <i class="fas fa-eraser mr-1"></i>
+                Clear
+              </button>
+            </div>
           </div>
         </div>
 
@@ -747,14 +805,28 @@ document.addEventListener('DOMContentLoaded', function() {
       openGeneratorProgressModal();
       const payload = await submitGeneratorRequest(formData);
       Swal.close();
+      const isQueued = String(payload.message || '').toLowerCase().includes('queued');
+
+      if (isQueued) {
+        window.dispatchEvent(new CustomEvent('mebis-name-job-queued', {
+          detail: {
+            message: payload.message || 'Name-matching CSV generation started in the background.'
+          }
+        }));
+      }
 
       await showGeneratorAlert({
         icon: 'success',
-        title: 'Ready',
+        title: isQueued ? 'Generation Started' : 'Ready',
         text: payload.message || 'Name-matching CSV generated successfully.'
       });
 
-      window.location.reload();
+      if (!isQueued) {
+        window.location.reload();
+      } else {
+        form.reset();
+        refreshPreview();
+      }
     } catch (error) {
       Swal.close();
       await showGeneratorAlert({
@@ -769,6 +841,80 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   });
 });
+
+(function () {
+  const panel = document.getElementById('mebisNameJobStatusPanel');
+  const message = document.getElementById('mebisNameJobStatusMessage');
+  const badge = document.getElementById('mebisNameJobStatusBadge');
+  const step = document.getElementById('mebisNameJobStatusStep');
+  const progressLabel = document.getElementById('mebisNameJobStatusProgress');
+  const progressBar = document.getElementById('mebisNameJobStatusProgressBar');
+  const actions = document.getElementById('mebisNameJobStatusActions');
+  const clearButton = document.getElementById('mebisNameJobClearButton');
+  let progressTimer = null;
+  let progress = 5;
+  let notificationTimer = null;
+
+  if (!panel || !message || !badge || !step || !progressLabel || !progressBar || !actions || !clearButton) {
+    return;
+  }
+
+  function renderProcessing(statusMessage) {
+    panel.classList.add('is-visible');
+    panel.classList.remove('is-completed', 'is-failed');
+    badge.className = 'badge badge-primary';
+    badge.textContent = 'Processing';
+    message.textContent = statusMessage || 'Name-matching CSV generation is running in the background. KODUS will notify you when the file is ready.';
+    step.textContent = 'Processing';
+    progressLabel.textContent = `${Math.round(progress)}%`;
+    progressBar.className = 'progress-bar progress-bar-striped progress-bar-animated bg-info';
+    progressBar.style.width = `${progress}%`;
+    progressBar.setAttribute('aria-valuenow', String(Math.round(progress)));
+    actions.hidden = false;
+  }
+
+  function startBackgroundIndicator(statusMessage) {
+    progress = 8;
+    renderProcessing(statusMessage);
+
+    if (progressTimer) {
+      window.clearInterval(progressTimer);
+    }
+    if (notificationTimer) {
+      window.clearInterval(notificationTimer);
+    }
+
+    progressTimer = window.setInterval(function () {
+      if (progress < 94) {
+        progress += progress < 60 ? 4 : 1;
+        renderProcessing(statusMessage);
+      }
+    }, 800);
+
+    notificationTimer = window.setInterval(function () {
+      if (window.refreshAppNotifications) {
+        window.refreshAppNotifications();
+      }
+    }, 5000);
+  }
+
+  window.addEventListener('mebis-name-job-queued', function (event) {
+    const statusMessage = event.detail && event.detail.message ? String(event.detail.message) : '';
+    startBackgroundIndicator(statusMessage);
+  });
+
+  clearButton.addEventListener('click', function () {
+    if (progressTimer) {
+      window.clearInterval(progressTimer);
+      progressTimer = null;
+    }
+    if (notificationTimer) {
+      window.clearInterval(notificationTimer);
+      notificationTimer = null;
+    }
+    panel.classList.remove('is-visible', 'is-completed', 'is-failed');
+  });
+}());
 </script>
 
 <?php if ($resultModal): ?>

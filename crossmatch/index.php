@@ -27,6 +27,29 @@
     #recent-crossmatch-table th {
       font-size: 14px;
     }
+
+    .crossmatch-job-status-panel {
+      display: none;
+      border-left: 4px solid #17a2b8;
+    }
+
+    .crossmatch-job-status-panel.is-visible {
+      display: block;
+    }
+
+    .crossmatch-job-status-panel.is-completed {
+      border-left-color: #28a745;
+    }
+
+    .crossmatch-job-status-panel.is-failed {
+      border-left-color: #dc3545;
+    }
+
+    .crossmatch-job-status-panel .progress {
+      height: 0.65rem;
+      border-radius: 999px;
+      overflow: hidden;
+    }
   </style>
 </head>
 <body>
@@ -113,6 +136,45 @@
               <!-- /.card-body -->
             </div>
         <!-- /.row -->
+            <div class="card crossmatch-job-status-panel" id="crossmatchJobStatusPanel" aria-live="polite">
+              <div class="card-body">
+                <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center">
+                  <div>
+                    <h5 class="mb-1" id="crossmatchJobStatusTitle">Background Generation</h5>
+                    <div class="text-muted" id="crossmatchJobStatusMessage">Checking latest job status...</div>
+                  </div>
+                  <span class="badge badge-info mt-2 mt-md-0" id="crossmatchJobStatusBadge">Queued</span>
+                </div>
+                <div class="mt-3">
+                  <div class="d-flex justify-content-between align-items-center mb-1">
+                    <span id="crossmatchJobStatusStep">Queued</span>
+                    <strong id="crossmatchJobStatusProgress">0%</strong>
+                  </div>
+                  <div class="progress">
+                    <div
+                      class="progress-bar progress-bar-striped progress-bar-animated bg-info"
+                      id="crossmatchJobStatusProgressBar"
+                      role="progressbar"
+                      style="width: 0%;"
+                      aria-valuemin="0"
+                      aria-valuemax="100"
+                      aria-valuenow="0"
+                    ></div>
+                  </div>
+                </div>
+                <div class="mt-3" id="crossmatchJobStatusActions" hidden>
+                  <a class="btn btn-sm btn-success" id="crossmatchJobViewResults" href="#" hidden>
+                    <i class="fas fa-list mr-1"></i>
+                    View Results
+                  </a>
+                  <button type="button" class="btn btn-sm btn-outline-secondary ml-1" id="crossmatchJobClearButton">
+                    <i class="fas fa-eraser mr-1"></i>
+                    Clear
+                  </button>
+                </div>
+              </div>
+            </div>
+
             <div class="card">
               <div class="card-header d-flex align-items-center">
                 <h4 class="m-0 flex-grow-1">Recent Crossmatchings</h4>
@@ -375,7 +437,19 @@ window.addEventListener('kodus:partial-refresh', function () {
         try {
             openProgressModal();
             const payload = await submitCrossmatchRequest(formData);
-            window.location.href = payload.redirect || `start.php?job=${encodeURIComponent(payload.job_id || '')}`;
+            Swal.close();
+            form.reset();
+            document.getElementById('file2wrap').style.display = 'none';
+            window.dispatchEvent(new CustomEvent('crossmatch-job-queued', {
+                detail: {
+                    jobId: payload.job_id || ''
+                }
+            }));
+            await Swal.fire({
+                icon: 'success',
+                title: 'Crossmatch Started',
+                text: payload.message || 'Crossmatching job started in the background.'
+            });
         } catch (error) {
             Swal.close();
             await Swal.fire({
@@ -388,6 +462,146 @@ window.addEventListener('kodus:partial-refresh', function () {
                 submitButton.disabled = false;
             }
         }
+    });
+}());
+
+(function () {
+    const panel = document.getElementById('crossmatchJobStatusPanel');
+    const message = document.getElementById('crossmatchJobStatusMessage');
+    const badge = document.getElementById('crossmatchJobStatusBadge');
+    const step = document.getElementById('crossmatchJobStatusStep');
+    const progressLabel = document.getElementById('crossmatchJobStatusProgress');
+    const progressBar = document.getElementById('crossmatchJobStatusProgressBar');
+    const actions = document.getElementById('crossmatchJobStatusActions');
+    const viewResults = document.getElementById('crossmatchJobViewResults');
+    const clearButton = document.getElementById('crossmatchJobClearButton');
+    let activeJobId = '';
+    let pollTimer = null;
+
+    if (!panel || !message || !badge || !step || !progressLabel || !progressBar || !actions || !viewResults || !clearButton) {
+        return;
+    }
+
+    function badgeClass(status) {
+        if (status === 'completed') {
+            return 'badge badge-success';
+        }
+        if (status === 'failed') {
+            return 'badge badge-danger';
+        }
+        if (status === 'processing') {
+            return 'badge badge-primary';
+        }
+        return 'badge badge-info';
+    }
+
+    function progressClass(status) {
+        if (status === 'completed') {
+            return 'progress-bar bg-success';
+        }
+        if (status === 'failed') {
+            return 'progress-bar bg-danger';
+        }
+        return 'progress-bar progress-bar-striped progress-bar-animated bg-info';
+    }
+
+    function renderStatus(job) {
+        if (!job) {
+            return;
+        }
+
+        const done = Boolean(job.done);
+        const percent = Math.max(0, Math.min(100, Number(job.percent || 0)));
+        const rawStatus = String(job.status || '');
+        const status = done ? 'completed' : (rawStatus.toLowerCase().includes('fail') ? 'failed' : 'processing');
+
+        panel.classList.add('is-visible');
+        panel.classList.toggle('is-completed', status === 'completed');
+        panel.classList.toggle('is-failed', status === 'failed');
+        badge.className = badgeClass(status);
+        badge.textContent = status === 'completed' ? 'Completed' : (status === 'failed' ? 'Failed' : 'Processing');
+        message.textContent = rawStatus || (done ? 'Crossmatching complete.' : 'Crossmatching is running in the background.');
+        step.textContent = done ? 'Completed' : (rawStatus || 'Processing');
+        progressLabel.textContent = `${Math.round(percent)}%`;
+        progressBar.className = progressClass(status);
+        progressBar.style.width = `${percent}%`;
+        progressBar.setAttribute('aria-valuenow', String(Math.round(percent)));
+        actions.hidden = false;
+        viewResults.hidden = !done;
+        viewResults.href = activeJobId ? `results.php?job=${encodeURIComponent(activeJobId)}` : '#';
+
+        if (window.refreshAppNotifications && done) {
+            window.refreshAppNotifications();
+        }
+    }
+
+    function refreshStatus(jobId) {
+        if (!jobId) {
+            return Promise.resolve(null);
+        }
+
+        return fetch(`progress_status.php?job=${encodeURIComponent(jobId)}`, {
+            headers: {
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            credentials: 'same-origin'
+        })
+            .then(function (response) {
+                return response.json();
+            })
+            .then(function (job) {
+                renderStatus(job);
+                return job;
+            })
+            .catch(function () {
+                return null;
+            });
+    }
+
+    function schedulePolling(jobId) {
+        activeJobId = jobId || activeJobId;
+        if (!activeJobId) {
+            return;
+        }
+
+        if (pollTimer) {
+            window.clearInterval(pollTimer);
+        }
+
+        refreshStatus(activeJobId);
+        pollTimer = window.setInterval(function () {
+            refreshStatus(activeJobId).then(function (job) {
+                if (job && job.done) {
+                    window.clearInterval(pollTimer);
+                    pollTimer = null;
+                    loadRecentCrossmatchings();
+                }
+            });
+        }, 1800);
+    }
+
+    window.addEventListener('crossmatch-job-queued', function (event) {
+        const jobId = event.detail && event.detail.jobId ? String(event.detail.jobId) : '';
+        if (!jobId) {
+            return;
+        }
+
+        renderStatus({
+            percent: 0,
+            done: false,
+            status: 'Waiting for the background generator to start.'
+        });
+        schedulePolling(jobId);
+    });
+
+    clearButton.addEventListener('click', function () {
+        if (pollTimer) {
+            window.clearInterval(pollTimer);
+            pollTimer = null;
+        }
+        activeJobId = '';
+        panel.classList.remove('is-visible', 'is-completed', 'is-failed');
     });
 }());
 </script>

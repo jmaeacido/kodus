@@ -5300,7 +5300,7 @@ $composeCsrfToken = security_get_csrf_token();
           </div>
           <div class="compose-field">
             <label for="groupComposePhoto">Group photo</label>
-            <input type="file" name="group_photo" id="groupComposePhoto" class="form-control" accept="image/jpeg,image/png,image/webp">
+            <input type="file" name="group_photo" id="groupComposePhoto" class="form-control" accept="image/jpeg,.jfif,image/png,image/gif,image/webp,image/avif">
           </div>
           <div class="compose-body">
             <label for="groupComposeMessage" class="mb-2">Opening message</label>
@@ -6822,7 +6822,7 @@ function isAttachmentMediaFile(file) {
     return type.startsWith('image/')
         || type.startsWith('video/')
         || type.startsWith('audio/')
-        || ['avif', 'jpg', 'jpeg', 'png', 'gif', 'webp', 'mp4', 'webm', 'ogv', 'mov', 'm4v', 'mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac'].includes(ext);
+        || ['avif', 'jpg', 'jpeg', 'jfif', 'png', 'gif', 'webp', 'mp4', 'webm', 'ogv', 'mov', 'm4v', 'mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac'].includes(ext);
 }
 
 function renderLocalAttachmentPreviewHtml(file) {
@@ -6832,7 +6832,7 @@ function renderLocalAttachmentPreviewHtml(file) {
     const isMedia = isAttachmentMediaFile(file);
     const url = typeof file === 'object' && file && isMedia ? URL.createObjectURL(file) : '';
 
-    if (type.startsWith('image/') || ['avif', 'jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext)) {
+    if (type.startsWith('image/') || ['avif', 'jpg', 'jpeg', 'jfif', 'png', 'gif', 'webp'].includes(ext)) {
         return url
             ? `<img src="${url}" alt="">`
             : '<div class="d-flex align-items-center justify-content-center" style="height:84px;"><i class="fas fa-file-image fa-2x text-secondary"></i></div>';
@@ -6904,17 +6904,103 @@ function appendOptimisticReply(replyText, attachments = [], quote = null) {
     return optimisticReply;
 }
 
+function captureReplyComposerState() {
+    const replyText = document.getElementById('replyText');
+    const replyForm = document.getElementById('replyForm');
+
+    if (!replyText || !replyForm) {
+        return null;
+    }
+
+    return {
+        value: replyText.value || '',
+        selectionStart: replyText.selectionStart ?? replyText.value.length,
+        selectionEnd: replyText.selectionEnd ?? replyText.value.length,
+        focused: document.activeElement === replyText,
+        mentionedUserIds: replyForm.dataset.mentionedUserIds || '',
+        quoteTargetType: document.getElementById('replyQuoteTargetType')?.value || '',
+        quoteReplyId: document.getElementById('replyQuoteReplyId')?.value || '',
+        quoteAuthor: document.getElementById('replyQuoteAuthor')?.textContent || '',
+        quoteText: document.getElementById('replyQuoteText')?.textContent || ''
+    };
+}
+
+function restoreReplyComposerState(state) {
+    if (!state) {
+        return;
+    }
+
+    const replyText = document.getElementById('replyText');
+    const replyForm = document.getElementById('replyForm');
+
+    if (!replyText || !replyForm) {
+        return;
+    }
+
+    replyText.value = state.value || '';
+    replyForm.dataset.mentionedUserIds = state.mentionedUserIds || '';
+
+    const mentionedField = document.getElementById('mentionedUserIds');
+    if (mentionedField) {
+        mentionedField.value = state.mentionedUserIds || '';
+    }
+
+    const quoteTargetField = document.getElementById('replyQuoteTargetType');
+    const quoteReplyField = document.getElementById('replyQuoteReplyId');
+    const quoteAuthorNode = document.getElementById('replyQuoteAuthor');
+    const quoteTextNode = document.getElementById('replyQuoteText');
+    const quoteComposer = document.getElementById('replyQuoteComposer');
+
+    if (quoteTargetField) {
+        quoteTargetField.value = state.quoteTargetType || '';
+    }
+    if (quoteReplyField) {
+        quoteReplyField.value = state.quoteReplyId || '';
+    }
+    if (quoteAuthorNode) {
+        quoteAuthorNode.textContent = state.quoteAuthor || '';
+    }
+    if (quoteTextNode) {
+        quoteTextNode.textContent = state.quoteText || '';
+    }
+    if (quoteComposer) {
+        quoteComposer.hidden = !state.quoteTargetType;
+    }
+
+    replyText.dispatchEvent(new Event('input', { bubbles: true }));
+
+    if (state.focused) {
+        const selectionStart = Math.min(Number(state.selectionStart || 0), replyText.value.length);
+        const selectionEnd = Math.min(Number(state.selectionEnd || selectionStart), replyText.value.length);
+        replyText.focus();
+        replyText.setSelectionRange(selectionStart, selectionEnd);
+    }
+}
+
+function hasActiveReplyComposerDraft() {
+    const composerState = captureReplyComposerState();
+    const attachmentInput = document.getElementById('replyAttachments');
+    const hasAttachments = !!(attachmentInput && attachmentInput.files && attachmentInput.files.length);
+
+    return hasAttachments || !!(
+        composerState
+        && (composerState.focused || composerState.value || composerState.quoteTargetType)
+    );
+}
+
 function refreshCurrentThread(options = {}) {
     if (!lastOpenedId) {
         return $.Deferred().resolve().promise();
     }
 
+    const composerState = captureReplyComposerState();
     const previousScrollTop = $('#conversationWrapper .conversation-scroll').scrollTop() || 0;
     return $.get('get_thread.php', { id: lastOpenedId, folder: currentMailboxFolder, bubble: isKodusChatBubbleMode ? 1 : 0 }, function(html) {
         closeReactionPickers();
         $('#messageDetail').html(html);
         updateDetailTitle();
         initializeThreadExperience();
+        restoreReplyComposerState(composerState);
         normalizeBubbleThreadMenu();
         syncVisibleMessengerPresence();
         preserveConversationScrollPosition(previousScrollTop);
@@ -7032,7 +7118,7 @@ function showGroupEditDialog(messageId, currentName) {
         title: 'Group details',
         html: `
             <input id="swalGroupName" class="swal2-input" placeholder="Group name" value="${escapeHtml(currentName || '')}">
-            <input id="swalGroupPhoto" class="swal2-file" type="file" accept="image/jpeg,image/png,image/webp">
+            <input id="swalGroupPhoto" class="swal2-file" type="file" accept="image/jpeg,.jfif,image/png,image/gif,image/webp,image/avif">
         `,
         showCancelButton: true,
         confirmButtonText: 'Save',
@@ -7933,6 +8019,9 @@ if (window.KODUSLiveRefresh && typeof window.KODUSLiveRefresh.watchSocket === 'f
             applyMessengerPresence(data.user_id, data.online || data.status === 'online', data.last_active_at || data.last_active || data.at);
             updateMessageList();
             if ($('#messageDetail .chat-shell[data-presence-user-id="0"]').length) {
+                if (hasActiveReplyComposerDraft()) {
+                    return;
+                }
                 refreshCurrentThread().always(function() {
                     notifyParentKodusBubbleThreadState();
                 });
@@ -8397,7 +8486,7 @@ $(document).on('click', '.mailbox-restore-trigger', function() {
         const basePath = '<?php echo app_url('inbox/uploads/'); ?>';
         const folder = type === 'reply' ? 'reply_attachments/' : 'contact_attachments/';
         const attachmentsBase = basePath + folder;
-        const imageExts = ['avif', 'jpg', 'jpeg', 'png', 'gif', 'webp'];
+        const imageExts = ['avif', 'jpg', 'jpeg', 'jfif', 'png', 'gif', 'webp'];
         const videoExts = ['mp4', 'webm', 'ogv', 'mov', 'm4v'];
         const audioExts = ['mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac'];
 
@@ -8706,7 +8795,7 @@ $(window).on('beforeunload pagehide', function() {
             card.style.zIndex = String(visibleFiles.length - index + 1);
             const ext = (file.name.split('.').pop() || '').toLowerCase();
 
-            if (file.type.startsWith('image/') || ['avif', 'webp', 'jpg', 'jpeg', 'png', 'gif'].includes(ext)) {
+            if (file.type.startsWith('image/') || ['avif', 'webp', 'jpg', 'jpeg', 'jfif', 'png', 'gif'].includes(ext)) {
                 const img = document.createElement('img');
                 img.src = getComposePreviewUrl(file);
                 img.alt = '';

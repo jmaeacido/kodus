@@ -159,37 +159,24 @@ try {
             tracking_delete_files_if_unreferenced($conn, $existingFileName);
         }
 
-        $mailResult = ['sent' => 0, 'failed' => 0];
-        $kodusAlertResult = ['notifications' => 0, 'messages' => 0];
-        if ($recipientData['emails'] !== [] && trim((string) ($existingRecord['receiving_office'] ?? '')) !== trim((string) $receiving_office)) {
-            $mailResult = tracking_send_document_recipient_emails($conn, $recipientData['emails'], [
-                'context' => 'Updated outgoing document',
-                'tracking_number' => (string) ($existingRecord['tracking_number'] ?? ''),
-                'description' => (string) $description,
-                'remarks' => (string) $remarks,
-                'receiving_office' => (string) $receiving_office,
-                'date_forwarded' => (string) ($date_forwarded ?: $date_out),
-                'url' => app_notification_build_url('pages/data-tracking-out'),
-            ]);
-            $kodusAlertResult = tracking_send_document_recipient_kodus_alerts($conn, $recipientData['emails'], [
-                'context' => 'Updated outgoing document',
-                'tracking_number' => (string) ($existingRecord['tracking_number'] ?? ''),
-                'description' => (string) $description,
-                'remarks' => (string) $remarks,
-                'receiving_office' => (string) $receiving_office,
-                'date_forwarded' => (string) ($date_forwarded ?: $date_out),
-                'url' => app_notification_build_url('pages/data-tracking-out'),
-            ]);
-        }
-
-        echo json_encode([
+        $response = [
             'success' => true,
             'message' => 'Document updated successfully.',
-            'mail_sent' => $mailResult['sent'],
-            'mail_failed' => $mailResult['failed'],
-            'notifications_sent' => $kodusAlertResult['notifications'],
-            'messenger_sent' => $kodusAlertResult['messages'],
-        ]);
+        ];
+        if ($recipientData['emails'] !== [] && trim((string) ($existingRecord['receiving_office'] ?? '')) !== trim((string) $receiving_office)) {
+            tracking_finish_json_response_then_send_document_recipient_notices($conn, $response, $recipientData['emails'], [
+                'context' => 'Updated outgoing document',
+                'tracking_number' => (string) ($existingRecord['tracking_number'] ?? ''),
+                'description' => (string) $description,
+                'remarks' => (string) $remarks,
+                'receiving_office' => (string) $receiving_office,
+                'date_forwarded' => (string) ($date_forwarded ?: $date_out),
+                'url' => app_notification_build_url('pages/data-tracking-out'),
+            ]);
+            exit;
+        }
+
+        echo json_encode($response + ['mail_queued' => false]);
     } else {
         if ($fileName) {
             tracking_cleanup_saved_paths($uploadedFiles['paths'] ?? []);

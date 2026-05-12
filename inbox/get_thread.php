@@ -502,12 +502,12 @@ function renderAttachments($attachmentCsv, $basePath, $type = 'contact')
     foreach ($files as $i => $file) {
         $path = $basePath . rawurlencode($file);
         $ext = strtolower(pathinfo($file, PATHINFO_EXTENSION));
-        $isMedia = in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp', 'avif', 'mp4', 'webm', 'ogg', 'ogv', 'mov', 'm4v', 'mp3', 'wav', 'm4a', 'aac', 'flac'], true);
+        $isMedia = in_array($ext, ['jpg', 'jpeg', 'jfif', 'png', 'gif', 'webp', 'avif', 'mp4', 'webm', 'ogg', 'ogv', 'mov', 'm4v', 'mp3', 'wav', 'm4a', 'aac', 'flac'], true);
         $safePath = htmlspecialchars($path, ENT_QUOTES, 'UTF-8');
         $safeFile = htmlspecialchars($file, ENT_QUOTES, 'UTF-8');
         $html .= '<div class="attachment-thumb' . ($isMedia ? ' attachment-thumb--media' : '') . '" data-attachments=\'' . $jsonFiles . '\' data-index="' . $i . '" data-type="' . $type . '">';
 
-        if (in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp', 'avif'], true)) {
+        if (in_array($ext, ['jpg', 'jpeg', 'jfif', 'png', 'gif', 'webp', 'avif'], true)) {
             $html .= '<img src="' . $safePath . '" alt="">';
         } elseif (in_array($ext, ['mp4', 'webm', 'ogv', 'mov', 'm4v'], true)) {
             $html .= '<video src="' . $safePath . '" controls preload="metadata"></video>';
@@ -1274,7 +1274,7 @@ if ($onlyConversation) {
         return file.type.startsWith('image/')
             || file.type.startsWith('video/')
             || file.type.startsWith('audio/')
-            || ['avif', 'webp', 'jpg', 'jpeg', 'png', 'gif', 'mp4', 'webm', 'ogv', 'mov', 'm4v', 'mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac'].includes(ext);
+            || ['avif', 'webp', 'jpg', 'jpeg', 'jfif', 'png', 'gif', 'mp4', 'webm', 'ogv', 'mov', 'm4v', 'mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac'].includes(ext);
     }
 
     function setReplyPreviewState() {
@@ -1294,7 +1294,7 @@ if ($onlyConversation) {
             card.style.zIndex = String(visibleFiles.length - index + 1);
             const ext = (file.name.split('.').pop() || '').toLowerCase();
 
-            if (file.type.startsWith('image/') || ['avif', 'webp', 'jpg', 'jpeg', 'png', 'gif'].includes(ext)) {
+            if (file.type.startsWith('image/') || ['avif', 'webp', 'jpg', 'jpeg', 'jfif', 'png', 'gif'].includes(ext)) {
                 const img = document.createElement('img');
                 img.src = getReplyPreviewUrl(file);
                 img.alt = '';

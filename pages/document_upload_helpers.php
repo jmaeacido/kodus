@@ -17,7 +17,11 @@ function tracking_upload_allowed_types(): array
         ],
         'jpg' => ['image/jpeg'],
         'jpeg' => ['image/jpeg'],
+        'jfif' => ['image/jpeg'],
         'png' => ['image/png'],
+        'gif' => ['image/gif'],
+        'webp' => ['image/webp'],
+        'avif' => ['image/avif'],
         'xlsx' => [
             'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
             'application/zip',
@@ -254,7 +258,7 @@ function tracking_save_uploaded_files(string $fieldName = 'file'): array
         $detectedType = security_detect_upload_mime($tmpPath);
 
         if (!isset($allowedTypes[$extension]) || !in_array($detectedType, $allowedTypes[$extension], true)) {
-            throw new Exception('Invalid file type. Allowed: PDF, DOC, DOCX, JPG, PNG, XLSX, XLSM.');
+            throw new Exception('Invalid file type. Allowed: PDF, DOC, DOCX, JPG, JFIF, PNG, GIF, WEBP, AVIF, XLSX, XLSM.');
         }
 
         $savedName = tracking_unique_upload_name(basename($originalName), $index);

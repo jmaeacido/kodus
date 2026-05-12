@@ -269,9 +269,9 @@ $currentArea = trim((string) ($user['area'] ?? ''));
                             <div class="card-header"><h3 class="card-title mb-0">Profile Snapshot</h3></div>
                             <div class="card-body">
                                 <div class="avatar-upload-card mb-4">
-                                    <input type="file" name="picture" id="picture" form="settingsForm" accept="image/png, image/jpeg" class="form-control mb-3">
+                                    <input type="file" name="picture" id="picture" form="settingsForm" accept="image/jpeg,.jfif,image/png,image/gif,image/webp,image/avif" class="form-control mb-3">
                                     <button type="button" class="btn btn-outline-danger btn-sm" id="removePhotoBtn">Remove Photo</button>
-                                    <p class="profile-hint mt-3 mb-0">Use a JPG or PNG image up to 10MB for the clearest profile photo.</p>
+                                    <p class="profile-hint mt-3 mb-0">Use a common image file up to 10MB for the clearest profile photo.</p>
                                 </div>
 
                                 <div class="settings-section-title">At A Glance</div>
@@ -524,12 +524,14 @@ $(function () {
 
     $('#picture').change(function () {
         const file = this.files[0];
-        if (file && file.size <= 10 * 1024 * 1024 && ['image/jpeg', 'image/png'].includes(file.type)) {
+        const allowedImageTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/avif'];
+        const ext = (file?.name || '').split('.').pop().toLowerCase();
+        if (file && file.size <= 10 * 1024 * 1024 && (allowedImageTypes.includes(file.type) || (file.type === '' && ['jpg', 'jpeg', 'jfif', 'png', 'gif', 'webp', 'avif'].includes(ext)))) {
             const reader = new FileReader();
             reader.onload = e => $('#profilePreview').attr('src', e.target.result);
             reader.readAsDataURL(file);
         } else {
-            Swal.fire('Invalid file', 'Only JPG/PNG under 10MB allowed.', 'warning');
+            Swal.fire('Invalid file', 'Only common image files under 10MB are allowed.', 'warning');
             this.value = '';
         }
     });

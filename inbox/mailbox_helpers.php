@@ -1026,7 +1026,7 @@ function mailboxFormatThreadPreview(array $preview, int $width = 54): string
 function mailboxAllowedAttachmentMimeExtensions(): array
 {
     return [
-        'image/jpeg' => ['jpg', 'jpeg'],
+        'image/jpeg' => ['jpg', 'jpeg', 'jfif'],
         'image/png' => ['png'],
         'image/gif' => ['gif'],
         'image/webp' => ['webp'],

@@ -211,11 +211,17 @@ if (
 
       .swal2-popup.kodus-detail-popup {
         width: min(960px, 92vw);
+        max-height: calc(100vh - 2rem);
+        max-height: calc(100dvh - 2rem);
         padding: 1.35rem;
         border-radius: 22px;
         color: var(--kodus-detail-text);
         background: var(--kodus-detail-hero-end);
         box-shadow: var(--kodus-detail-shadow);
+        display: flex !important;
+        flex-direction: column;
+        justify-content: flex-start;
+        overflow: hidden;
       }
 
       .swal2-popup.kodus-detail-popup .swal2-title {
@@ -227,15 +233,35 @@ if (
       .swal2-popup.kodus-detail-popup .swal2-html-container {
         margin-top: 0.75rem;
         color: var(--kodus-detail-text);
+        flex: 1 1 auto;
+        min-height: 0;
+        max-height: none;
+        overflow-y: auto;
+        padding-right: 0.25rem;
+      }
+
+      .swal2-popup.kodus-detail-popup .swal2-actions {
+        flex: 0 0 auto;
+        z-index: 2;
+        margin: 0.85rem 0 0;
+        padding-top: 0.85rem;
+        width: 100%;
+        background: linear-gradient(180deg, rgba(22, 32, 52, 0), var(--kodus-detail-hero-end) 34%);
       }
 
       .swal2-popup.kodus-edit-popup {
         width: min(980px, 94vw);
+        max-height: calc(100vh - 2rem);
+        max-height: calc(100dvh - 2rem);
         padding: 1.35rem;
         border-radius: 22px;
         color: var(--kodus-detail-text);
         background: var(--kodus-detail-hero-end);
         box-shadow: var(--kodus-detail-shadow);
+        display: flex !important;
+        flex-direction: column;
+        justify-content: flex-start;
+        overflow: hidden;
       }
 
       .swal2-popup.kodus-edit-popup .swal2-title,
@@ -245,6 +271,20 @@ if (
 
       .swal2-popup.kodus-edit-popup .swal2-html-container {
         margin-top: 0.75rem;
+        flex: 1 1 auto;
+        min-height: 0;
+        max-height: none;
+        overflow-y: auto;
+        padding-right: 0.25rem;
+      }
+
+      .swal2-popup.kodus-edit-popup .swal2-actions {
+        flex: 0 0 auto;
+        z-index: 2;
+        margin: 0.85rem 0 0;
+        padding-top: 0.85rem;
+        width: 100%;
+        background: linear-gradient(180deg, rgba(22, 32, 52, 0), var(--kodus-detail-hero-end) 34%);
       }
 
       .swal2-popup.kodus-swal-hero-ready .swal2-title,
@@ -628,6 +668,14 @@ if (
       body[data-theme="light"] .kodus-edit-shell .form-control[readonly],
       body[data-theme="light"] .kodus-edit-shell .form-control:disabled {
         background: #f5f8fc;
+      }
+
+      body[data-theme="light"] .swal2-popup.kodus-edit-popup .swal2-actions {
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0), #ffffff 34%);
+      }
+
+      body[data-theme="light"] .swal2-popup.kodus-detail-popup .swal2-actions {
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0), #ffffff 34%);
       }
 
       .kodus-edit-help {

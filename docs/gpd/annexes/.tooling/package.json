@@ -1,0 +1,1 @@
+{"name":"kodus-annex-tooling","version":"1.0.0","private":true,"dependencies":{"docx":"^9.6.1","markdown-it":"^14.1.1","puppeteer":"^24.43.1"}}

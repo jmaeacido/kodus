@@ -64,11 +64,13 @@ if (!empty($_FILES['group_photo']['name']) && is_uploaded_file($_FILES['group_ph
     $allowed = [
         'image/jpeg' => 'jpg',
         'image/png' => 'png',
+        'image/gif' => 'gif',
         'image/webp' => 'webp',
+        'image/avif' => 'avif',
     ];
     if (!isset($allowed[$mime]) || (int) ($_FILES['group_photo']['size'] ?? 0) > 5 * 1024 * 1024) {
         http_response_code(422);
-        echo json_encode(['success' => false, 'error' => 'Upload a JPG, PNG, or WEBP photo up to 5 MB.']);
+        echo json_encode(['success' => false, 'error' => 'Upload a JPG, PNG, GIF, WEBP, or AVIF photo up to 5 MB.']);
         exit;
     }
     $uploadDir = __DIR__ . '/uploads/group_photos/';

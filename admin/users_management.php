@@ -793,7 +793,7 @@ $deactivatedCount = count($deletedUsers);
                       <th>User Type</th>
                       <th>Status</th>
                       <th>Latest Activity</th>
-                      <th>Action</th>
+                      <th class="no-sort">Action</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -884,7 +884,7 @@ $deactivatedCount = count($deletedUsers);
                       <th>Email</th>
                       <th>Date Registered</th>
                       <th>User Type</th>
-                      <th>Action</th>
+                      <th class="no-sort">Action</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -942,7 +942,7 @@ $deactivatedCount = count($deletedUsers);
                       <th>Full Name</th>
                       <th>Email</th>
                       <th>Deleted At</th>
-                      <th>Action</th>
+                      <th class="no-sort">Action</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1030,7 +1030,7 @@ $deactivatedCount = count($deletedUsers);
                 <table id="twoFactorTable" class="table table-bordered table-striped" style="width:100%;">
                   <thead>
                     <tr>
-                      <th class="checkbox-cell">
+                      <th class="checkbox-cell no-sort">
                         <input type="checkbox" id="selectAll2faUsers" aria-label="Select all visible users">
                       </th>
                       <th>Username</th>
@@ -1039,12 +1039,12 @@ $deactivatedCount = count($deletedUsers);
                       <th>2FA Status</th>
                       <th>Recovery Codes</th>
                       <th>Presence</th>
-                      <th>Action</th>
+                      <th class="no-sort">Action</th>
                     </tr>
                   </thead>
                   <tbody>
                     <?php foreach ($activeUsers as $row): ?>
-                      <tr>
+                      <tr data-twofactor-status="<?= htmlspecialchars((string) $row['two_factor']['label'], ENT_QUOTES); ?>">
                         <td class="checkbox-cell">
                           <input
                             type="checkbox"
@@ -1126,7 +1126,10 @@ function initUsersManagementTable(selector) {
     scrollX: true,
     pageLength: 10,
     lengthMenu: [[5, 10, 25, 50, -1], [5, 10, 25, 50, "All"]],
-    order: []
+    order: [],
+    columnDefs: [
+      { targets: 'no-sort', orderable: false, searchable: false }
+    ]
   });
 }
 
@@ -1136,6 +1139,26 @@ $(document).ready(function () {
   initUsersManagementTable('#restorationTable');
   const twoFactorTable = initUsersManagementTable('#twoFactorTable');
   let classificationStatusFilter = '';
+  let twoFactorStatusFilter = '';
+
+  const tableByTab = {
+    '#classification': classificationTable,
+    '#deactivate': $('#deactivateTable').DataTable(),
+    '#restoration': $('#restorationTable').DataTable(),
+    '#twofactor': twoFactorTable
+  };
+
+  function adjustVisibleUsersTable(target) {
+    const table = tableByTab[target];
+    if (!table) return;
+
+    window.setTimeout(function () {
+      table.columns.adjust();
+      if (table.responsive && typeof table.responsive.recalc === 'function') {
+        table.responsive.recalc();
+      }
+    }, 80);
+  }
 
   $.fn.dataTable.ext.search.push(function (settings, data, dataIndex) {
     if (settings.nTable.id !== 'classificationTable' || !classificationStatusFilter) {
@@ -1144,6 +1167,15 @@ $(document).ready(function () {
 
     const rowNode = settings.aoData[dataIndex] ? settings.aoData[dataIndex].nTr : null;
     return String($(rowNode).data('classification-status') || '') === classificationStatusFilter;
+  });
+
+  $.fn.dataTable.ext.search.push(function (settings, data, dataIndex) {
+    if (settings.nTable.id !== 'twoFactorTable' || !twoFactorStatusFilter) {
+      return true;
+    }
+
+    const rowNode = settings.aoData[dataIndex] ? settings.aoData[dataIndex].nTr : null;
+    return String($(rowNode).data('twofactor-status') || '') === twoFactorStatusFilter;
   });
 
   function setStatusSummary(summary) {
@@ -1389,18 +1421,23 @@ $(document).ready(function () {
     refreshUserStatuses();
   });
 
-  if (window.location.hash === '#deactivate') {
-    $('#deactivate-tab').tab('show');
-  } else if (window.location.hash === '#restoration') {
-    $('#restoration-tab').tab('show');
+  const initialTabTarget = ['#classification', '#deactivate', '#restoration', '#twofactor'].includes(window.location.hash)
+    ? window.location.hash
+    : '#classification';
+
+  if (initialTabTarget !== '#classification') {
+    $('a[data-toggle="pill"][href="' + initialTabTarget + '"]').tab('show');
+  } else {
+    adjustVisibleUsersTable(initialTabTarget);
   }
+  adjustVisibleUsersTable(initialTabTarget);
 
   $('a[data-toggle="pill"]').on('shown.bs.tab', function (e) {
     const target = $(e.target).attr('href');
     if (target) {
       history.replaceState(null, '', target);
+      adjustVisibleUsersTable(target);
     }
-
   });
 
   $(document).on('click', '.reset-2fa-btn', function () {
@@ -1482,10 +1519,9 @@ $(document).ready(function () {
   syncBulkResetState();
 
   $('#twoFactorStatusFilter').on('change', function () {
-    const statusValue = String($(this).val() || '');
-    const searchValue = statusValue ? '^' + $.fn.dataTable.util.escapeRegex(statusValue) + '$' : '';
+    twoFactorStatusFilter = String($(this).val() || '');
     $('.twofactor-user-checkbox').prop('checked', false);
-    twoFactorTable.column(4).search(searchValue, true, false).draw();
+    twoFactorTable.column(4).search('').draw();
     $('#selectAll2faUsers').prop('checked', false);
     syncBulkResetState();
   });

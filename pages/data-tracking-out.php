@@ -172,14 +172,32 @@
       width: min(780px, 94vw);
       height: auto;
       max-height: calc(100vh - 2rem);
+      max-height: calc(100dvh - 2rem);
       padding: 1.35rem;
       border-radius: 22px;
       color: var(--kodus-detail-text, #f8f9fa);
       background: var(--kodus-detail-hero-end, #162034);
       box-shadow: var(--kodus-detail-shadow, 0 18px 40px rgba(15, 23, 42, 0.12));
-      display: flex;
+      display: flex !important;
       flex-direction: column;
+      justify-content: flex-start;
       overflow: hidden;
+    }
+    .swal2-container.kodus-scrollable-swal {
+      align-items: flex-start !important;
+      overflow-x: hidden !important;
+      overflow-y: auto !important;
+      padding: 1.75rem 0.75rem !important;
+    }
+    .swal2-container.kodus-scrollable-swal .swal2-popup {
+      max-height: none !important;
+      margin: 0 auto !important;
+      overflow: visible !important;
+    }
+    .swal2-container.kodus-scrollable-swal .swal2-html-container {
+      flex: none !important;
+      max-height: none !important;
+      overflow: visible !important;
     }
     .swal2-popup.kodus-form-popup .swal2-title,
     .swal2-popup.kodus-form-popup .swal2-html-container {
@@ -192,6 +210,9 @@
       max-height: none;
       overflow-y: auto;
       padding-right: 0.25rem;
+    }
+    .swal2-popup.kodus-form-popup .swal2-loader {
+      border-color: #ffffff transparent #ffffff transparent;
     }
     .swal2-popup.kodus-form-popup .swal2-actions {
       flex: 0 0 auto;
@@ -330,13 +351,18 @@
       flex-wrap: wrap;
       align-items: center;
       gap: 0.35rem;
+      width: 100%;
       min-height: 36px;
       padding: 0;
+      box-sizing: border-box;
+      overflow: hidden;
     }
     .kodus-form-shell .select2-container--bootstrap4 .select2-selection--multiple .select2-selection__choice,
     .kodus-edit-shell .select2-container--bootstrap4 .select2-selection--multiple .select2-selection__choice {
       display: inline-flex;
       align-items: center;
+      flex: 0 1 auto;
+      min-width: 0;
       min-height: 30px;
       margin: 0;
       padding: 0.22rem 0.5rem;
@@ -347,17 +373,34 @@
       font-size: 0.82rem;
       line-height: 1.25;
       max-width: 100%;
+      overflow: hidden;
       white-space: normal;
     }
     .kodus-form-shell .select2-container--bootstrap4 .select2-selection--multiple .select2-selection__choice__remove,
     .kodus-edit-shell .select2-container--bootstrap4 .select2-selection--multiple .select2-selection__choice__remove {
+      flex: 0 0 auto;
       margin-right: 0.32rem;
       color: rgba(255, 255, 255, 0.78);
       text-shadow: none;
     }
+    .kodus-form-shell .select2-container--bootstrap4 .select2-selection--multiple .select2-selection__choice__display,
+    .kodus-edit-shell .select2-container--bootstrap4 .select2-selection--multiple .select2-selection__choice__display {
+      display: inline-flex;
+      min-width: 0;
+      max-width: 100%;
+      overflow: hidden;
+    }
+    .kodus-form-shell .select2-container--bootstrap4 .select2-selection--multiple .select2-search--inline,
+    .kodus-edit-shell .select2-container--bootstrap4 .select2-selection--multiple .select2-search--inline {
+      flex: 1 1 8rem;
+      min-width: min(8rem, 100%);
+      max-width: 100%;
+    }
     .kodus-form-shell .select2-container--bootstrap4 .select2-search__field,
     .kodus-edit-shell .select2-container--bootstrap4 .select2-search__field {
-      min-width: 13rem;
+      width: 100% !important;
+      min-width: min(8rem, 100%);
+      max-width: 100%;
       margin-top: 0;
       color: var(--kodus-detail-text, #f8f9fa) !important;
     }
@@ -396,7 +439,11 @@
       display: inline-flex;
       align-items: center;
       gap: 0.55rem;
+      min-width: 0;
       max-width: 100%;
+    }
+    .kodus-recipient-chip {
+      flex: 1 1 auto;
     }
     .kodus-recipient-avatar {
       width: 1.85rem;
@@ -414,6 +461,8 @@
     }
     .kodus-recipient-copy {
       min-width: 0;
+      max-width: 100%;
+      flex: 1 1 auto;
       display: inline-flex;
       flex-direction: column;
       line-height: 1.22;
@@ -837,23 +886,6 @@ function syncReceivingOfficeField() {
         return '';
     }
 
-    if (window.jQuery) {
-        const pendingTerm = $('.select2-search__field').map(function() {
-            return String(this.value || '').trim();
-        }).get().find(Boolean);
-        if (pendingTerm && !Array.from(picker.options).some(option => option.value === pendingTerm)) {
-            picker.add(new Option(pendingTerm, pendingTerm, true, true));
-            $('.select2-search__field').val('');
-        } else if (pendingTerm) {
-            Array.from(picker.options).forEach(option => {
-                if (option.value === pendingTerm) {
-                    option.selected = true;
-                }
-            });
-            $('.select2-search__field').val('');
-        }
-    }
-
     const values = Array.from(picker.selectedOptions || []).map(option => String(option.value || option.text || '').trim()).filter(Boolean);
     hidden.value = values.join(', ');
     return hidden.value;
@@ -879,7 +911,7 @@ function bindReceivingOfficePicker(initialValue = '') {
             width: '100%',
             tags: true,
             tokenSeparators: [',', ';'],
-            dropdownParent: $('.swal2-popup'),
+            dropdownParent: picker.closest('.swal2-popup'),
             placeholder: 'Select users or type recipients',
             templateResult: option => renderRecipientVisual(option, false),
             templateSelection: option => renderRecipientVisual(option, true),
@@ -891,6 +923,9 @@ function bindReceivingOfficePicker(initialValue = '') {
         });
     }
 
+    picker.on('select2:select', function() {
+        $('.select2-search__field').val('');
+    });
     picker.on('change select2:select select2:unselect', syncReceivingOfficeField);
     syncReceivingOfficeField();
 }
@@ -1222,8 +1257,13 @@ function validateTrackingFormBeforeUpload(formId, progressId) {
     return false;
 }
 
-function submitFormDataWithProgress(url, formData, progressId) {
-    updateUploadProgress(progressId, 3, "Preparing upload");
+function submitFormDataWithProgress(url, formData, progressId, labels = {}) {
+    const progressLabels = {
+        preparing: labels.preparing || "Preparing upload",
+        transferring: labels.transferring || "Uploading file",
+        processing: labels.processing || "Processing upload"
+    };
+    updateUploadProgress(progressId, 3, progressLabels.preparing);
 
     return new Promise((resolve, reject) => {
         const xhr = new XMLHttpRequest();
@@ -1241,7 +1281,7 @@ function submitFormDataWithProgress(url, formData, progressId) {
             stopProgressTimer();
             progressTimer = window.setInterval(() => {
                 simulatedPercent = Math.min(88, simulatedPercent + (simulatedPercent < 35 ? 7 : 3));
-                updateUploadProgress(progressId, simulatedPercent, "Uploading file");
+                updateUploadProgress(progressId, simulatedPercent, progressLabels.transferring);
                 if (simulatedPercent >= 88) {
                     stopProgressTimer();
                 }
@@ -1254,29 +1294,29 @@ function submitFormDataWithProgress(url, formData, progressId) {
 
         xhr.upload.addEventListener("loadstart", () => {
             simulatedPercent = Math.max(simulatedPercent, 8);
-            updateUploadProgress(progressId, simulatedPercent, "Uploading file");
+            updateUploadProgress(progressId, simulatedPercent, progressLabels.transferring);
             startProgressTimer();
         });
 
         xhr.upload.addEventListener("progress", event => {
             if (event.lengthComputable && event.total > 0) {
                 simulatedPercent = Math.min(90, Math.max(simulatedPercent, (event.loaded / event.total) * 90));
-                updateUploadProgress(progressId, simulatedPercent, "Uploading file");
+                updateUploadProgress(progressId, simulatedPercent, progressLabels.transferring);
             } else {
                 simulatedPercent = Math.max(simulatedPercent, 35);
-                updateUploadProgress(progressId, simulatedPercent, "Uploading file");
+                updateUploadProgress(progressId, simulatedPercent, progressLabels.transferring);
             }
         });
 
         xhr.upload.addEventListener("load", () => {
             simulatedPercent = Math.max(simulatedPercent, 92);
-            updateUploadProgress(progressId, simulatedPercent, "Processing upload");
+            updateUploadProgress(progressId, simulatedPercent, progressLabels.processing);
             stopProgressTimer();
         });
 
         xhr.addEventListener("load", () => {
             stopProgressTimer();
-            updateUploadProgress(progressId, 100, "Processing upload");
+            updateUploadProgress(progressId, 100, progressLabels.processing);
             const response = {
                 ok: xhr.status >= 200 && xhr.status < 300,
                 status: xhr.status,
@@ -1304,6 +1344,7 @@ function showEditForm(rowData, date_out, date_forwarded) {
     Swal.fire({
         title: "Edit Document",
         customClass: {
+            container: 'kodus-scrollable-swal',
             popup: 'kodus-edit-popup'
         },
         html: `
@@ -1422,6 +1463,7 @@ document.getElementById("track-documents").addEventListener("click", function ()
 
     Swal.fire({
         customClass: {
+            container: 'kodus-scrollable-swal',
             popup: 'kodus-form-popup',
             confirmButton: 'kodus-form-confirm',
             cancelButton: 'kodus-form-cancel'
@@ -1594,7 +1636,11 @@ document.getElementById("track-documents").addEventListener("click", function ()
 
             let formData = new FormData(document.getElementById("trackForm"));
             appendCsrfToken(formData);
-            return submitFormDataWithProgress("track_outgoing.php", formData, "trackUploadProgress")
+            return submitFormDataWithProgress("track_outgoing.php", formData, "trackUploadProgress", {
+                preparing: "Preparing outgoing document",
+                transferring: "Saving outgoing document",
+                processing: "Finalizing save"
+            })
             .then(data => {
                 if (!data.success) {
                     throw new Error(data.message || "Tracking failed");

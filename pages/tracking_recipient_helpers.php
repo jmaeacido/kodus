@@ -342,3 +342,34 @@ function tracking_send_document_recipient_kodus_alerts(mysqli $conn, array $emai
         ];
     }
 }
+
+function tracking_finish_json_response_then_send_document_recipient_notices(mysqli $conn, array $response, array $emails, array $document): void
+{
+    $response['mail_queued'] = count(array_unique(array_filter($emails))) > 0;
+    $payload = json_encode($response);
+
+    if (!headers_sent()) {
+        header('Content-Length: ' . strlen($payload));
+        header('Connection: close');
+    }
+
+    echo $payload;
+
+    if (function_exists('session_write_close')) {
+        session_write_close();
+    }
+
+    ignore_user_abort(true);
+
+    if (function_exists('fastcgi_finish_request')) {
+        fastcgi_finish_request();
+    } else {
+        while (ob_get_level() > 0) {
+            @ob_end_flush();
+        }
+        @flush();
+    }
+
+    tracking_send_document_recipient_emails($conn, $emails, $document);
+    tracking_send_document_recipient_kodus_alerts($conn, $emails, $document);
+}

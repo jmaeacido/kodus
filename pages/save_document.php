@@ -74,7 +74,11 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         'pdf' => ['application/pdf'],
         'jpg' => ['image/jpeg'],
         'jpeg' => ['image/jpeg'],
+        'jfif' => ['image/jpeg'],
         'png' => ['image/png'],
+        'gif' => ['image/gif'],
+        'webp' => ['image/webp'],
+        'avif' => ['image/avif'],
         'doc' => ['application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
         'docx' => ['application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
     ];

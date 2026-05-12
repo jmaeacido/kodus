@@ -113,33 +113,19 @@ try {
         'actor_id' => (int) $user_id,
     ]);
 
-    $mailResult = tracking_send_document_recipient_emails($conn, $recipientData['emails'], [
-        'context' => 'Forwarded document',
-        'tracking_number' => $tracking_number,
-        'description' => $description,
-        'remarks' => $remarks,
-        'receiving_office' => $receiving_office,
-        'date_forwarded' => $date_forwarded,
-        'url' => app_notification_build_url('pages/data-tracking-out'),
-    ]);
-    $kodusAlertResult = tracking_send_document_recipient_kodus_alerts($conn, $recipientData['emails'], [
-        'context' => 'Forwarded document',
-        'tracking_number' => $tracking_number,
-        'description' => $description,
-        'remarks' => $remarks,
-        'receiving_office' => $receiving_office,
-        'date_forwarded' => $date_forwarded,
-        'url' => app_notification_build_url('pages/data-tracking-out'),
-    ]);
-
-    echo json_encode([
+    tracking_finish_json_response_then_send_document_recipient_notices($conn, [
         'success' => true,
         'message' => 'Document forwarded successfully',
-        'mail_sent' => $mailResult['sent'],
-        'mail_failed' => $mailResult['failed'],
-        'notifications_sent' => $kodusAlertResult['notifications'],
-        'messenger_sent' => $kodusAlertResult['messages'],
+    ], $recipientData['emails'], [
+        'context' => 'Forwarded document',
+        'tracking_number' => $tracking_number,
+        'description' => $description,
+        'remarks' => $remarks,
+        'receiving_office' => $receiving_office,
+        'date_forwarded' => $date_forwarded,
+        'url' => app_notification_build_url('pages/data-tracking-out'),
     ]);
+    exit;
 
 } catch(Exception $e) {
     $conn->rollback();

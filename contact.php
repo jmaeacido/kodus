@@ -943,8 +943,9 @@ function updateAttachments() {
   files.slice(0, maxPreview).forEach(file => {
     const card = document.createElement('div');
     card.classList.add('file-card');
+    const ext = (file.name.split('.').pop() || '').toLowerCase();
 
-    if (file.type.startsWith('image/')) {
+    if (file.type.startsWith('image/') || ['avif', 'webp', 'jpg', 'jpeg', 'jfif', 'png', 'gif'].includes(ext)) {
       const img = document.createElement('img');
       img.src = URL.createObjectURL(file);
       card.appendChild(img);

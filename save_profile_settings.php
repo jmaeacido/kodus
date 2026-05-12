@@ -60,12 +60,12 @@ if (!empty($password)) {
 
 // Optional: handle picture upload
 if (isset($_FILES['picture']) && $_FILES['picture']['error'] == 0) {
-    $allowed = ['jpg', 'jpeg', 'png'];
+    $allowed = ['jpg', 'jpeg', 'jfif', 'png', 'gif', 'webp', 'avif'];
     $filename = basename($_FILES['picture']['name']);
     $ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
     $size = $_FILES['picture']['size'];
     $mime = security_detect_upload_mime($_FILES['picture']['tmp_name']);
-    $allowedMimes = ['image/jpeg', 'image/png'];
+    $allowedMimes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/avif'];
 
     if (in_array($ext, $allowed, true) && in_array($mime, $allowedMimes, true) && $size <= 10 * 1024 * 1024) {
         $safeBaseName = preg_replace('/[^A-Za-z0-9_\-]/', '_', pathinfo($filename, PATHINFO_FILENAME));

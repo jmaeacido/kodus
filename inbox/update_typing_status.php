@@ -34,7 +34,7 @@ if ($userId <= 0 || $messageId <= 0) {
     exit;
 }
 
-mailboxTouchCurrentUserPresence($conn, $isTyping);
+mailboxTouchCurrentUserPresence($conn);
 
 if (!mailboxCanAccessMessage($conn, $messageId, $userType, $userEmail, $userName)) {
     http_response_code(403);

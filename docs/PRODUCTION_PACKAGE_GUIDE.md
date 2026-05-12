@@ -1,125 +1,104 @@
 # KODUS Production Package Guide
 
-Date: 2026-04-07
+Last reviewed: 2026-05-12
 
-This guide lists what should go to the company server and what should stay out of the production deployment package.
+This guide lists what should normally be deployed to production and what should stay out of a production package.
 
 ## Deploy
 
-These are the app areas that should normally be included in the production package:
+Deploy reviewed application code, bundled assets, Composer dependencies, and required runtime scaffolding:
 
 - `admin/`
-- `cdn.datatables.net/`
-- `cdn.jsdelivr.net/`
-- `cdnjs.cloudflare.com/`
-- `code.jquery.com/`
 - `crossmatch/`
 - `deduplication/`
 - `dist/`
-- `fonts.googleapis.com/`
-- `fonts.gstatic.com/`
 - `implementation-status/`
 - `inbox/`
+- `messenger/`
 - `mebis-consolidator/`
+- `mebis-lgu-template/`
+- `notifications/`
 - `pages/`
 - `plugins/`
-- `storage/`
-- `vendor/`
-- `.htaccess`
-- `ajax_login.php`
+- `socket/` if the optional bridge service is being deployed or documented with the package
+- bundled local CDN/font asset folders used by the app
+- `vendor/` or install it on-server through Composer
+- root PHP entry points and helpers, including authentication, security, notification, audit, role, profile, theme, two-factor, SSO, socket, fund monitoring, project target, project variable, payout, and base URL helpers
+- `composer.json` and `composer.lock`
+- `.htaccess` only when deploying under Apache; Nginx deployments still need server config
+
+Important root/helper files currently include:
+
 - `app_meta.php`
-- `audit_helpers.php`
-- `auth_helpers.php`
-- `base_url.php`
-- `composer.json`
-- `composer.lock`
 - `config.php`
-- `contact.php`
-- `delete_account.php`
-- `disable_2fa.php`
+- `security.php`
+- `auth_helpers.php`
+- `audit_helpers.php`
+- `app_notification_helpers.php`
+- `notification_helpers.php`
+- `socket_helpers.php`
 - `env_helpers.php`
-- `export_excel.php`
-- `export_style_helpers.php`
-- `favicon.ico`
-- `forgot-password.php`
-- `fund_monitoring_helpers.php`
-- `get_data.php`
+- `db_stmt_helpers.php`
+- `base_url.php`
 - `header.php`
+- `sidenav.php`
 - `home.php`
 - `index.php`
-- `live_refresh.php`
 - `login.php`
+- `ajax_login.php`
 - `logout.php`
-- `mail_config.php`
-- `notification_helpers.php`
-- `page_loader.php`
+- `register.php`
+- `settings.php`
+- `select_year.php`
 - `password_policy_helpers.php`
-- `payout.php`
-- `payout_config_helpers.php`
+- `two_factor_helpers.php`
+- `sso_helpers.php`
+- `role_change_helpers.php`
+- `profile_review_helpers.php`
+- `profile_completion_helpers.php`
+- `meb_change_history_helpers.php`
+- `fund_monitoring_helpers.php`
 - `project_targets_helpers.php`
 - `project_variable_helpers.php`
-- `recover-password.php`
-- `register.php`
-- `remove_photo.php`
-- `reset-password.php`
-- `restore_user.php`
-- `restore_users.php`
-- `role-change-status.php`
-- `role_change_helpers.php`
-- `save_profile_settings.php`
-- `save_theme_preference.php`
-- `security.php`
-- `select_year.php`
-- `send-reset-link.php`
-- `begin_2fa_setup.php`
-- `regenerate_recovery_codes.php`
-- `two_factor_helpers.php`
-- `send_contact.php`
-- `send_legacy_password_reminders.php`
-- `send_login_notification.php`
-- `settings.php`
-- `sidenav.php`
-- `theme_helpers.php`
-- `update-password.php`
-- `verify-2fa.php`
-- `verify_2fa_code.php`
+- `payout_config_helpers.php`
+- `export_style_helpers.php`
+- custom error pages `400.php` through `504.php`
+
+## Create on Server, Do Not Bundle
+
+- production `.env`
+- database dumps/backups
+- private keys
+- SMTP credentials
+- SSO client secrets
+- Socket bearer tokens
+- production upload/output data
+- production logs
 
 ## Do Not Deploy
 
-These should be excluded from the production package:
+Exclude:
 
-- `.env`
-- `.env.example`
 - `.git/`
-- `.tmp.driveupload/`
-- `artifacts/`
-- `docs/`
-- `screenshots/`
-- `scratch/`
-- `sql/`
-- `composer-setup.php`
-- `composer.phar`
-- `info.php`
-- `phpinfo.php`
-- `__diag_password_policy.php`
-- `__https_debug.php`
-- `kodus-key_pair.pem`
-- `kodus-key_pair.ppk`
-- `kodus_db.sql`
-- any temporary exports, test spreadsheets, or local working files
+- `.env`
+- SQL dumps and database backups
+- private keys such as `.pem`, `.ppk`, `.key`
+- local diagnostics such as `phpinfo.php`, `info.php`, temporary schema checks, debug scripts, and scratch cleanup files
+- `docs/` unless the deployment policy explicitly allows internal documentation on the server; if deployed, block it from web access
+- `scratch/`, `artifacts/`, `screenshots/`, temporary upload folders, and local working files
+- test spreadsheets, live-file copies, payroll files, or other operational data unless formally reviewed, scrubbed, and required as production assets
 
-Examples from the current workspace that should not be deployed:
+Examples of files that should be reviewed or excluded if present:
 
 - `Beneficiaries_Template.xlsx`
 - `Caraga RRP-CFTW Tracker_CY2026 live file.xlsx`
-- `LIBJO, PDI (ECT PAYROLL).xlsm`
 - `Regional Program Implementation Plan.xlsx`
-
-If any of those files are required for user-facing downloads, move them into a reviewed production assets location first and confirm they do not contain sensitive data.
+- payroll or LGU workbook samples
+- ad hoc `tmp_*.php` scripts
 
 ## Deploy With Caution
 
-These paths may be needed at runtime, but should be reviewed before go-live:
+These paths may be required at runtime but must be reviewed before go-live:
 
 - `storage/`
 - `crossmatch/uploads/`
@@ -127,38 +106,40 @@ These paths may be needed at runtime, but should be reviewed before go-live:
 - `deduplication/logs/`
 - `inbox/uploads/`
 - `pages/uploads/`
+- `mebis-consolidator/outputs/`
+- `mebis-lgu-template/jobs/`
+- `mebis-lgu-template/outputs/`
+- profile export job/output directories used by `pages/profile_export_*`
 
-Production rules for these directories:
+Production rules:
 
-- keep write access limited to the web server account only where needed
-- do not place secrets there
-- do not allow script execution there
-- clean out old test files before go-live
-- move logs outside the web root if possible
+- keep write access limited to the web/PHP user
+- block script execution
+- clear old test files
+- move logs outside web root when possible
+- treat generated files as sensitive if they contain beneficiary or operational data
+- include required runtime directories in backup scope only after confirming retention rules
 
-## Recommended Packaging Rule
+## Packaging Rule
 
-If you are preparing a zip or deployment artifact, build it from an allowlist mindset:
+Use an allowlist mindset:
 
-1. Include the application code and runtime assets only.
-2. Exclude secrets, dumps, docs, screenshots, scratch work, installers, and diagnostics.
-3. Add the production `.env` separately on the server instead of bundling it in the package.
+1. Include reviewed app source, runtime assets, and Composer dependencies.
+2. Exclude secrets, dumps, keys, diagnostics, docs, screenshots, scratch work, and operational datasets.
+3. Install production `.env` directly on the server.
+4. Recreate writable runtime directories with correct permissions.
+5. Confirm web-server deny rules before exposing the app.
 
-## Pre-Upload Sanity Check
+## Pre-Go-Live Checks
 
-Before copying the package to the company server, verify that the package does not contain:
-
-- any `.env` file
-- any `.sql` dump
-- any `.pem`, `.ppk`, or `.key` file
-- any `phpinfo` or debug endpoint
-- any `docs/`, `scratch/`, `screenshots/`, or `artifacts/` directory
-
-## Recommended Server-Side Follow-Up
-
-After deployment:
-
-- create the production `.env` directly on the server
-- set secure file permissions
-- confirm blocked files return `403` or `404`
-- run the smoke tests from [`APACHE_PRODUCTION_CHECKLIST.md`](/C:/laragon/www/kodus/docs/APACHE_PRODUCTION_CHECKLIST.md)
+- `composer install --no-dev --optimize-autoloader` completed.
+- `.env` exists only on the server and is not browser-accessible.
+- DB connection works.
+- PHP CLI is available for background workers.
+- SMTP works.
+- Upload directories are writable and cannot execute scripts.
+- MEB import, deduplication, crossmatch, profile export, and MEBIS worker flows start correctly.
+- Audit logs record state-changing requests.
+- Role checks work for admin/editor/AA/user.
+- Maintenance mode and custom error pages work.
+- Backup and restore process is documented by the host/system owner.

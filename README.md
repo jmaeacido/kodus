@@ -1,93 +1,102 @@
 # KODUS
 
-KODUS stands for `KliMalasakit Online Document Updating System`. This repository contains the PHP-based web application prepared for formal GitLab submission and departmental review.
+Last reviewed: 2026-05-12
 
-## Project Summary
+KODUS means **KliMalasakit Online Document Updating System**. In the current codebase it is a PHP/MySQL internal operations platform for DSWD Caraga climate-response program monitoring, document/data tracking, MEB processing, RRP-CFTW / Project LAWA and BINHI implementation monitoring, fund/payout monitoring, staff coordination, and audit-ready reporting.
 
-KODUS is a role-based internal web application for document updating, tracking, reporting, and administrative management. The codebase is structured as a server-rendered PHP application with shared helper modules, MySQL connectivity, and spreadsheet-based import or export utilities.
-
-Current application metadata from [`app_meta.php`](/c:/laragon/www/kodus/app_meta.php:1):
+Application metadata from `app_meta.php`:
 
 - Version: `2.4.6`
 - Codename: `Control Center`
 - Release date: `2026-03-30`
 
-## Implemented Modules
+## Current Scope
 
-The following items are based on modules and entry points present in this repository:
+KODUS is not only a document tracker. The implemented modules support an institutional workflow that connects planning targets, beneficiary records, validation, implementation status, payouts, funds, reporting, notifications, and accountability logs.
 
-- User authentication with session handling, remember-me support, password recovery, and password reset flows
-- Optional Caraga Connect SSO integration
-- Optional two-factor authentication with QR setup, verification, recovery codes, and admin reset actions
-- Role-aware access control and administration features for user management, classification, restore, deactivation, and audit logs
-- Mailbox and internal messaging screens with attachments, read or trash state, and reply handling
-- Application notification feed and notification history
-- Document and data tracking pages for incoming, outgoing, and MEB-related records
-- Beneficiary profile, sectoral summary, and PWD summary pages with export support
-- Calendar and event scheduling pages
-- Payout and fund monitoring pages
-- Implementation status pages for baseline targets, program activities, project location records, project location maps, and summary templates
-- Crossmatching utilities for uploaded datasets
-- Deduplication utilities and template generation
-- Spreadsheet import and export workflows powered by PhpSpreadsheet
-- Maintenance mode controls and shared security helpers
+Core implemented areas:
 
-## Technical Notes
+- Authentication, registration, password reset, remember-me, 2FA, SSO hooks, profile review, and account lifecycle controls
+- Role and area-based access for `admin`, `editor`, `aa`, and `user` accounts
+- MEB import, background import jobs, MEB edit screens, MEB validation, change review, profile export, and Excel export
+- RRP-CFTW / Project LAWA and BINHI baseline targets, project target rows, implementation activity rows, project location records, maps, and summary reports
+- Deduplication and crossmatch utilities for uploaded beneficiary datasets
+- Payout tracking and fund monitoring, including monthly obligations/disbursements and export routes
+- Incoming/outgoing document tracking and document upload/forwarding helpers
+- Inbox/messenger, group chat, attachments, reactions, typing state, read/trash state, and notification feed
+- Calendar events, guest lists, schedule helpers, holidays, and reminders
+- App notifications, live refresh polling, and optional Socket.IO bridge
+- Admin user management, maintenance mode, password security settings, project variables, audit logs, and restore/deactivation actions
 
-- Application stack: PHP with MySQL or MariaDB
-- Frontend pattern: server-rendered pages using AdminLTE, Bootstrap, jQuery, and bundled plugins
-- Dependency management: Composer is used for PHP packages; `package.json` is present for frontend asset tooling inherited from the AdminLTE-based project structure
-- Environment loading: `.env` values are read through `vlucas/phpdotenv`
-- Hosting target for submission: Linux with Nginx and PHP-FPM
+## Stack
 
-Primary PHP dependencies declared in [`composer.json`](/c:/laragon/www/kodus/composer.json:1):
+- PHP using procedural page controllers and shared helper modules
+- MySQL or MariaDB via `mysqli`
+- AdminLTE 3, Bootstrap 4, jQuery, DataTables, Chart.js, SweetAlert2, and bundled frontend plugins
+- Composer dependencies in `composer.json`:
+  - `phpoffice/phpspreadsheet`
+  - `phpmailer/phpmailer`
+  - `vlucas/phpdotenv`
+  - `pragmarx/google2fa`
+  - `bacon/bacon-qr-code`
+- Optional Node tooling remains from AdminLTE and is only needed when rebuilding frontend assets
 
-- `phpoffice/phpspreadsheet`
-- `phpmailer/phpmailer`
-- `vlucas/phpdotenv`
-- `pragmarx/google2fa`
-- `bacon/bacon-qr-code`
+## Key Entry Points
 
-## Repository Layout
+- `index.php`, `login.php`, `ajax_login.php`, `logout.php`
+- `register.php`, `forgot-password.php`, `send-reset-link.php`, `reset-password.php`
+- `verify-2fa.php`, `verify_2fa_code.php`, `begin_2fa_setup.php`, `disable_2fa.php`
+- `home.php`, `select_year.php`, `settings.php`
+- `pages/data-tracking-meb.php`, `pages/import.php`, `pages/meb_import_worker.php`
+- `pages/data-tracking-meb-validation.php`, `pages/update_validation_status.php`
+- `implementation-status/program-targets.php`, `implementation-status/program-activities.php`
+- `deduplication/index.php`, `deduplication/upload_handler.php`, `deduplication/worker_v2.php`
+- `crossmatch/index.php`, `crossmatch/upload_handler.php`, `crossmatch/run_job.php`
+- `pages/payout.php`, `pages/fund-monitoring.php`
+- `inbox/index.php`, `contact.php`, `send_contact.php`
+- `notifications/index.php`, `live_refresh.php`
+- `admin/users_management.php`, `admin/audit_logs.php`, `admin/maintenance.php`
 
-- [`index.php`](/c:/laragon/www/kodus/index.php:1): login entry page
-- [`config.php`](/c:/laragon/www/kodus/config.php:1): environment loading, database connection, schema bootstrapping, and runtime safeguards
-- [`header.php`](/c:/laragon/www/kodus/header.php:1): authenticated page bootstrap, shared guards, and common assets
-- [`admin/`](/c:/laragon/www/kodus/admin): administrative pages
-- [`pages/`](/c:/laragon/www/kodus/pages): primary transaction and reporting pages
-- [`inbox/`](/c:/laragon/www/kodus/inbox): mailbox and messaging features
-- [`notifications/`](/c:/laragon/www/kodus/notifications): notification history and actions
-- [`crossmatch/`](/c:/laragon/www/kodus/crossmatch): dataset crossmatching tools
-- [`deduplication/`](/c:/laragon/www/kodus/deduplication): deduplication tools and template generation
-- [`implementation-status/`](/c:/laragon/www/kodus/implementation-status): implementation status and target-tracking pages
-- [`docs/LINUX_NGINX_DEPLOYMENT.md`](/c:/laragon/www/kodus/docs/LINUX_NGINX_DEPLOYMENT.md:1): deployment notes already maintained in the repository
-- [`deployment/nginx/crg-kodus.conf.example`](/c:/laragon/www/kodus/deployment/nginx/crg-kodus.conf.example:1): example Nginx site configuration
+## Important Directories
 
-## Environment Configuration
+- `admin/`: user, role, password security, project variable, maintenance, restore, and audit screens
+- `pages/`: main operational pages for MEB, document tracking, payout, fund monitoring, exports, calendar, and profile jobs
+- `implementation-status/`: target setting, activity monitoring, maps, records, and LAWA/BINHI summaries
+- `deduplication/`: uploaded-file duplicate detection jobs and results
+- `crossmatch/`: DB-vs-file and file-vs-file matching jobs and results
+- `mebis-consolidator/`: MEBIS workbook consolidation and output history
+- `mebis-lgu-template/`: LGU import-template generation and import helpers
+- `inbox/` and `messenger/`: staff messaging handlers
+- `notifications/`: notification history/feed actions
+- `socket/`: optional Socket.IO bridge service documentation
+- `docs/`: ERD, PIA, user manuals, test cases, screenshots, deployment guides, and evidence notes
+- `dist/`, `plugins/`, `cdn.*`, `fonts.*`: bundled frontend/static assets
 
-Use [`.env.example`](/c:/laragon/www/kodus/.env.example:1) as the reference for local or server configuration. The example file currently includes settings for:
+## Data and Accountability
+
+The main operational tables include `users`, `meb`, `meb_change_history`, `audit_logs`, `mail_logs`, `incoming`, `outgoing`, `breakdown`, `project_lawa_binhi_targets`, `project_target_entries`, `program_activity_metadata`, `program_activity_actual_projects`, `crossmatch_jobs`, `crossmatch_results`, `deduplication_jobs`, `deduplication_results`, `fund_monitoring_items`, `fund_monitoring_entries`, `contact_messages`, `contact_message_recipients`, `contact_replies`, `message_reads`, `events`, `event_guests`, `app_notifications`, and `app_notification_reads`.
+
+KODUS currently has live refresh and optional Socket.IO support, but no first-class PWA/offline mode was found. There is no app manifest or service-worker registration in the current source tree; “offline” references are presence labels in chat/inbox flows.
+
+## Configuration
+
+Copy `.env.example` to `.env` and configure:
 
 - database connection
-- application base path
+- app URL and public root/directory
+- timezone
 - SMTP mail delivery
-- Caraga Connect SSO
-- optional socket bridge integration
+- Caraga Connect SSO endpoints and credentials, if used
+- optional Socket.IO bridge settings
 - optional KODA scene settings
 
-The repository does not include live secrets and `.env` should remain untracked.
+Never commit `.env`, SQL dumps, private keys, runtime logs, or production uploads.
 
-## Hosting Notes
+## Deployment
 
-This repository already includes Linux and Nginx deployment notes. Based on the current codebase and documentation:
+The maintained deployment target is Linux + Nginx + PHP-FPM + MySQL/MariaDB. See:
 
-- the intended deployment model is PHP on Linux with Nginx and PHP-FPM
-- the app currently assumes deployment under a `/kodus` URL path in the documented Nginx setup
-- Apache `.htaccess` files are present in the repository, but Nginx rules must be configured separately
+- `docs/LINUX_NGINX_DEPLOYMENT.md`
+- `docs/PRODUCTION_PACKAGE_GUIDE.md`
 
-Refer to [`docs/LINUX_NGINX_DEPLOYMENT.md`](/c:/laragon/www/kodus/docs/LINUX_NGINX_DEPLOYMENT.md:1) for the existing server-side notes.
-
-## Submission Notes
-
-- This repository should track source code, reviewed static assets, and supporting documentation
-- Runtime uploads, generated outputs, local caches, SQL dumps, and secrets should not be committed
-- The included GitLab CI configuration is limited to safe validation checks and does not perform deployment
+Runtime upload/output directories must be writable only where needed, and server rules must block secrets, SQL dumps, logs, private keys, documentation, and executable uploads.

@@ -269,7 +269,7 @@ def build_document(database_name: str, tables: Dict[str, TableDef], source_sql: 
     )
     lines.append("")
     lines.append(
-        "KODUS stands for KliMalasakit Online Document Updating System. Based on the application code and existing "
+        "KODUS stands for KliMalasakit Operational Data Unified System. Based on the application code and existing "
         "project documentation, the database supports user management, MEB beneficiary records, incoming and outgoing "
         "document tracking, internal messaging, project implementation monitoring, fund monitoring, crossmatch, and "
         "deduplication utilities."
@@ -446,7 +446,7 @@ th {
         "and foreign keys.</p>"
     )
     add(
-        "<p>KODUS stands for KliMalasakit Online Document Updating System. Based on the application code and existing "
+        "<p>KODUS stands for KliMalasakit Operational Data Unified System. Based on the application code and existing "
         "project documentation, the database supports user management, MEB beneficiary records, incoming and outgoing "
         "document tracking, internal messaging, project implementation monitoring, fund monitoring, crossmatch, and "
         "deduplication utilities.</p>"

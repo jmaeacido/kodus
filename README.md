@@ -2,7 +2,7 @@
 
 Last reviewed: 2026-05-12
 
-KODUS means **KliMalasakit Online Document Updating System**. In the current codebase it is a PHP/MySQL internal operations platform for DSWD Caraga climate-response program monitoring, document/data tracking, MEB processing, RRP-CFTW / Project LAWA and BINHI implementation monitoring, fund/payout monitoring, staff coordination, and audit-ready reporting.
+KODUS means **KliMalasakit Operational Data Unified System**. In the current codebase it is a PHP/MySQL internal operations platform for DSWD Caraga climate-response program monitoring, document/data tracking, MEB processing, RRP-CFTW / Project LAWA and BINHI implementation monitoring, fund/payout monitoring, staff coordination, and audit-ready reporting.
 
 Application metadata from `app_meta.php`:
 

@@ -333,7 +333,7 @@ document.addEventListener('DOMContentLoaded', function () {
       version 1.0.0
     </div>
     <!-- Default to the left -->
-    <strong>KliMalasakit Online Document Updating System</a>.</strong>
+    <strong>KliMalasakit Operational Data Unified System</a>.</strong>
   </footer>
 </body>
 </html>

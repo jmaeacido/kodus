@@ -299,10 +299,10 @@ def build_workbook():
         ws.delete_rows(12, ws.max_row - 11)
 
     ws["A2"] = "KODUS SYSTEM"
-    ws["D4"] = "KliMalasakit Online Document Updating System"
+    ws["D4"] = "KliMalasakit Operational Data Unified System"
     ws["D5"] = "KODUS Administration"
     ws["A10"] = (
-        "KliMalasakit Online Document Updating System (KODUS) is a web-based platform for "
+        "KliMalasakit Operational Data Unified System (KODUS) is a web-based platform for "
         "user administration, document tracking, implementation-status reporting, location views, "
         "notifications, and internal messaging. The user stories below are based on implemented "
         "role checks, page guards, sidebar visibility, and transaction permissions in the codebase."

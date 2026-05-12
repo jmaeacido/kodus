@@ -273,7 +273,7 @@ def build_sections(snapshot: dict) -> list[dict]:
             "heading": "Introduction",
             "paragraphs": [
                 (
-                    "KODUS, or the KliMalasakit Online Document Updating System, is a web-based PHP and MySQL application used to manage beneficiary records, document tracking, implementation-status reporting, fund monitoring, payout monitoring, internal messaging, and supporting utility workflows. "
+                    "KODUS, or the KliMalasakit Operational Data Unified System, is a web-based PHP and MySQL application used to manage beneficiary records, document tracking, implementation-status reporting, fund monitoring, payout monitoring, internal messaging, and supporting utility workflows. "
                     "This documentation was prepared from an audit of the current application codebase together with the live database schema and active table inventory on April 17, 2026."
                 ),
                 (
@@ -483,7 +483,7 @@ def build_docx(sections: list[dict], snapshot: dict) -> None:
 
     p2 = document.add_paragraph()
     p2.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    r = p2.add_run("KliMalasakit Online Document Updating System")
+    r = p2.add_run("KliMalasakit Operational Data Unified System")
     r.font.size = Pt(15)
     r.bold = True
 
@@ -646,7 +646,7 @@ def build_pdf(sections: list[dict], snapshot: dict) -> None:
     story = [
         Spacer(1, 1.5 * inch),
         Paragraph("KODUS Full System Documentation", styles["KodusTitle"]),
-        Paragraph("KliMalasakit Online Document Updating System", styles["KodusSubtitle"]),
+        Paragraph("KliMalasakit Operational Data Unified System", styles["KodusSubtitle"]),
         Spacer(1, 0.2 * inch),
         Paragraph("Submission-Ready Documentation for Hosting Requirements", styles["KodusMeta"]),
         Paragraph(

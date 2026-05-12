@@ -67,14 +67,14 @@
 				});
 			}
 
-			// Toggle between "KliMalasakit Online Document Updating System" and "KODUS" with smooth transition
+			// Toggle between "KliMalasakit Operational Data Unified System" and "KODUS" with smooth transition
 			text.classList.add("text-hidden");
 			setTimeout(function() {
 				if (isOriginal) {
 					text.textContent = "KODUS";
 					isOriginal = false;
 				} else {
-					text.textContent = "KliMalasakit Online Document Updating System";
+					text.textContent = "KliMalasakit Operational Data Unified System";
 					isOriginal = true;
 				}
 				text.classList.remove("text-hidden");

@@ -2018,7 +2018,7 @@ document.addEventListener("DOMContentLoaded", function() {
       Version <?= htmlspecialchars(app_version_label(), ENT_QUOTES, 'UTF-8') ?> · <?= htmlspecialchars(app_release_label(), ENT_QUOTES, 'UTF-8') ?>
     </div>
     <!-- Default to the left -->
-    <strong>KliMalasakit Online Document Updating System</a>.</strong>
+    <strong>KliMalasakit Operational Data Unified System</a>.</strong>
   </footer>
 </body>
 </html>

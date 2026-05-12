@@ -709,7 +709,7 @@ function kodus_render_error_page(int $code, array $context = []): void
                         </div>
                         <div>
                             <div class="text-uppercase font-weight-bold" style="letter-spacing: 0.12em; opacity: 0.75;">KODUS Response Center</div>
-                            <h2 class="h3 mb-1 font-weight-bold">KliMalasakit Online Document Updating System</h2>
+                            <h2 class="h3 mb-1 font-weight-bold">KliMalasakit Operational Data Unified System</h2>
                             <div><?= htmlspecialchars((string) $meta['headline'], ENT_QUOTES, 'UTF-8') ?></div>
                         </div>
                     </div>

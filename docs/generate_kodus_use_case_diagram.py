@@ -233,7 +233,7 @@ def build_diagram():
     draw_centered_text(
         draw,
         (CENTER_X, 165),
-        "KliMalasakit Online Document Updating System",
+        "KliMalasakit Operational Data Unified System",
         SUBTITLE_FONT,
         subtitle_color,
     )

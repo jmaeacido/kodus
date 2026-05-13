@@ -194,42 +194,63 @@ function projectTargetsValidationActualAggregateSql(string $yearPlaceholder = '?
 
 function projectTargetsValidationComparisonSql(): string
 {
-    $targetAggregateSql = projectTargetsValidationTargetAggregateSql();
-    $actualAggregateSql = projectTargetsValidationActualAggregateSql();
+    $targetProvinceKey = projectTargetsCanonicalLocationSql('province');
+    $targetMunicipalityKey = projectTargetsCanonicalLocationSql('municipality');
+    $targetBarangayKey = projectTargetsCanonicalLocationSql('barangay');
+    $actualProvinceKey = projectTargetsCanonicalLocationSql('province');
+    $actualMunicipalityKey = projectTargetsCanonicalLocationSql('lgu');
+    $actualBarangayKey = projectTargetsCanonicalLocationSql('barangay');
 
     return "
         SELECT
-            COALESCE(targets.province, actuals.province) AS province,
-            COALESCE(targets.municipality, actuals.municipality) AS municipality,
-            COALESCE(targets.barangay, actuals.barangay) AS barangay,
-            COALESCE(actuals.batch_numbers, '') AS batch_numbers,
-            COALESCE(targets.target_partner_beneficiaries, 0) AS target_beneficiaries,
-            COALESCE(actuals.actual_beneficiaries, 0) AS actual_beneficiaries,
-            COALESCE(actuals.actual_beneficiaries, 0) - COALESCE(targets.target_partner_beneficiaries, 0) AS variance,
-            COALESCE(actuals.ids, '') AS ids
-        FROM ({$targetAggregateSql}) AS targets
-        LEFT JOIN ({$actualAggregateSql}) AS actuals
-            ON actuals.province_key = targets.province_key
-           AND actuals.municipality_key = targets.municipality_key
-           AND actuals.barangay_key = targets.barangay_key
+            COALESCE(MIN(NULLIF(target_province, '')), MIN(NULLIF(actual_province, '')), '') AS province,
+            COALESCE(MIN(NULLIF(target_municipality, '')), MIN(NULLIF(actual_municipality, '')), '') AS municipality,
+            COALESCE(MIN(NULLIF(target_barangay, '')), MIN(NULLIF(actual_barangay, '')), '') AS barangay,
+            COALESCE(GROUP_CONCAT(NULLIF(batch_numbers, '') SEPARATOR ', '), '') AS batch_numbers,
+            SUM(target_beneficiaries) AS target_beneficiaries,
+            SUM(actual_beneficiaries) AS actual_beneficiaries,
+            SUM(actual_beneficiaries) - SUM(target_beneficiaries) AS variance,
+            COALESCE(GROUP_CONCAT(NULLIF(ids, '') SEPARATOR ','), '') AS ids
+        FROM (
+            SELECT
+                {$targetProvinceKey} AS province_key,
+                {$targetMunicipalityKey} AS municipality_key,
+                {$targetBarangayKey} AS barangay_key,
+                MIN(province) AS target_province,
+                MIN(municipality) AS target_municipality,
+                MIN(barangay) AS target_barangay,
+                '' AS actual_province,
+                '' AS actual_municipality,
+                '' AS actual_barangay,
+                '' AS batch_numbers,
+                SUM(target_partner_beneficiaries) AS target_beneficiaries,
+                0 AS actual_beneficiaries,
+                '' AS ids
+            FROM project_lawa_binhi_targets
+            WHERE fiscal_year = ?
+            GROUP BY province_key, municipality_key, barangay_key
 
-        UNION ALL
+            UNION ALL
 
-        SELECT
-            actuals.province,
-            actuals.municipality,
-            actuals.barangay,
-            COALESCE(actuals.batch_numbers, '') AS batch_numbers,
-            0 AS target_beneficiaries,
-            COALESCE(actuals.actual_beneficiaries, 0) AS actual_beneficiaries,
-            COALESCE(actuals.actual_beneficiaries, 0) AS variance,
-            COALESCE(actuals.ids, '') AS ids
-        FROM ({$actualAggregateSql}) AS actuals
-        LEFT JOIN ({$targetAggregateSql}) AS targets
-            ON targets.province_key = actuals.province_key
-           AND targets.municipality_key = actuals.municipality_key
-           AND targets.barangay_key = actuals.barangay_key
-        WHERE targets.province_key IS NULL
+            SELECT
+                {$actualProvinceKey} AS province_key,
+                {$actualMunicipalityKey} AS municipality_key,
+                {$actualBarangayKey} AS barangay_key,
+                '' AS target_province,
+                '' AS target_municipality,
+                '' AS target_barangay,
+                MIN(province) AS actual_province,
+                MIN(lgu) AS actual_municipality,
+                MIN(barangay) AS actual_barangay,
+                GROUP_CONCAT(DISTINCT batch_id ORDER BY batch_id ASC SEPARATOR ', ') AS batch_numbers,
+                0 AS target_beneficiaries,
+                COUNT(*) AS actual_beneficiaries,
+                GROUP_CONCAT(id ORDER BY id ASC) AS ids
+            FROM meb
+            WHERE time_stamp >= ? AND time_stamp < ?
+            GROUP BY province_key, municipality_key, barangay_key
+        ) AS location_rows
+        GROUP BY province_key, municipality_key, barangay_key
     ";
 }
 

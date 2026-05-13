@@ -41,10 +41,12 @@ if (!in_array($orderColumn, ['province', 'municipality', 'barangay'], true)) {
 }
 
 $comparisonSql = projectTargetsValidationComparisonSql();
+$selectedYearStart = sprintf('%04d-01-01 00:00:00', $selectedYear);
+$selectedYearEnd = sprintf('%04d-01-01 00:00:00', $selectedYear + 1);
 
 $whereClause = '';
-$params = [$selectedYear, $selectedYear, $selectedYear, $selectedYear];
-$types = "iiii";
+$params = [$selectedYear, $selectedYearStart, $selectedYearEnd];
+$types = "iss";
 
 if ($searchValue !== '') {
     $whereClause = " WHERE comparison.batch_numbers LIKE ? OR comparison.province LIKE ? OR comparison.municipality LIKE ? OR comparison.barangay LIKE ?";
@@ -120,27 +122,30 @@ foreach ($result as $row) {
 }
 $stmt->close();
 
-$sqlCount = "
-    SELECT COUNT(*) AS total
-    FROM ({$comparisonSql}) AS comparison
-    {$whereClause}
-";
-$stmtCount = $conn->prepare($sqlCount);
-$stmtCount->bind_param($types, ...$params);
-$stmtCount->execute();
-$countRow = db_stmt_fetch_one_assoc($stmtCount);
-$totalRows = (int) ($countRow['total'] ?? 0);
-$stmtCount->close();
-
 $stmtTotal = $conn->prepare("
     SELECT COUNT(*) AS total
     FROM ({$comparisonSql}) AS comparison
 ");
-$stmtTotal->bind_param("iiii", $selectedYear, $selectedYear, $selectedYear, $selectedYear);
+$stmtTotal->bind_param("iss", $selectedYear, $selectedYearStart, $selectedYearEnd);
 $stmtTotal->execute();
 $totalRow = db_stmt_fetch_one_assoc($stmtTotal);
 $totalRecords = (int) ($totalRow['total'] ?? 0);
 $stmtTotal->close();
+
+$totalRows = $totalRecords;
+if ($whereClause !== '') {
+    $sqlCount = "
+        SELECT COUNT(*) AS total
+        FROM ({$comparisonSql}) AS comparison
+        {$whereClause}
+    ";
+    $stmtCount = $conn->prepare($sqlCount);
+    $stmtCount->bind_param($types, ...$params);
+    $stmtCount->execute();
+    $countRow = db_stmt_fetch_one_assoc($stmtCount);
+    $totalRows = (int) ($countRow['total'] ?? 0);
+    $stmtCount->close();
+}
 
 echo json_encode([
     "draw" => isset($_GET['draw']) ? (int) $_GET['draw'] : 1,

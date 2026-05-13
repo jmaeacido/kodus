@@ -43,6 +43,8 @@ $headers = [
 $sheet->fromArray([$headers], null, 'A3');
 
 $comparisonSql = projectTargetsValidationComparisonSql();
+$selectedYearStart = sprintf('%04d-01-01 00:00:00', $selectedYear);
+$selectedYearEnd = sprintf('%04d-01-01 00:00:00', $selectedYear + 1);
 $sql = "
     SELECT
         comparison.province,
@@ -56,7 +58,7 @@ $sql = "
 ";
 
 $stmt = $conn->prepare($sql);
-$stmt->bind_param('iiii', $selectedYear, $selectedYear, $selectedYear, $selectedYear);
+$stmt->bind_param('iss', $selectedYear, $selectedYearStart, $selectedYearEnd);
 $stmt->execute();
 $result = db_stmt_fetch_all_assoc($stmt);
 

@@ -42,6 +42,7 @@ $headers = [
 ];
 $sheet->fromArray([$headers], null, 'A3');
 
+$comparisonSql = projectTargetsValidationComparisonSql();
 $sql = "
     SELECT
         comparison.province,
@@ -50,45 +51,7 @@ $sql = "
         comparison.target_beneficiaries,
         comparison.actual_beneficiaries,
         comparison.variance
-    FROM (
-        SELECT
-            locations.province,
-            locations.municipality,
-            locations.barangay,
-            COALESCE(targets.target_partner_beneficiaries, 0) AS target_beneficiaries,
-            COALESCE(actuals.actual_beneficiaries, 0) AS actual_beneficiaries,
-            COALESCE(actuals.actual_beneficiaries, 0) - COALESCE(targets.target_partner_beneficiaries, 0) AS variance
-        FROM (
-            SELECT province, municipality, barangay
-            FROM project_lawa_binhi_targets
-            WHERE fiscal_year = ?
-
-            UNION
-
-            SELECT province, lgu AS municipality, barangay
-            FROM meb
-            WHERE YEAR(time_stamp) = ?
-            GROUP BY province, lgu, barangay
-        ) AS locations
-        LEFT JOIN project_lawa_binhi_targets AS targets
-            ON targets.fiscal_year = ?
-           AND targets.province = locations.province
-           AND targets.municipality = locations.municipality
-           AND targets.barangay = locations.barangay
-        LEFT JOIN (
-            SELECT
-                province,
-                lgu AS municipality,
-                barangay,
-                COUNT(*) AS actual_beneficiaries
-            FROM meb
-            WHERE YEAR(time_stamp) = ?
-            GROUP BY province, lgu, barangay
-        ) AS actuals
-            ON actuals.province = locations.province
-           AND actuals.municipality = locations.municipality
-           AND actuals.barangay = locations.barangay
-    ) AS comparison
+    FROM ({$comparisonSql}) AS comparison
     ORDER BY comparison.province ASC, comparison.municipality ASC, comparison.barangay ASC
 ";
 

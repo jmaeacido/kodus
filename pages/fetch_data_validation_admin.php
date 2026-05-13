@@ -40,49 +40,7 @@ if (!in_array($orderColumn, ['province', 'municipality', 'barangay'], true)) {
     $orderByClause .= ", comparison.{$orderColumn} {$orderDir}";
 }
 
-$comparisonSql = "
-    SELECT
-        locations.province,
-        locations.municipality,
-        locations.barangay,
-        COALESCE(actuals.batch_numbers, '') AS batch_numbers,
-        COALESCE(targets.target_partner_beneficiaries, 0) AS target_beneficiaries,
-        COALESCE(actuals.actual_beneficiaries, 0) AS actual_beneficiaries,
-        COALESCE(actuals.actual_beneficiaries, 0) - COALESCE(targets.target_partner_beneficiaries, 0) AS variance,
-        COALESCE(actuals.ids, '') AS ids
-    FROM (
-        SELECT province, municipality, barangay
-        FROM project_lawa_binhi_targets
-        WHERE fiscal_year = ?
-
-        UNION
-
-        SELECT province, lgu AS municipality, barangay
-        FROM meb
-        WHERE YEAR(time_stamp) = ?
-        GROUP BY province, lgu, barangay
-    ) AS locations
-    LEFT JOIN project_lawa_binhi_targets AS targets
-        ON targets.fiscal_year = ?
-       AND targets.province = locations.province
-       AND targets.municipality = locations.municipality
-       AND targets.barangay = locations.barangay
-    LEFT JOIN (
-        SELECT
-            province,
-            lgu AS municipality,
-            barangay,
-            GROUP_CONCAT(DISTINCT batch_id ORDER BY batch_id ASC SEPARATOR ', ') AS batch_numbers,
-            COUNT(*) AS actual_beneficiaries,
-            GROUP_CONCAT(id ORDER BY id ASC) AS ids
-        FROM meb
-        WHERE YEAR(time_stamp) = ?
-        GROUP BY province, lgu, barangay
-    ) AS actuals
-        ON actuals.province = locations.province
-       AND actuals.municipality = locations.municipality
-       AND actuals.barangay = locations.barangay
-";
+$comparisonSql = projectTargetsValidationComparisonSql();
 
 $whereClause = '';
 $params = [$selectedYear, $selectedYear, $selectedYear, $selectedYear];
@@ -97,24 +55,6 @@ if ($searchValue !== '') {
     $params[] = $searchLike;
     $types .= "ssss";
 }
-
-$sql = "
-    SELECT
-        province,
-        lgu,
-        barangay,
-        COUNT(*) AS beneficiary_count,
-        GROUP_CONCAT(id ORDER BY id ASC) AS ids,
-        CASE
-            WHEN SUM(CASE WHEN COALESCE(validation, '') <> '✓' THEN 1 ELSE 0 END) = 0 THEN 'validated'
-            ELSE 'not_validated'
-        END AS validation_status
-    FROM meb
-    {$whereClause}
-    GROUP BY province, lgu, barangay
-    ORDER BY {$orderColumn} {$orderDir}
-    LIMIT ?, ?
-";
 
 $sql = "
     SELECT *

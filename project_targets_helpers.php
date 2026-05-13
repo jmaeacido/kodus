@@ -136,6 +136,103 @@ function normalizeProjectTargetLocation(string $value): string
     return mb_strtoupper((string) $normalized, 'UTF-8');
 }
 
+function projectTargetsCanonicalLocationSql(string $expression): string
+{
+    $canonical = "UPPER(TRIM(SUBSTRING_INDEX(COALESCE({$expression}, ''), '(', 1)))";
+
+    foreach ([' ', '-', '.', ',', "'", '`'] as $character) {
+        $escaped = str_replace("'", "''", $character);
+        $canonical = "REPLACE({$canonical}, '{$escaped}', '')";
+    }
+
+    return $canonical;
+}
+
+function projectTargetsValidationTargetAggregateSql(string $yearPlaceholder = '?'): string
+{
+    $provinceKey = projectTargetsCanonicalLocationSql('province');
+    $municipalityKey = projectTargetsCanonicalLocationSql('municipality');
+    $barangayKey = projectTargetsCanonicalLocationSql('barangay');
+
+    return "
+        SELECT
+            {$provinceKey} AS province_key,
+            {$municipalityKey} AS municipality_key,
+            {$barangayKey} AS barangay_key,
+            MIN(province) AS province,
+            MIN(municipality) AS municipality,
+            MIN(barangay) AS barangay,
+            SUM(target_partner_beneficiaries) AS target_partner_beneficiaries
+        FROM project_lawa_binhi_targets
+        WHERE fiscal_year = {$yearPlaceholder}
+        GROUP BY province_key, municipality_key, barangay_key
+    ";
+}
+
+function projectTargetsValidationActualAggregateSql(string $yearPlaceholder = '?'): string
+{
+    $provinceKey = projectTargetsCanonicalLocationSql('province');
+    $municipalityKey = projectTargetsCanonicalLocationSql('lgu');
+    $barangayKey = projectTargetsCanonicalLocationSql('barangay');
+
+    return "
+        SELECT
+            {$provinceKey} AS province_key,
+            {$municipalityKey} AS municipality_key,
+            {$barangayKey} AS barangay_key,
+            MIN(province) AS province,
+            MIN(lgu) AS municipality,
+            MIN(barangay) AS barangay,
+            GROUP_CONCAT(DISTINCT batch_id ORDER BY batch_id ASC SEPARATOR ', ') AS batch_numbers,
+            COUNT(*) AS actual_beneficiaries,
+            GROUP_CONCAT(id ORDER BY id ASC) AS ids
+        FROM meb
+        WHERE YEAR(time_stamp) = {$yearPlaceholder}
+        GROUP BY province_key, municipality_key, barangay_key
+    ";
+}
+
+function projectTargetsValidationComparisonSql(): string
+{
+    $targetAggregateSql = projectTargetsValidationTargetAggregateSql();
+    $actualAggregateSql = projectTargetsValidationActualAggregateSql();
+
+    return "
+        SELECT
+            COALESCE(targets.province, actuals.province) AS province,
+            COALESCE(targets.municipality, actuals.municipality) AS municipality,
+            COALESCE(targets.barangay, actuals.barangay) AS barangay,
+            COALESCE(actuals.batch_numbers, '') AS batch_numbers,
+            COALESCE(targets.target_partner_beneficiaries, 0) AS target_beneficiaries,
+            COALESCE(actuals.actual_beneficiaries, 0) AS actual_beneficiaries,
+            COALESCE(actuals.actual_beneficiaries, 0) - COALESCE(targets.target_partner_beneficiaries, 0) AS variance,
+            COALESCE(actuals.ids, '') AS ids
+        FROM ({$targetAggregateSql}) AS targets
+        LEFT JOIN ({$actualAggregateSql}) AS actuals
+            ON actuals.province_key = targets.province_key
+           AND actuals.municipality_key = targets.municipality_key
+           AND actuals.barangay_key = targets.barangay_key
+
+        UNION ALL
+
+        SELECT
+            actuals.province,
+            actuals.municipality,
+            actuals.barangay,
+            COALESCE(actuals.batch_numbers, '') AS batch_numbers,
+            0 AS target_beneficiaries,
+            COALESCE(actuals.actual_beneficiaries, 0) AS actual_beneficiaries,
+            COALESCE(actuals.actual_beneficiaries, 0) AS variance,
+            COALESCE(actuals.ids, '') AS ids
+        FROM ({$actualAggregateSql}) AS actuals
+        LEFT JOIN ({$targetAggregateSql}) AS targets
+            ON targets.province_key = actuals.province_key
+           AND targets.municipality_key = actuals.municipality_key
+           AND targets.barangay_key = actuals.barangay_key
+        WHERE targets.province_key IS NULL
+    ";
+}
+
 function normalizeProjectTargetList(array $values, bool $uppercase = true): array
 {
     $normalized = array_map(static function ($value) use ($uppercase) {

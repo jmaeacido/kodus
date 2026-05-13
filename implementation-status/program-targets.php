@@ -71,24 +71,30 @@ unset($_SESSION['target_import_success'], $_SESSION['target_import_error']);
     }
     .swal2-popup.kodus-edit-popup {
       width: min(980px, 96vw);
-      max-height: calc(100vh - 2rem);
-      max-height: calc(100dvh - 2rem);
       padding: 1.25rem;
       border-radius: 24px;
-      display: flex !important;
-      flex-direction: column;
-      overflow: hidden;
+    }
+    .swal2-container.kodus-scrollable-swal {
+      align-items: flex-start !important;
+      overflow-x: hidden !important;
+      overflow-y: auto !important;
+      padding: 1.75rem 0.75rem !important;
+    }
+    .swal2-container.kodus-scrollable-swal .swal2-popup {
+      max-height: none !important;
+      margin: 0 auto !important;
+      overflow: visible !important;
+    }
+    .swal2-container.kodus-scrollable-swal .swal2-html-container {
+      flex: none !important;
+      max-height: none !important;
+      overflow: visible !important;
     }
     .swal2-popup.kodus-edit-popup .swal2-html-container {
       margin: 0.75rem 0 0;
       padding: 0;
-      min-height: 0;
-      overflow-x: hidden;
-      overflow-y: auto;
-      -webkit-overflow-scrolling: touch;
     }
     .swal2-popup.kodus-edit-popup .swal2-actions {
-      flex: 0 0 auto;
       margin-top: 0.85rem;
       padding-top: 0.85rem;
       width: 100%;
@@ -894,15 +900,22 @@ $(function() {
     function syncClassificationTargets() {
         let lawaCount = 0;
         let binhiCount = 0;
+        let hasClassifiedRows = false;
 
         $('#target-entry-list .target-entry-item').each(function() {
             const classification = (($(this).find('.project-classification-input').val() || '').trim()).toUpperCase();
             if (classification === 'LAWA') {
                 lawaCount += 1;
+                hasClassifiedRows = true;
             } else if (classification === 'BINHI') {
                 binhiCount += 1;
+                hasClassifiedRows = true;
             }
         });
+
+        if (!hasClassifiedRows) {
+            return;
+        }
 
         $('#target-lawa').val(lawaCount);
         $('#target-binhi').val(binhiCount);
@@ -1105,6 +1118,7 @@ $(function() {
             title: row ? 'Edit Baseline Target' : 'Add Baseline Target',
             width: 980,
             customClass: {
+                container: 'kodus-scrollable-swal',
                 popup: 'kodus-edit-popup'
             },
             html: `
@@ -1310,12 +1324,6 @@ $(function() {
                     syncAquaticResourceField($(this));
                 });
                 reindexTargetEntries();
-                $(document).on('input.targetModal change.targetModal', '#target-lawa', function() {
-                    syncCoverageRowsToTarget('LAWA', $(this).val());
-                });
-                $(document).on('input.targetModal change.targetModal', '#target-binhi', function() {
-                    syncCoverageRowsToTarget('BINHI', $(this).val());
-                });
                 syncClassificationTargets();
             },
             willClose: () => {

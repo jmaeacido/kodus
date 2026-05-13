@@ -36,6 +36,16 @@ function generateProjectRowId(): string
     }
 }
 
+function parseProjectTargetCountPost(string $field): int
+{
+    $value = trim((string) ($_POST[$field] ?? ''));
+    if ($value === '' || !preg_match('/^\d+$/', $value)) {
+        return -1;
+    }
+
+    return (int) $value;
+}
+
 $validLawaTypes = [
     'Rehabilitation of Water System Level I (Manual Pump)',
     'Rehabilitation of Water System Level II (Pipe Laying)',
@@ -64,6 +74,13 @@ $province = normalizeProjectTargetLocation((string) ($_POST['province'] ?? ''));
 $municipality = normalizeProjectTargetLocation((string) ($_POST['municipality'] ?? ''));
 $barangay = normalizeProjectTargetLocation((string) ($_POST['barangay'] ?? ''));
 $entriesInput = $_POST['entries'] ?? [];
+$postedLawaTarget = parseProjectTargetCountPost('lawa_target');
+$postedBinhiTarget = parseProjectTargetCountPost('binhi_target');
+$postedBinhiVegetableTarget = parseProjectTargetCountPost('binhi_vegetable_target');
+$postedBinhiCropsTarget = parseProjectTargetCountPost('binhi_crops_target');
+$postedBinhiDisasterResilientCropsTarget = parseProjectTargetCountPost('binhi_disaster_resilient_crops_target');
+$postedBinhiFruitBearingTreesTarget = parseProjectTargetCountPost('binhi_fruit_bearing_trees_target');
+$postedBinhiTilapiaTarget = parseProjectTargetCountPost('binhi_tilapia_target');
 $lawaTarget = 0;
 $binhiTarget = 0;
 $binhiVegetableTarget = 0;
@@ -71,9 +88,9 @@ $binhiCropsTarget = 0;
 $binhiDisasterResilientCropsTarget = 0;
 $binhiFruitBearingTreesTarget = 0;
 $binhiTilapiaTarget = 0;
-$capbuildTarget = isset($_POST['capbuild_target']) ? (int) $_POST['capbuild_target'] : -1;
-$communityActionPlanTarget = isset($_POST['community_action_plan_target']) ? (int) $_POST['community_action_plan_target'] : -1;
-$targetBeneficiaries = isset($_POST['target_partner_beneficiaries']) ? (int) $_POST['target_partner_beneficiaries'] : -1;
+$capbuildTarget = parseProjectTargetCountPost('capbuild_target');
+$communityActionPlanTarget = parseProjectTargetCountPost('community_action_plan_target');
+$targetBeneficiaries = parseProjectTargetCountPost('target_partner_beneficiaries');
 
 $puroks = [];
 $projectRowIds = [];
@@ -244,16 +261,27 @@ $entryRows = projectTargetsBuildEntryRows(
     $aquaticResourceQuantities
 );
 
-if (empty($projects)) {
-    http_response_code(400);
-    echo json_encode(['success' => false, 'message' => 'Please add at least one project entry before saving the baseline target.']);
-    exit;
+if ($entryRows === []) {
+    $lawaTarget = $postedLawaTarget;
+    $binhiTarget = $postedBinhiTarget;
+    $binhiVegetableTarget = $postedBinhiVegetableTarget;
+    $binhiCropsTarget = $postedBinhiCropsTarget;
+    $binhiDisasterResilientCropsTarget = $postedBinhiDisasterResilientCropsTarget;
+    $binhiFruitBearingTreesTarget = $postedBinhiFruitBearingTreesTarget;
+    $binhiTilapiaTarget = $postedBinhiTilapiaTarget;
 }
 
 if (
     $province === '' ||
     $municipality === '' ||
     $barangay === '' ||
+    $lawaTarget < 0 ||
+    $binhiTarget < 0 ||
+    $binhiVegetableTarget < 0 ||
+    $binhiCropsTarget < 0 ||
+    $binhiDisasterResilientCropsTarget < 0 ||
+    $binhiFruitBearingTreesTarget < 0 ||
+    $binhiTilapiaTarget < 0 ||
     $capbuildTarget < 0 ||
     $communityActionPlanTarget < 0 ||
     $targetBeneficiaries < 0

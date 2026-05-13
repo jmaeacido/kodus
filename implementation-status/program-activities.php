@@ -777,20 +777,27 @@ $canManageActivities = auth_can_manage_program_activities();
     .kodus-edit-popup {
       width: min(1180px, calc(100vw - 2rem)) !important;
       max-width: calc(100vw - 2rem) !important;
-      max-height: calc(100vh - 2rem);
-      max-height: calc(100dvh - 2rem);
-      display: flex !important;
-      flex-direction: column;
-      overflow: hidden;
+    }
+    .swal2-container.kodus-scrollable-swal {
+      align-items: flex-start !important;
+      overflow-x: hidden !important;
+      overflow-y: auto !important;
+      padding: 1.75rem 0.75rem !important;
+    }
+    .swal2-container.kodus-scrollable-swal .swal2-popup {
+      max-height: none !important;
+      margin: 0 auto !important;
+      overflow: visible !important;
+    }
+    .swal2-container.kodus-scrollable-swal .swal2-html-container {
+      flex: none !important;
+      max-height: none !important;
+      overflow: visible !important;
     }
     .kodus-edit-popup .swal2-html-container {
-      min-height: 0;
       overflow-x: hidden;
-      overflow-y: auto;
-      -webkit-overflow-scrolling: touch;
     }
     .kodus-edit-popup .swal2-actions {
-      flex: 0 0 auto;
       margin-top: 0.85rem;
       padding-top: 0.85rem;
       width: 100%;
@@ -3154,6 +3161,7 @@ $(document).ready(function() {
                 Swal.fire({
                     width: 1180,
                     customClass: {
+                        container: 'kodus-scrollable-swal',
                         popup: 'kodus-edit-popup'
                     },
                     html: `
@@ -3565,6 +3573,7 @@ $(document).ready(function() {
             title: 'Program Activity Details',
             width: 900,
             customClass: {
+                container: 'kodus-scrollable-swal',
                 popup: 'kodus-detail-popup'
             },
             html: renderActivityDetails(data),

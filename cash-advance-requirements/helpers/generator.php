@@ -6,9 +6,11 @@ require_once dirname(__DIR__, 2) . '/vendor/autoload.php';
 require_once dirname(__DIR__, 2) . '/project_variable_helpers.php';
 
 use PhpOffice\PhpSpreadsheet\IOFactory;
+use PhpOffice\PhpSpreadsheet\RichText\RichText;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Border;
+use PhpOffice\PhpSpreadsheet\Style\Font;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 
@@ -37,7 +39,7 @@ function cash_advance_templates(): array
         ],
         'payroll' => [
             'label' => 'Payroll',
-            'filename' => 'PAYROLL.xlsx',
+            'filename' => 'Payroll.xlsx',
             'output' => 'Payroll.xlsx',
         ],
         'authority_to_pay' => [
@@ -67,12 +69,6 @@ function cash_advance_manual_fields(): array
             'template' => 'Request for Cash Advance',
             'context' => 'Optional manual field from cell C10.',
             'type' => 'text',
-        ],
-        'request_dv_date' => [
-            'label' => 'Request / DV Date',
-            'template' => 'Shared Fields',
-            'context' => 'Used for Request for Cash Advance and Disbursement Voucher when no payout schedule date is available.',
-            'type' => 'date',
         ],
         'dv_number' => [
             'label' => 'Disbursement Voucher Number',
@@ -467,15 +463,7 @@ function cash_advance_generation_day_phrase(): string
 function cash_advance_replace_cell_markers(string $value, array $context, ?string $barangay = null): string
 {
     $manual = $context['manual'] ?? [];
-    $dateFallback = (string) ($context['implementation_date'] ?? '');
-    $payoutDate = (string) ($context['payout_date'] ?? '');
-    $manualDate = cash_advance_format_optional_date((string) (
-        ($manual['request_dv_date'] ?? '')
-        ?: ($manual['request_ca_date'] ?? '')
-        ?: ($manual['dv_date'] ?? '')
-    ));
-    $requestDate = $payoutDate ?: ($manualDate ?: $dateFallback);
-    $dvDate = $payoutDate ?: ($manualDate ?: $dateFallback);
+    $generatedDate = cash_advance_generation_date_label();
     $amountWords = cash_advance_amount_in_words((float) ($context['total_amount'] ?? 0));
 
     $map = [
@@ -489,16 +477,16 @@ function cash_advance_replace_cell_markers(string $value, array $context, ?strin
         '<Manual Input>' => '',
         '<MANUAL INPUT>' => '',
         '<MANUAL INPUT AS `MSWDO`>' => (string) ($manual['time_tally_mswdo'] ?? ''),
-        '<MANUAL INPUT IF NO DATE ENTERED IN THE IMPLEMENTATION STATUS>' => $requestDate ?: $dvDate,
+        '<MANUAL INPUT IF NO DATE ENTERED IN THE IMPLEMENTATION STATUS>' => $generatedDate,
         '<PLACE THE AMOUNT IN WORDS HERE>' => $amountWords,
-        '<GENERATION DATE>' => cash_advance_generation_date_label(),
+        '<GENERATION DATE>' => $generatedDate,
         '<GENERATION DATE (23RD day of February)>' => cash_advance_generation_day_phrase(),
     ];
 
     $result = strtr($value, $map);
     $result = str_replace(
         'Date :  ',
-        'Date : ' . $dvDate,
+        'Date : ' . $generatedDate,
         $result
     );
 
@@ -515,39 +503,31 @@ function cash_advance_apply_direct_manual_cells(Spreadsheet $spreadsheet, string
         ?: ($manual['dv_e11'] ?? '')
         ?: ($manual['payroll_sdo_name'] ?? '')
     );
-    $dateFallback = (string) ($context['implementation_date'] ?? '');
-    $payoutDate = (string) ($context['payout_date'] ?? '');
-    $manualDate = cash_advance_format_optional_date((string) (
-        ($manual['request_dv_date'] ?? '')
-        ?: ($manual['request_ca_date'] ?? '')
-        ?: ($manual['dv_date'] ?? '')
-    ));
-    $requestDate = $payoutDate ?: ($manualDate ?: $dateFallback);
-    $dvDate = $payoutDate ?: ($manualDate ?: $dateFallback);
+    $generatedDate = cash_advance_generation_date_label();
     $totalAmount = (float) ($context['total_amount'] ?? 0);
 
     if ($templateKey === 'request_for_cash_advance') {
         $sheet = $spreadsheet->getSheet(0);
         $sheet->setCellValue('C8', $doSdoPayee);
         $sheet->setCellValue('C10', (string) ($manual['request_ca_c10'] ?? ''));
-        $sheet->setCellValue('D20', $requestDate);
+        $sheet->setCellValue('D20', (string) ($context['payout_date'] ?? ''));
         $sheet->setCellValue('D22', cash_advance_amount_in_words($totalAmount));
         $sheet->setCellValue('C25', '(' . cash_advance_money($totalAmount) . ')');
     } elseif ($templateKey === 'obligation_status_request') {
         $sheet = $spreadsheet->getSheet(0);
         $sheet->setCellValue('D6', $doSdoPayee);
-        $sheet->setCellValue('K4', 'Date : ' . $requestDate);
+        $sheet->setCellValue('K4', 'Date : ' . $generatedDate);
         $sheet->setCellValue('L14', cash_advance_money($totalAmount));
         $sheet->setCellValue('L22', cash_advance_money($totalAmount));
     } elseif ($templateKey === 'disbursement_voucher') {
         $sheet = $spreadsheet->getSheet(0);
-        $sheet->setCellValue('AB5', 'Date : ' . $dvDate);
+        $sheet->setCellValue('AB5', 'Date : ' . $generatedDate);
         $sheet->setCellValue('AB6', 'DV No. : ' . (string) ($manual['dv_number'] ?? ''));
         $sheet->setCellValue('E11', $doSdoPayee);
         $sheet->setCellValue('AB16', $totalAmount);
         $sheet->setCellValue('AB22', $totalAmount);
     } elseif ($templateKey === 'payroll') {
-        cash_advance_clear_payroll_payout_dates($spreadsheet);
+        cash_advance_clear_payroll_payout_dates($spreadsheet, $context);
         $summarySheet = $spreadsheet->getSheetByName('SUMMARY PAGE');
         if ($summarySheet instanceof Worksheet) {
             $approvedRow = cash_advance_find_label_row($summarySheet, 'Approved for Payment') ?: 28;
@@ -641,7 +621,7 @@ function cash_advance_populate_payroll_sheet(Worksheet $sheet, array $context, a
     $sheet->setCellValue('A2', 'Risk Resiliency Program thru Cash for Training and Work (RRP-CFTW) ' . (string) ($context['year'] ?? ''));
     $sheet->setCellValue('A5', 'MUNICIPALITY OF ' . strtoupper((string) $context['municipality']) . ', ' . strtoupper((string) $context['province']));
 
-    $sheet->setCellValue('A7', 'PAY-OUT DATE:    __________________________');
+    cash_advance_set_payroll_payout_date($sheet, (string) ($context['payout_date'] ?? ''));
 
     $rowNumber = 10;
     foreach ($beneficiaries as $beneficiary) {
@@ -659,6 +639,20 @@ function cash_advance_populate_payroll_sheet(Worksheet $sheet, array $context, a
         $sequence++;
         $rowNumber++;
     }
+}
+
+function cash_advance_set_payroll_payout_date(Worksheet $sheet, string $payoutDate): void
+{
+    $richText = new RichText();
+    $richText->createText('PAY-OUT DATE:    ');
+
+    if (trim($payoutDate) !== '') {
+        $dateRun = $richText->createTextRun($payoutDate);
+        $dateRun->getFontOrThrow()->setBold(true);
+        $dateRun->getFontOrThrow()->setUnderline(Font::UNDERLINE_SINGLE);
+    }
+
+    $sheet->setCellValue('A7', $richText);
 }
 
 function cash_advance_find_time_tally_footer_row(Worksheet $sheet): int
@@ -1147,14 +1141,15 @@ function cash_advance_adjust_authority_to_pay(Spreadsheet $spreadsheet, array $c
     cash_advance_apply_authority_bottom_formatting($sheet, $totalRow, $doneRow, $directorRow, $roleRow, $footerRow);
 }
 
-function cash_advance_clear_payroll_payout_dates(Spreadsheet $spreadsheet): void
+function cash_advance_clear_payroll_payout_dates(Spreadsheet $spreadsheet, array $context): void
 {
+    $payoutDate = (string) ($context['payout_date'] ?? '');
     foreach ($spreadsheet->getWorksheetIterator() as $sheet) {
         if ($sheet->getTitle() === 'SUMMARY PAGE') {
             continue;
         }
 
-        $sheet->setCellValue('A7', 'PAY-OUT DATE:    __________________________');
+        cash_advance_set_payroll_payout_date($sheet, $payoutDate);
     }
 }
 

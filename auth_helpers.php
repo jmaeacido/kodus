@@ -163,6 +163,7 @@ function auth_admin_generator_directories(): array
     return [
         'mebis-consolidator',
         'mebis-lgu-template',
+        'cash-advance-requirements',
     ];
 }
 
@@ -170,6 +171,21 @@ function auth_is_admin_generator_request(): bool
 {
     $currentDirectory = basename(dirname((string) ($_SERVER['SCRIPT_FILENAME'] ?? '')));
     return in_array($currentDirectory, auth_admin_generator_directories(), true);
+}
+
+function auth_current_admin_generator_directory(): string
+{
+    return basename(dirname((string) ($_SERVER['SCRIPT_FILENAME'] ?? '')));
+}
+
+function auth_can_access_admin_generator_directory(): bool
+{
+    $userType = auth_current_user_type();
+    if ($userType === 'admin') {
+        return true;
+    }
+
+    return auth_current_admin_generator_directory() === 'cash-advance-requirements' && $userType === 'aa';
 }
 
 function auth_ensure_login_tracking_schema(mysqli $conn): void
@@ -499,10 +515,10 @@ function auth_enforce_admin_generator_access(?mysqli $conn = null): void
         auth_redirect_to_login();
     }
 
-    if (auth_current_user_type() !== 'admin') {
+    if (!auth_can_access_admin_generator_directory()) {
         if (function_exists('kodus_abort')) {
             kodus_abort($conn, 403, [
-                'detail' => 'Administrator privileges are required to open this generator.',
+                'detail' => 'Your current role does not include access to this generator.',
                 'popup' => true,
                 'redirect' => auth_build_internal_redirect('home'),
             ]);

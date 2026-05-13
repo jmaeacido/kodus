@@ -13,6 +13,8 @@ function tracking_upload_allowed_types(): array
         'docx' => [
             'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
             'application/zip',
+            'application/x-zip',
+            'application/x-zip-compressed',
             'application/octet-stream',
         ],
         'jpg' => ['image/jpeg'],
@@ -24,13 +26,20 @@ function tracking_upload_allowed_types(): array
         'avif' => ['image/avif'],
         'xlsx' => [
             'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'application/vnd.ms-excel',
             'application/zip',
+            'application/x-zip',
+            'application/x-zip-compressed',
             'application/octet-stream',
         ],
         'xlsm' => [
             'application/vnd.ms-excel.sheet.macroEnabled.12',
+            'application/vnd.ms-excel.sheet.macroenabled.12',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
             'application/vnd.ms-excel',
             'application/zip',
+            'application/x-zip',
+            'application/x-zip-compressed',
             'application/octet-stream',
         ],
     ];

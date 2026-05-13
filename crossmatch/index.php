@@ -136,6 +136,29 @@
               <!-- /.card-body -->
             </div>
         <!-- /.row -->
+            <div class="card">
+              <div class="card-header d-flex align-items-center">
+                <h4 class="m-0 flex-grow-1">Crossmatching Template Generator</h4>
+              </div>
+              <div class="card-body">
+                <div class="alert alert-info">
+                  Upload one or more final validated MEB workbooks and convert them into crossmatching-ready files with the required beneficiary columns.
+                </div>
+                <form id="crossmatchTemplateGenerateForm" action="generate_template.php" method="post" enctype="multipart/form-data" data-no-loader="true">
+                  <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(security_get_csrf_token(), ENT_QUOTES, 'UTF-8') ?>">
+                  <div class="form-group">
+                    <label for="crossmatch-template-files">Final Validated MEB Workbooks</label>
+                    <input type="file" name="template_files[]" class="form-control" accept=".xlsx,.xlsm" multiple required id="crossmatch-template-files">
+                    <small class="form-text text-muted">Accepted files: <code>.xlsx</code> and <code>.xlsm</code>.</small>
+                  </div>
+                  <button type="submit" class="btn btn-success">
+                    <i class="fas fa-file-excel mr-1"></i>
+                    Generate Crossmatching Templates
+                  </button>
+                </form>
+              </div>
+            </div>
+
             <div class="card crossmatch-job-status-panel" id="crossmatchJobStatusPanel" aria-live="polite">
               <div class="card-body">
                 <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center">
@@ -225,6 +248,64 @@
 document.getElementById('mode').addEventListener('change', function(){
   document.getElementById('file2wrap').style.display = this.value === 'file_vs_file' ? 'block' : 'none';
 });
+
+const crossmatchTemplateForm = document.getElementById('crossmatchTemplateGenerateForm');
+if (crossmatchTemplateForm) {
+  crossmatchTemplateForm.addEventListener('submit', function(event) {
+    event.preventDefault();
+    const button = crossmatchTemplateForm.querySelector('button[type="submit"]');
+    if (button) {
+      button.disabled = true;
+    }
+
+    Swal.fire({
+      title: 'Generating Templates',
+      html: `
+        <div class="text-left">
+          <p class="mb-2">Uploading workbooks and formatting crossmatching templates...</p>
+          <div class="progress" style="height: .85rem; border-radius: 999px; overflow: hidden;">
+            <div class="progress-bar progress-bar-striped progress-bar-animated bg-success" style="width: 72%;"></div>
+          </div>
+        </div>
+      `,
+      allowOutsideClick: false,
+      allowEscapeKey: false,
+      showConfirmButton: false
+    });
+
+    fetch(crossmatchTemplateForm.action, {
+      method: 'POST',
+      body: new FormData(crossmatchTemplateForm),
+      headers: {
+        'X-Requested-With': 'XMLHttpRequest',
+        'Accept': 'application/json'
+      },
+      credentials: 'same-origin'
+    })
+      .then(response => response.json().then(payload => ({ ok: response.ok, payload })))
+      .then(({ ok, payload }) => {
+        if (!ok || !payload.success) {
+          throw new Error(payload.message || 'Unable to generate templates.');
+        }
+        const links = (payload.outputs || []).map(output => (
+          `<a class="btn btn-sm btn-outline-success m-1" href="${output.url}"><i class="fas fa-download mr-1"></i>${output.filename}</a>`
+        )).join('');
+        Swal.fire({
+          icon: 'success',
+          title: 'Templates Ready',
+          html: `<p>${payload.message}</p><div>${links}</div>`
+        });
+      })
+      .catch(error => {
+        Swal.fire({ icon: 'error', title: 'Generation Failed', text: error.message || 'Unable to generate templates.' });
+      })
+      .finally(() => {
+        if (button) {
+          button.disabled = false;
+        }
+      });
+  });
+}
 </script>
 <script>
 let recentCrossmatchTable;

@@ -1243,8 +1243,8 @@ if (isset($_SESSION['user_id']) && is_numeric($_SESSION['user_id'])) {
             </ul>
           </li>
           <li class="nav-header">Utilities</li>
-          <li class="nav-item <?= in_array($current_dir, ['crossmatch', 'deduplication', 'mebis-consolidator', 'mebis-lgu-template']) ? 'menu-open' : ''; ?>">
-            <a href="#" class="nav-link <?= in_array($current_dir, ['crossmatch', 'deduplication', 'mebis-consolidator', 'mebis-lgu-template']) ? 'active' : ''; ?>">
+          <li class="nav-item <?= in_array($current_dir, ['crossmatch', 'deduplication', 'mebis-consolidator', 'mebis-lgu-template', 'cash-advance-requirements']) ? 'menu-open' : ''; ?>">
+            <a href="#" class="nav-link <?= in_array($current_dir, ['crossmatch', 'deduplication', 'mebis-consolidator', 'mebis-lgu-template', 'cash-advance-requirements']) ? 'active' : ''; ?>">
               <i class="fas fa-wrench nav-icon"></i>
               <p>
                 Tools
@@ -1278,6 +1278,14 @@ if (isset($_SESSION['user_id']) && is_numeric($_SESSION['user_id'])) {
                 <a href="<?= $app_root; ?>mebis-lgu-template/" class="nav-link <?= ($current_dir == 'mebis-lgu-template') ? 'active' : ''; ?>">
                   <i class="nav-icon fas fa-file-excel"></i>
                   <p>MEB Import Template</p>
+                </a>
+              </li>
+              <?php endif; ?>
+              <?php if (in_array($_SESSION['user_type'] ?? '', ['admin', 'aa'], true)): ?>
+              <li class="nav-item">
+                <a href="<?= $app_root; ?>cash-advance-requirements/" class="nav-link <?= ($current_dir == 'cash-advance-requirements') ? 'active' : ''; ?>">
+                  <i class="nav-icon fas fa-file-invoice-dollar"></i>
+                  <p>Cash Advance Requirements</p>
                 </a>
               </li>
               <?php endif; ?>

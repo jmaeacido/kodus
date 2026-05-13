@@ -777,9 +777,23 @@ $canManageActivities = auth_can_manage_program_activities();
     .kodus-edit-popup {
       width: min(1180px, calc(100vw - 2rem)) !important;
       max-width: calc(100vw - 2rem) !important;
+      max-height: calc(100vh - 2rem);
+      max-height: calc(100dvh - 2rem);
+      display: flex !important;
+      flex-direction: column;
+      overflow: hidden;
     }
     .kodus-edit-popup .swal2-html-container {
+      min-height: 0;
       overflow-x: hidden;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    .kodus-edit-popup .swal2-actions {
+      flex: 0 0 auto;
+      margin-top: 0.85rem;
+      padding-top: 0.85rem;
+      width: 100%;
     }
     .activity-modal {
       text-align: left;

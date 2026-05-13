@@ -71,13 +71,27 @@ unset($_SESSION['target_import_success'], $_SESSION['target_import_error']);
     }
     .swal2-popup.kodus-edit-popup {
       width: min(980px, 96vw);
+      max-height: calc(100vh - 2rem);
+      max-height: calc(100dvh - 2rem);
       padding: 1.25rem;
       border-radius: 24px;
+      display: flex !important;
+      flex-direction: column;
+      overflow: hidden;
     }
     .swal2-popup.kodus-edit-popup .swal2-html-container {
       margin: 0.75rem 0 0;
       padding: 0;
-      overflow: visible;
+      min-height: 0;
+      overflow-x: hidden;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    .swal2-popup.kodus-edit-popup .swal2-actions {
+      flex: 0 0 auto;
+      margin-top: 0.85rem;
+      padding-top: 0.85rem;
+      width: 100%;
     }
     .kodus-edit-shell {
       text-align: left;

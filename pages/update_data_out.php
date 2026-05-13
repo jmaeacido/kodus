@@ -18,6 +18,8 @@ tracking_reject_oversized_post();
 security_require_csrf_token();
 tracking_ensure_file_columns($conn, 'outgoing');
 
+$uploadedFiles = ['paths' => []];
+
 try {
     // Get form data
     $id = $_POST['id'] ?? null;
@@ -27,6 +29,7 @@ try {
     $recipientData = tracking_normalize_recipient_inputs($_POST);
     $receiving_office = $recipientData['display'] !== '' ? $recipientData['display'] : ($_POST['receiving_office'] ?? null);
     $date_forwarded = !empty($_POST['date_forwarded']) ? $_POST['date_forwarded'] : null; 
+    $submittedKeepExistingFiles = isset($_POST['keep_existing_files_submitted']);
 
     if (!$id) {
         throw new Exception("Invalid request. Missing document ID.");
@@ -47,17 +50,26 @@ try {
     $fileSize = null;
     $uploadTime = date("Y-m-d H:i:s");
 
-    // Handle file removal flag
-    $removeFile = isset($_POST['remove_file']) && $_POST['remove_file'] == "1";
     $existingFileName = (string) ($existingRecord['file_name'] ?? '');
-    $newFilePath = null;
-    $uploadedFiles = ['paths' => []];
-
+    $keepExistingFiles = $submittedKeepExistingFiles
+        ? ($_POST['keep_existing_files'] ?? [])
+        : tracking_split_file_names($existingFileName);
+    $existingFilePayload = tracking_filter_existing_file_payload($existingRecord, $keepExistingFiles);
+    $removedExistingFileName = $existingFilePayload['removed_file_name'];
+    $fileAction = "keep";
     if (tracking_has_uploaded_files('file')) {
         $uploadedFiles = tracking_save_uploaded_files('file');
-        $fileName = $uploadedFiles['file_name'];
-        $fileType = $uploadedFiles['file_type'];
-        $fileSize = $uploadedFiles['file_size'];
+        $mergedFiles = tracking_merge_file_payloads($existingFilePayload, $uploadedFiles);
+        $fileName = $mergedFiles['file_name'];
+        $fileType = $mergedFiles['file_type'];
+        $fileSize = $mergedFiles['file_size'];
+        $fileAction = "upload";
+    } elseif ($existingFilePayload['changed']) {
+        $fileName = $existingFilePayload['file_name'];
+        $fileType = $existingFilePayload['file_type'];
+        $fileSize = $existingFilePayload['file_size'];
+        $uploadTime = $fileName ? ($existingRecord['upload_time'] ?? null) : null;
+        $fileAction = $fileName ? "upload" : "remove";
     }
 
     // Build SQL
@@ -70,12 +82,12 @@ try {
     $params = [$date_out, $description, $remarks, $receiving_office, $date_forwarded];
     $types = "sssss";
 
-    if ($fileName) {
+    if ($fileAction === "upload") {
         // Update with new file
         $sql .= ", file_name = ?, file_size = ?, file_type = ?, upload_time = ?";
         $params = array_merge($params, [$fileName, $fileSize, $fileType, $uploadTime]);
         $types .= "ssss";
-    } elseif ($removeFile) {
+    } elseif ($fileAction === "remove") {
         // Delete physical file if exists
         // Set DB file fields to NULL
         $sql .= ", file_name = NULL, file_size = NULL, file_type = NULL, upload_time = NULL";
@@ -94,18 +106,18 @@ try {
     $stmt->bind_param($types, ...$params);
 
     if ($stmt->execute()) {
-        $updatedFileName = $removeFile
+        $updatedFileName = $fileAction === "remove"
             ? null
-            : ($fileName ?: ($existingRecord['file_name'] ?? null));
-        $updatedFileSize = $removeFile
+            : ($fileAction === "upload" ? $fileName : ($existingRecord['file_name'] ?? null));
+        $updatedFileSize = $fileAction === "remove"
             ? null
-            : ($fileName ? $fileSize : ($existingRecord['file_size'] ?? null));
-        $updatedFileType = $removeFile
+            : ($fileAction === "upload" ? $fileSize : ($existingRecord['file_size'] ?? null));
+        $updatedFileType = $fileAction === "remove"
             ? null
-            : ($fileName ? $fileType : ($existingRecord['file_type'] ?? null));
-        $updatedUploadTime = $removeFile
+            : ($fileAction === "upload" ? $fileType : ($existingRecord['file_type'] ?? null));
+        $updatedUploadTime = $fileAction === "remove"
             ? null
-            : ($fileName ? $uploadTime : ($existingRecord['upload_time'] ?? null));
+            : ($fileAction === "upload" ? $uploadTime : ($existingRecord['upload_time'] ?? null));
 
         $changes = audit_collect_field_changes(
             [
@@ -155,8 +167,8 @@ try {
             'actor_id' => (int) ($_SESSION['user_id'] ?? 0),
         ]);
 
-        if ($removeFile || $fileName) {
-            tracking_delete_files_if_unreferenced($conn, $existingFileName);
+        if ($fileAction === "remove" || $fileAction === "upload") {
+            tracking_delete_files_if_unreferenced($conn, $removedExistingFileName ?: $existingFileName);
         }
 
         $response = [
@@ -178,7 +190,7 @@ try {
 
         echo json_encode($response + ['mail_queued' => false]);
     } else {
-        if ($fileName) {
+        if ($fileAction === "upload") {
             tracking_cleanup_saved_paths($uploadedFiles['paths'] ?? []);
         }
         throw new Exception("Database error: " . $stmt->error);

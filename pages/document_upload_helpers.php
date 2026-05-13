@@ -297,6 +297,87 @@ function tracking_split_file_names(?string $fileNames): array
     return array_values(array_filter(array_map('trim', explode(',', $fileNames)), static fn($name) => $name !== ''));
 }
 
+function tracking_split_file_values(?string $values): array
+{
+    $values = trim((string) $values);
+    if ($values === '') {
+        return [];
+    }
+
+    return array_values(array_map('trim', explode(',', $values)));
+}
+
+function tracking_normalize_keep_file_names($keepFiles): array
+{
+    if (!is_array($keepFiles)) {
+        $keepFiles = $keepFiles === null || $keepFiles === '' ? [] : [$keepFiles];
+    }
+
+    $normalized = [];
+    foreach ($keepFiles as $fileName) {
+        $baseName = basename(trim((string) $fileName));
+        if ($baseName !== '') {
+            $normalized[$baseName] = true;
+        }
+    }
+
+    return array_keys($normalized);
+}
+
+function tracking_filter_existing_file_payload(array $existingRecord, $keepFiles): array
+{
+    $keepLookup = array_fill_keys(tracking_normalize_keep_file_names($keepFiles), true);
+    $existingNames = tracking_split_file_names($existingRecord['file_name'] ?? null);
+    $existingTypes = tracking_split_file_values($existingRecord['file_type'] ?? null);
+    $existingSizes = tracking_split_file_values($existingRecord['file_size'] ?? null);
+
+    $keptNames = [];
+    $keptTypes = [];
+    $keptSizes = [];
+    $removedNames = [];
+
+    foreach ($existingNames as $index => $fileName) {
+        $baseName = basename($fileName);
+        if (isset($keepLookup[$baseName])) {
+            $keptNames[] = $baseName;
+            $keptTypes[] = $existingTypes[$index] ?? '';
+            $keptSizes[] = $existingSizes[$index] ?? '';
+        } else {
+            $removedNames[] = $baseName;
+        }
+    }
+
+    return [
+        'file_name' => $keptNames ? implode(',', $keptNames) : null,
+        'file_type' => $keptTypes ? implode(',', $keptTypes) : null,
+        'file_size' => $keptSizes ? implode(',', $keptSizes) : null,
+        'removed_file_name' => $removedNames ? implode(',', $removedNames) : null,
+        'changed' => count($removedNames) > 0 || count($keptNames) !== count($existingNames),
+    ];
+}
+
+function tracking_merge_file_payloads(array ...$payloads): array
+{
+    $names = [];
+    $types = [];
+    $sizes = [];
+    $paths = [];
+
+    foreach ($payloads as $payload) {
+        $names = array_merge($names, tracking_split_file_names($payload['file_name'] ?? null));
+        $types = array_merge($types, tracking_split_file_values($payload['file_type'] ?? null));
+        $sizes = array_merge($sizes, tracking_split_file_values($payload['file_size'] ?? null));
+        $paths = array_merge($paths, $payload['paths'] ?? []);
+    }
+
+    return [
+        'file_name' => $names ? implode(',', $names) : null,
+        'file_type' => $types ? implode(',', $types) : null,
+        'file_size' => $sizes ? implode(',', $sizes) : null,
+        'paths' => $paths,
+    ];
+}
+
 function tracking_delete_files(?string $fileNames): void
 {
     foreach (tracking_split_file_names($fileNames) as $fileName) {

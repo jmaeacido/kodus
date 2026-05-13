@@ -17,13 +17,15 @@ tracking_reject_oversized_post();
 security_require_csrf_token();
 tracking_ensure_file_columns($conn, 'incoming');
 
+$uploadedFiles = ['paths' => []];
+
 try {
     $id = $_POST['id'] ?? null;
     $date_received = $_POST['date_received'] ?? null;
     $description = $_POST['description'] ?? null;
     $remarks = $_POST['remarks'] ?? null;
     $focal = !empty($_POST['focal']) ? $_POST['focal'] : null;
-    $removeFile = isset($_POST['remove_file']) ? (int)$_POST['remove_file'] : 0;
+    $submittedKeepExistingFiles = isset($_POST['keep_existing_files_submitted']);
 
     if (!$id) {
         throw new Exception("Invalid request. Missing document ID.");
@@ -46,18 +48,25 @@ try {
     $fileAction = "keep";
 
     $existingFileName = (string) ($existingRecord['file_name'] ?? '');
-    $newFilePath = null;
-    $uploadedFiles = ['paths' => []];
-
-    if ($removeFile === 1) {
-        $fileAction = "remove";
-    } elseif (tracking_has_uploaded_files('file')) {
+    $keepExistingFiles = $submittedKeepExistingFiles
+        ? ($_POST['keep_existing_files'] ?? [])
+        : tracking_split_file_names($existingFileName);
+    $existingFilePayload = tracking_filter_existing_file_payload($existingRecord, $keepExistingFiles);
+    $removedExistingFileName = $existingFilePayload['removed_file_name'];
+    if (tracking_has_uploaded_files('file')) {
         $uploadedFiles = tracking_save_uploaded_files('file');
-        $fileName = $uploadedFiles['file_name'];
-        $fileType = $uploadedFiles['file_type'];
-        $fileSize = $uploadedFiles['file_size'];
+        $mergedFiles = tracking_merge_file_payloads($existingFilePayload, $uploadedFiles);
+        $fileName = $mergedFiles['file_name'];
+        $fileType = $mergedFiles['file_type'];
+        $fileSize = $mergedFiles['file_size'];
         $uploadTime = date("Y-m-d H:i:s");
         $fileAction = "upload";
+    } elseif ($existingFilePayload['changed']) {
+        $fileName = $existingFilePayload['file_name'];
+        $fileType = $existingFilePayload['file_type'];
+        $fileSize = $existingFilePayload['file_size'];
+        $uploadTime = $fileName ? ($existingRecord['upload_time'] ?? null) : null;
+        $fileAction = $fileName ? "upload" : "remove";
     }
 
     $sql = "UPDATE incoming SET 
@@ -144,7 +153,7 @@ try {
         ]);
 
         if ($fileAction === "remove" || $fileAction === "upload") {
-            tracking_delete_files_if_unreferenced($conn, $existingFileName);
+            tracking_delete_files_if_unreferenced($conn, $removedExistingFileName ?: $existingFileName);
         }
 
         echo json_encode(['success' => true, 'message' => 'Document updated successfully.']);

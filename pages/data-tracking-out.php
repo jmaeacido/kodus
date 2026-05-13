@@ -222,9 +222,203 @@
       width: 100%;
       background: linear-gradient(180deg, rgba(22, 32, 52, 0), var(--kodus-detail-hero-end, #162034) 34%);
     }
+    .swal2-popup.kodus-detail-popup,
+    .swal2-popup.kodus-edit-popup {
+      width: min(920px, 94vw);
+      padding: 1.35rem;
+      border-radius: 22px;
+      color: var(--kodus-detail-text, #f8f9fa);
+      background: var(--kodus-detail-hero-end, #162034);
+      box-shadow: var(--kodus-detail-shadow, 0 18px 40px rgba(15, 23, 42, 0.12));
+    }
+    .swal2-popup.kodus-edit-popup {
+      width: min(860px, 94vw);
+    }
+    .swal2-popup.kodus-detail-popup .swal2-html-container,
+    .swal2-popup.kodus-edit-popup .swal2-html-container {
+      margin: 0.75rem 0 0;
+      color: var(--kodus-detail-text, #f8f9fa);
+      overflow: visible;
+    }
+    .swal2-popup.kodus-detail-popup .swal2-actions,
+    .swal2-popup.kodus-edit-popup .swal2-actions {
+      margin: 0.85rem 0 0;
+      padding-top: 0.85rem;
+      width: 100%;
+      background: linear-gradient(180deg, rgba(22, 32, 52, 0), var(--kodus-detail-hero-end, #162034) 34%);
+    }
     .kodus-form-shell {
       text-align: left;
       color: var(--kodus-detail-text, #f8f9fa);
+    }
+    .kodus-edit-shell {
+      text-align: left;
+      color: var(--kodus-detail-text, #f8f9fa);
+    }
+    .kodus-edit-header {
+      padding: 1rem 1.05rem;
+      margin-bottom: 1rem;
+      border-radius: 18px;
+      border: 1px solid var(--kodus-detail-border, rgba(255, 255, 255, 0.12));
+      background: linear-gradient(135deg, var(--kodus-detail-hero-start, #1a2840), var(--kodus-detail-hero-end, #162034));
+    }
+    .kodus-edit-header-title {
+      margin: 0;
+      font-size: 1.08rem;
+      font-weight: 700;
+      line-height: 1.35;
+      color: var(--kodus-detail-text, #f8f9fa);
+    }
+    .kodus-edit-header-note {
+      margin: 0.38rem 0 0;
+      line-height: 1.5;
+      color: var(--kodus-detail-muted, rgba(255, 255, 255, 0.7));
+    }
+    .kodus-edit-section {
+      padding: 1rem 1.05rem;
+      margin-bottom: 0.95rem;
+      border-radius: 16px;
+      border: 1px solid var(--kodus-detail-border, rgba(255, 255, 255, 0.12));
+      background: var(--kodus-detail-panel, rgba(255, 255, 255, 0.05));
+    }
+    .kodus-edit-section:last-child {
+      margin-bottom: 0;
+    }
+    .kodus-edit-section-title {
+      margin: 0 0 0.85rem;
+      font-size: 0.9rem;
+      font-weight: 700;
+      color: var(--kodus-detail-text, #f8f9fa);
+    }
+    .kodus-edit-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 0.9rem 1rem;
+    }
+    .kodus-edit-field {
+      min-width: 0;
+    }
+    .kodus-edit-field--full {
+      grid-column: 1 / -1;
+    }
+    .kodus-edit-shell label {
+      display: block;
+      margin-bottom: 0.42rem;
+      font-size: 0.82rem;
+      font-weight: 700;
+      color: var(--kodus-detail-muted, rgba(255, 255, 255, 0.7));
+    }
+    .kodus-edit-shell .form-control,
+    .kodus-edit-shell textarea {
+      width: 100%;
+      border-radius: 12px;
+      border: 1px solid var(--kodus-detail-border, rgba(255, 255, 255, 0.12));
+      background: var(--kodus-detail-panel-strong, rgba(255, 255, 255, 0.08));
+      color: var(--kodus-detail-text, #f8f9fa);
+      min-height: 46px;
+    }
+    .kodus-edit-shell textarea.form-control {
+      min-height: 110px;
+      resize: vertical;
+    }
+    .kodus-edit-help {
+      display: block;
+      margin-top: 0.55rem;
+      font-size: 0.78rem;
+      line-height: 1.45;
+      color: var(--kodus-detail-muted, rgba(255, 255, 255, 0.7));
+    }
+    .kodus-edit-inline-file {
+      display: block;
+      margin-top: 0.4rem;
+    }
+    .kodus-detail-modal {
+      text-align: left;
+      color: var(--kodus-detail-text, #f8f9fa);
+    }
+    .kodus-detail-hero {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 1rem;
+      padding: 1rem 1.05rem;
+      margin-bottom: 1rem;
+      border-radius: 18px;
+      border: 1px solid var(--kodus-detail-border, rgba(255, 255, 255, 0.12));
+      background: linear-gradient(135deg, var(--kodus-detail-hero-start, #1a2840), var(--kodus-detail-hero-end, #162034));
+    }
+    .kodus-detail-eyebrow,
+    .kodus-detail-label {
+      display: block;
+      margin-bottom: 0.32rem;
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--kodus-detail-muted, rgba(255, 255, 255, 0.7));
+    }
+    .kodus-detail-title {
+      margin: 0;
+      font-size: 1.15rem;
+      font-weight: 800;
+      color: var(--kodus-detail-text, #f8f9fa);
+    }
+    .kodus-detail-subtitle {
+      margin: 0.38rem 0 0;
+      line-height: 1.5;
+      color: var(--kodus-detail-muted, rgba(255, 255, 255, 0.7));
+    }
+    .kodus-detail-pill,
+    .kodus-detail-badge {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      padding: 0.35rem 0.65rem;
+      background: rgba(13, 110, 253, 0.18);
+      color: var(--kodus-detail-text, #f8f9fa);
+      font-size: 0.82rem;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .kodus-detail-grid,
+    .kodus-detail-section-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 0.85rem;
+    }
+    .kodus-detail-stat,
+    .kodus-detail-section {
+      padding: 0.9rem 1rem;
+      border-radius: 16px;
+      border: 1px solid var(--kodus-detail-border, rgba(255, 255, 255, 0.12));
+      background: var(--kodus-detail-panel, rgba(255, 255, 255, 0.05));
+    }
+    .kodus-detail-grid,
+    .kodus-detail-section {
+      margin-bottom: 0.95rem;
+    }
+    .kodus-detail-section-title {
+      margin: 0 0 0.85rem;
+      font-size: 0.9rem;
+      font-weight: 700;
+      color: var(--kodus-detail-text, #f8f9fa);
+    }
+    .kodus-detail-value {
+      display: block;
+      color: var(--kodus-detail-text, #f8f9fa);
+      line-height: 1.45;
+      word-break: break-word;
+    }
+    .kodus-detail-value--strong {
+      font-weight: 800;
+    }
+    .kodus-detail-empty {
+      color: var(--kodus-detail-muted, rgba(255, 255, 255, 0.65));
+      font-style: italic;
+    }
+    .kodus-detail-link {
+      color: var(--kodus-detail-link, #7ab7ff);
+      font-weight: 700;
     }
     .kodus-form-hero {
       padding: 1rem 1.05rem;
@@ -535,14 +729,54 @@
       background: rgba(108, 117, 125, 0.18);
       color: var(--kodus-detail-text, #f8f9fa);
     }
-    body[data-theme="light"] .kodus-form-section {
+    body[data-theme="light"] .kodus-form-section,
+    body[data-theme="light"] .kodus-edit-section,
+    body[data-theme="light"] .kodus-edit-header,
+    body[data-theme="light"] .kodus-detail-section,
+    body[data-theme="light"] .kodus-detail-stat,
+    body[data-theme="light"] .kodus-detail-hero {
       background: #ffffff;
       border-color: rgba(13, 110, 253, 0.14);
       box-shadow: 0 0.4rem 1rem rgba(13, 110, 253, 0.06);
     }
+    body[data-theme="light"] .swal2-popup.kodus-detail-popup,
+    body[data-theme="light"] .swal2-popup.kodus-edit-popup {
+      background: #ffffff;
+      color: #212529;
+    }
+    body[data-theme="light"] .kodus-detail-modal,
+    body[data-theme="light"] .kodus-detail-title,
+    body[data-theme="light"] .kodus-detail-value,
+    body[data-theme="light"] .kodus-detail-section-title,
+    body[data-theme="light"] .kodus-edit-header-title,
+    body[data-theme="light"] .kodus-edit-section-title {
+      color: #212529;
+    }
+    body[data-theme="light"] .kodus-detail-subtitle,
+    body[data-theme="light"] .kodus-detail-label,
+    body[data-theme="light"] .kodus-detail-eyebrow,
+    body[data-theme="light"] .kodus-edit-header-note,
+    body[data-theme="light"] .kodus-edit-shell label,
+    body[data-theme="light"] .kodus-edit-help {
+      color: #6c757d;
+    }
+    body[data-theme="light"] .kodus-detail-pill,
+    body[data-theme="light"] .kodus-detail-badge {
+      background: rgba(13, 110, 253, 0.12);
+      color: #0d6efd;
+    }
+    body[data-theme="light"] .kodus-detail-empty {
+      color: #6c757d;
+    }
+    body[data-theme="light"] .swal2-popup.kodus-detail-popup .swal2-actions,
+    body[data-theme="light"] .swal2-popup.kodus-edit-popup .swal2-actions {
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0), #ffffff 34%);
+    }
     body[data-theme="light"] .kodus-form-shell .form-control,
     body[data-theme="light"] .kodus-form-shell textarea,
     body[data-theme="light"] .kodus-form-shell .select2-container--bootstrap4 .select2-selection--multiple,
+    body[data-theme="light"] .kodus-edit-shell .form-control,
+    body[data-theme="light"] .kodus-edit-shell textarea,
     body[data-theme="light"] .kodus-edit-shell .select2-container--bootstrap4 .select2-selection--multiple {
       background: #ffffff;
       border-color: rgba(13, 110, 253, 0.14);
@@ -650,6 +884,68 @@
     body[data-theme="light"] .kodus-upload-progress-row {
       color: #212529;
     }
+    .kodus-selected-files {
+      display: none;
+      margin-top: 0.65rem;
+      border: 1px solid var(--kodus-detail-border, rgba(255, 255, 255, 0.12));
+      border-radius: 10px;
+      overflow: hidden;
+      background: rgba(255, 255, 255, 0.05);
+    }
+    .kodus-selected-files.is-visible {
+      display: block;
+    }
+    .kodus-selected-file {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+      padding: 0.55rem 0.65rem;
+      border-top: 1px solid var(--kodus-detail-border, rgba(255, 255, 255, 0.1));
+      color: var(--kodus-detail-text, #f8f9fa);
+      font-size: 0.82rem;
+    }
+    .kodus-selected-file:first-child {
+      border-top: 0;
+    }
+    .kodus-selected-file-name {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .kodus-selected-file-size {
+      color: var(--kodus-detail-muted, #adb5bd);
+      font-size: 0.76rem;
+      white-space: nowrap;
+    }
+    .kodus-selected-file-remove {
+      flex: 0 0 auto;
+      width: 1.85rem;
+      height: 1.85rem;
+      border: 0;
+      border-radius: 6px;
+      background: rgba(220, 53, 69, 0.12);
+      color: #ff8a9a;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    body[data-theme="light"] .kodus-selected-files {
+      background: #ffffff;
+      border-color: rgba(13, 110, 253, 0.14);
+    }
+    body[data-theme="light"] .kodus-selected-file {
+      color: #212529;
+      border-top-color: rgba(13, 110, 253, 0.1);
+    }
+    body[data-theme="light"] .kodus-selected-file-size {
+      color: #6c757d;
+    }
+    body[data-theme="light"] .kodus-selected-file-remove {
+      background: rgba(220, 53, 69, 0.1);
+      color: #dc3545;
+    }
     @media (max-width: 576px) {
       .swal2-popup.kodus-form-popup {
         padding: 1.05rem;
@@ -699,7 +995,7 @@
             <div id="track-documents-container" style="display: none;">
               <button id="track-documents" class="btn btn-outline-primary btn-xs kodus-track-btn">Track Outgoing Documents</button>
             </div><br>
-            <div class="table-container kodus-table-scroll" style="--kodus-table-min-width: 1150px;">
+            <div class="table-container kodus-table-scroll" style="--kodus-table-min-width: 1200px;">
               <table id="Outgoing-table" class="table table-bordered table-striped" style="text-align: center; width: 100%; table-layout: auto;">
                 <thead style="font-size: 10px;">
                   <tr>
@@ -773,13 +1069,71 @@ function renderFileLink(fileName) {
         return '<span class="kodus-detail-empty">No file attached</span>';
     }
 
-    const files = normalized.split(',').map(file => file.trim()).filter(Boolean);
+    const files = splitTrackingFileNames(normalized);
     return files.map(file => {
         const safeName = escapeHtml(file);
         const safeUrl = encodeURIComponent(file).replace(/%2F/g, '/');
         const popupUrl = `uploads/${safeUrl}`;
         return `<a class="kodus-detail-link d-inline-block mr-2" data-url="${escapeAttribute(popupUrl)}" onclick="openPopup(this.dataset.url)" href="javascript:void(0)">${safeName}</a>`;
     }).join('');
+}
+
+function splitTrackingFileNames(fileName) {
+    return String(fileName ?? '').split(',').map(file => file.trim()).filter(Boolean);
+}
+
+function renderExistingFileRemovalList(fileName) {
+    const files = splitTrackingFileNames(fileName);
+    if (files.length === 0) {
+        return '<span class="kodus-detail-empty">No file attached</span>';
+    }
+
+    const rows = files.map(file => `
+        <div class="kodus-selected-file" data-existing-file="${escapeAttribute(file)}">
+            <span class="kodus-selected-file-name">${escapeHtml(file)}</span>
+            <button type="button" class="kodus-selected-file-remove" title="Remove ${escapeAttribute(file)}" aria-label="Remove ${escapeAttribute(file)}">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+    `).join('');
+
+    return `<div id="existingFileList" class="kodus-selected-files is-visible" aria-live="polite">${rows}</div>`;
+}
+
+function bindExistingFileRemovalList(listId = 'existingFileList') {
+    const list = document.getElementById(listId);
+    if (!list) {
+        return;
+    }
+
+    list.addEventListener("click", event => {
+        const removeButton = event.target.closest(".kodus-selected-file-remove");
+        if (!removeButton) {
+            return;
+        }
+
+        removeButton.closest(".kodus-selected-file")?.remove();
+        if (!list.querySelector(".kodus-selected-file")) {
+            list.classList.remove("is-visible");
+            list.innerHTML = '<span class="kodus-detail-empty d-block p-2">No file attached</span>';
+        }
+    });
+}
+
+function appendKeptExistingFiles(formData, listId = 'existingFileList') {
+    formData.append("keep_existing_files_submitted", "1");
+
+    const list = document.getElementById(listId);
+    if (!list) {
+        return;
+    }
+
+    list.querySelectorAll("[data-existing-file]").forEach(row => {
+        const fileName = String(row.dataset.existingFile || "").trim();
+        if (fileName !== "") {
+            formData.append("keep_existing_files[]", fileName);
+        }
+    });
 }
 
 function renderTrackingFileCell(fileName) {
@@ -1011,14 +1365,16 @@ function openOutgoingDetails(rowData) {
         title: "Document Details",
         width: 920,
         customClass: {
-            popup: 'kodus-detail-popup'
+            popup: 'kodus-detail-popup',
+            confirmButton: 'kodus-form-confirm',
+            cancelButton: 'kodus-form-cancel'
         },
         html: renderOutgoingDetails(rowData),
-        icon: "info",
+        buttonsStyling: false,
         showCancelButton: true,
         showConfirmButton: userType === 'admin' || userType === 'aa',
-        confirmButtonText: '<i class="fas fa-pen"></i>',
-        cancelButtonText: '<i class="fas fa-times"></i>',
+        confirmButtonText: '<i class="fas fa-pen mr-1"></i> Edit',
+        cancelButtonText: 'Close',
         preConfirm: () => {
             showEditForm(rowData, date_out, date_forwarded);
         }
@@ -1069,8 +1425,22 @@ function openOutgoingDetails(rowData) {
           "paging": true,
           "scrollX": true,
           "columnDefs": [
-              { "targets": 5, "width": "14rem", "className": "tracking-file-column" }
+              { "targets": 0, "width": "5rem" },
+              { "targets": 1, "width": "7rem" },
+              { "targets": 2, "width": "8rem" },
+              { "targets": 3, "width": "16rem" },
+              { "targets": 4, "width": "12rem" },
+              { "targets": 5, "width": "14rem", "className": "tracking-file-column" },
+              { "targets": 6, "width": "11rem" },
+              { "targets": 7, "width": "11rem" },
+              { "targets": 8, "width": "8rem" }
           ],
+          "initComplete": function() {
+              this.api().columns.adjust();
+          },
+          "drawCallback": function() {
+              this.api().columns.adjust();
+          },
           //"dom": 'Bfrtip',
           //"buttons": ["copy", "csv", "excel", "pdf", "print", "colvis"]
       });
@@ -1088,7 +1458,9 @@ function openOutgoingDetails(rowData) {
       }
 </script>
 <script>
-$(document).on("click", ".edit-btn", function () {
+$(document).on("click", ".edit-btn", function (event) {
+    event.preventDefault();
+    event.stopPropagation();
     openOutgoingDetails(getOutgoingRowData(this));
 });
 
@@ -1214,17 +1586,134 @@ function formatUploadBytes(bytes) {
     return `${bytes} bytes`;
 }
 
+function fileSelectionKey(file) {
+    return [file.name, file.size, file.lastModified].join("::");
+}
+
+function syncAccumulatedFileSelection(fileInput, files) {
+    if (!window.DataTransfer) {
+        return false;
+    }
+
+    const transfer = new DataTransfer();
+    files.forEach(file => transfer.items.add(file));
+    fileInput.files = transfer.files;
+    return true;
+}
+
+function selectedFileListId(fileInputId, progressId) {
+    return `${fileInputId}-${progressId}-selected-files`;
+}
+
+function ensureSelectedFileList(fileInput, progressId) {
+    const listId = selectedFileListId(fileInput.id, progressId);
+    let list = document.getElementById(listId);
+    if (!list) {
+        fileInput.insertAdjacentHTML("afterend", `<div id="${escapeAttribute(listId)}" class="kodus-selected-files" aria-live="polite"></div>`);
+        list = document.getElementById(listId);
+    }
+    return list;
+}
+
+function refreshSelectedFileList(fileInput, progressId) {
+    const list = ensureSelectedFileList(fileInput, progressId);
+    const files = Array.from(fileInput.files || []);
+    list.innerHTML = "";
+
+    if (files.length === 0) {
+        list.classList.remove("is-visible");
+        const progress = document.getElementById(progressId);
+        progress?.classList.remove("is-visible");
+        return;
+    }
+
+    list.classList.add("is-visible");
+    files.forEach((file, index) => {
+        const row = document.createElement("div");
+        row.className = "kodus-selected-file";
+
+        const name = document.createElement("span");
+        name.className = "kodus-selected-file-name";
+        name.textContent = file.name;
+
+        const size = document.createElement("span");
+        size.className = "kodus-selected-file-size";
+        size.textContent = formatUploadBytes(file.size || 0);
+
+        const remove = document.createElement("button");
+        remove.type = "button";
+        remove.className = "kodus-selected-file-remove";
+        remove.title = `Remove ${file.name}`;
+        remove.setAttribute("aria-label", `Remove ${file.name}`);
+        remove.innerHTML = '<i class="fas fa-times"></i>';
+        remove.addEventListener("click", () => {
+            const selectedFiles = Array.isArray(fileInput.kodusSelectedFiles)
+                ? fileInput.kodusSelectedFiles.slice()
+                : Array.from(fileInput.files || []);
+            selectedFiles.splice(index, 1);
+            fileInput.kodusSelectedFiles = selectedFiles;
+            syncAccumulatedFileSelection(fileInput, selectedFiles);
+            refreshSelectedFileList(fileInput, progressId);
+
+            if (selectedFiles.length > 0) {
+                const totalBytes = selectedFiles.reduce((sum, selectedFile) => sum + (selectedFile.size || 0), 0);
+                setUploadReadyProgress(progressId, `Selected: ${selectedFiles.length} file${selectedFiles.length === 1 ? "" : "s"} (${formatUploadBytes(totalBytes)})`);
+            }
+        });
+
+        row.append(name, size, remove);
+        list.appendChild(row);
+    });
+}
+
+function clearAccumulatedFileSelection(fileInputId, progressId) {
+    const fileInput = document.getElementById(fileInputId);
+    if (!fileInput) {
+        return;
+    }
+
+    fileInput.kodusSelectedFiles = [];
+    if (window.DataTransfer) {
+        syncAccumulatedFileSelection(fileInput, []);
+    } else {
+        fileInput.value = "";
+    }
+
+    const progress = document.getElementById(progressId);
+    progress?.classList.remove("is-visible");
+    refreshSelectedFileList(fileInput, progressId);
+}
+
 function bindUploadProgressFilePreview(fileInputId, progressId) {
     const fileInput = document.getElementById(fileInputId);
     if (!fileInput) {
         return;
     }
 
+    ensureSelectedFileList(fileInput, progressId);
     fileInput.addEventListener("change", () => {
+        const pickedFiles = Array.from(fileInput.files || []);
+        if (window.DataTransfer) {
+            const selectedFiles = Array.isArray(fileInput.kodusSelectedFiles) ? fileInput.kodusSelectedFiles : [];
+            const selectedKeys = new Set(selectedFiles.map(fileSelectionKey));
+
+            pickedFiles.forEach(file => {
+                const key = fileSelectionKey(file);
+                if (!selectedKeys.has(key)) {
+                    selectedFiles.push(file);
+                    selectedKeys.add(key);
+                }
+            });
+
+            fileInput.kodusSelectedFiles = selectedFiles;
+            syncAccumulatedFileSelection(fileInput, selectedFiles);
+        }
+
         const files = Array.from(fileInput.files || []);
         if (files.length === 0) {
             const progress = document.getElementById(progressId);
             progress?.classList.remove("is-visible");
+            refreshSelectedFileList(fileInput, progressId);
             return;
         }
 
@@ -1232,6 +1721,7 @@ function bindUploadProgressFilePreview(fileInputId, progressId) {
         const label = files.length === 1
             ? `Selected: ${files[0].name} (${formatUploadBytes(totalBytes)})`
             : `Selected: ${files.length} files (${formatUploadBytes(totalBytes)})`;
+        refreshSelectedFileList(fileInput, progressId);
         setUploadReadyProgress(progressId, label);
     });
 }
@@ -1345,7 +1835,9 @@ function showEditForm(rowData, date_out, date_forwarded) {
         title: "Edit Document",
         customClass: {
             container: 'kodus-scrollable-swal',
-            popup: 'kodus-edit-popup'
+            popup: 'kodus-edit-popup',
+            confirmButton: 'kodus-form-confirm',
+            cancelButton: 'kodus-form-cancel'
         },
         html: `
             <form id="editForm" class="kodus-edit-shell">
@@ -1385,12 +1877,7 @@ function showEditForm(rowData, date_out, date_forwarded) {
                             <span class="kodus-edit-help">
                                 Current file(s):
                                 <span class="kodus-edit-inline-file">
-                                    ${rowData.file_name 
-                                        ? `${renderFileLink(rowData.file_name)}
-                                           <label class="kodus-edit-check">
-                                               <input type="checkbox" id="remove_file" name="remove_file" value="1"> Remove file(s)
-                                           </label>`
-                                        : '<span class="kodus-detail-empty">No file attached</span>'}
+                                    ${renderExistingFileRemovalList(rowData.file_name)}
                                 </span>
                             </span>
                             ${renderUploadProgress('editUploadProgress')}
@@ -1406,15 +1893,16 @@ function showEditForm(rowData, date_out, date_forwarded) {
                 </div>
             </form>
         `,
-        icon: "warning",
+        buttonsStyling: false,
         showCancelButton: true,
-        confirmButtonText: '<i class="fas fa-save"></i>',
-        cancelButtonText: '<i class="fas fa-times"></i>',
+        confirmButtonText: '<i class="fas fa-save mr-1"></i> Save Changes',
+        cancelButtonText: 'Cancel',
         didOpen: () => {
             const desc = document.getElementById("description");
             desc.focus();
             // Move cursor to the end of the text
             desc.selectionStart = desc.selectionEnd = desc.value.length;
+            bindExistingFileRemovalList();
             bindUploadProgressFilePreview("file", "editUploadProgress");
             bindReceivingOfficePicker(rowData.receiving_office || '');
         },
@@ -1425,13 +1913,9 @@ function showEditForm(rowData, date_out, date_forwarded) {
                 return false;
             }
             let formData = new FormData(document.getElementById("editForm"));
+            appendKeptExistingFiles(formData);
             appendCsrfToken(formData);
             formData.append("id", rowData.id); // Append the row ID for the update query
-
-            // Append remove_file flag if checked
-            if (document.getElementById("remove_file")?.checked) {
-                formData.append("remove_file", "1");
-            }
 
             return submitFormDataWithProgress("update_data_out.php", formData, "editUploadProgress")
             .then(data => {
@@ -1613,6 +2097,7 @@ document.getElementById("track-documents").addEventListener("click", function ()
                 $desc.val(item.description);
                 $suggestions.hide();
 
+                clearAccumulatedFileSelection("file", "trackUploadProgress");
                 $("#incomingFileInfo")
                     .html(`Incoming file(s): ${renderFileLink(item.file_name)}<br><span style="color:gray;">No need to upload a file, the incoming one will be used.</span>`)
                     .show();

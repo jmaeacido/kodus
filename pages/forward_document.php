@@ -82,6 +82,7 @@ try {
         $username         // user_log
     );
     $stmt->execute();
+    $outgoingId = (int) $conn->insert_id;
 
     // Update incoming status
     $stmt2 = $conn->prepare("UPDATE incoming SET status='Forwarded' WHERE id=?");
@@ -98,6 +99,17 @@ try {
     $ip_address = $_SERVER['REMOTE_ADDR'];
     audit_log($conn, (int) $user_id, $action, $details, $ip_address);
 
+    app_notification_create($conn, [
+        'category' => 'document_tracking',
+        'title' => 'Document forwarded',
+        'message' => app_notification_actor_name_from_session() . " forwarded document {$tracking_number}.",
+        'url' => app_notification_build_url('pages/data-tracking-out'),
+        'icon_class' => 'fas fa-share',
+        'color_class' => 'text-success',
+        'actor_user_id' => (int) $user_id,
+        'actor_name' => app_notification_actor_name_from_session(),
+    ]);
+
     $conn->commit();
 
     kodus_socket_broadcast('kodus.incoming', 'incoming.changed', [
@@ -109,6 +121,7 @@ try {
     kodus_socket_broadcast('kodus.outgoing', 'outgoing.changed', [
         'action' => 'created_from_forward',
         'incoming_id' => $id,
+        'outgoing_id' => $outgoingId,
         'tracking_number' => $tracking_number,
         'actor_id' => (int) $user_id,
     ]);

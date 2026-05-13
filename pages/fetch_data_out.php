@@ -23,13 +23,16 @@ if ($limit == -1) $limit = 10000;
 // Search
 $searchValue = isset($_GET['search']['value']) ? $_GET['search']['value'] : '';
 
-// Columns
-$columns = ['date_out', 'tracking_number', 'description', 'remarks', 'file_name', 'receiving_office', 'date_forwarded', 'user_log'];
+// Columns, aligned to the DataTables column indexes including the action column.
+$columns = [null, 'date_out', 'tracking_number', 'description', 'remarks', 'file_name', 'receiving_office', 'date_forwarded', 'user_log'];
 
 // Sorting
 $orderColumnIndex = isset($_GET['order'][0]['column']) ? (int)$_GET['order'][0]['column'] : 0;
 $orderDir = isset($_GET['order'][0]['dir']) && in_array(strtoupper($_GET['order'][0]['dir']), ['ASC','DESC']) ? $_GET['order'][0]['dir'] : 'ASC';
-$orderByClause = "ORDER BY " . $columns[$orderColumnIndex] . " $orderDir";
+$orderColumn = $columns[$orderColumnIndex] ?? null;
+$orderByClause = $orderColumn
+    ? "ORDER BY {$orderColumn} {$orderDir}, id DESC"
+    : "ORDER BY date_out DESC, id DESC";
 
 // =======================
 // Build WHERE clause
@@ -62,7 +65,7 @@ if (!empty($searchValue)) {
 // =======================
 $sql = "SELECT id, date_out, tracking_number, description, remarks, file_name, receiving_office, date_forwarded, user_log
         FROM outgoing $whereClause
-        ORDER BY date_out DESC, id DESC
+        $orderByClause
         LIMIT ?, ?";
 
 $params[] = $start;
@@ -97,9 +100,13 @@ $stmt_count->close();
 // =======================
 // Count total records (without filters)
 // =======================
-$sql_total = "SELECT COUNT(*) AS total FROM outgoing";
-$total_result = $conn->query($sql_total);
-$total_records = $total_result->fetch_assoc()['total'];
+$sql_total = "SELECT COUNT(*) AS total FROM outgoing WHERE YEAR(date_out) = ?";
+$stmt_total = $conn->prepare($sql_total);
+$stmt_total->bind_param('i', $year);
+$stmt_total->execute();
+$total_result = db_stmt_fetch_one_assoc($stmt_total);
+$total_records = $total_result['total'] ?? 0;
+$stmt_total->close();
 
 // =======================
 // Prepare response

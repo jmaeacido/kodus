@@ -233,6 +233,15 @@ session_start();
       background: var(--kodus-detail-hero-end, #162034);
       box-shadow: var(--kodus-detail-shadow, 0 18px 40px rgba(15, 23, 42, 0.12));
     }
+    .swal2-popup.kodus-detail-popup {
+      height: auto !important;
+      max-height: calc(100vh - 2rem) !important;
+      max-height: calc(100dvh - 2rem) !important;
+      display: flex !important;
+      flex-direction: column;
+      justify-content: flex-start;
+      overflow: hidden !important;
+    }
     .swal2-popup.kodus-edit-popup {
       width: min(860px, 94vw);
     }
@@ -242,12 +251,27 @@ session_start();
       color: var(--kodus-detail-text, #f8f9fa);
       overflow: visible;
     }
+    .swal2-popup.kodus-detail-popup .swal2-title {
+      flex: 0 0 auto;
+    }
+    .swal2-popup.kodus-detail-popup .swal2-html-container {
+      flex: 1 1 auto;
+      min-height: 0;
+      max-height: calc(100vh - 10rem) !important;
+      max-height: calc(100dvh - 10rem) !important;
+      overflow-y: auto !important;
+      padding-right: 0.25rem;
+    }
     .swal2-popup.kodus-detail-popup .swal2-actions,
     .swal2-popup.kodus-edit-popup .swal2-actions {
       margin: 0.85rem 0 0;
       padding-top: 0.85rem;
       width: 100%;
       background: linear-gradient(180deg, rgba(22, 32, 52, 0), var(--kodus-detail-hero-end, #162034) 34%);
+    }
+    .swal2-popup.kodus-detail-popup .swal2-actions {
+      flex: 0 0 auto;
+      z-index: 2;
     }
     .kodus-form-shell {
       text-align: left;
@@ -419,8 +443,19 @@ session_start();
       font-style: italic;
     }
     .kodus-detail-link {
+      display: block !important;
       color: var(--kodus-detail-link, #7ab7ff);
       font-weight: 700;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+    .kodus-detail-files {
+      display: flex;
+      flex-direction: column;
+      gap: 0.2rem;
+      max-height: min(16rem, 32vh);
+      overflow-y: auto;
+      padding-right: 0.25rem;
     }
     .kodus-form-hero {
       padding: 1rem 1.05rem;
@@ -1053,12 +1088,13 @@ function renderFileLink(fileName) {
     }
 
     const files = splitTrackingFileNames(normalized);
-    return files.map(file => {
+    const links = files.map(file => {
         const safeName = escapeHtml(file);
         const safeUrl = encodeURIComponent(file).replace(/%2F/g, '/');
         const popupUrl = `uploads/${safeUrl}`;
-        return `<a class="kodus-detail-link d-inline-block mr-2" data-url="${escapeAttribute(popupUrl)}" onclick="openPopup(this.dataset.url)" href="javascript:void(0)">${safeName}</a>`;
+        return `<a class="kodus-detail-link" data-url="${escapeAttribute(popupUrl)}" onclick="openPopup(this.dataset.url)" href="javascript:void(0)">${safeName}</a>`;
     }).join('');
+    return `<span class="kodus-detail-files">${links}</span>`;
 }
 
 function splitTrackingFileNames(fileName) {

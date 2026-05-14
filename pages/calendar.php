@@ -751,6 +751,10 @@ $(function () {
       : String(event.id || '');
   }
 
+  function isProgramActivityEvent(event) {
+    return !!(event && event.extendedProps && event.extendedProps.sourceType === 'program_activity');
+  }
+
   function buildTimedScheduleRow(schedule) {
     const normalized = schedule || {};
     const row = $(`
@@ -970,6 +974,13 @@ $(function () {
     $('#viewEditBtn').data('event', ev);
     $('#viewDeleteBtn').data('id', getParentEventId(ev));
     $('#viewDuplicateBtn').data('event', ev);
+
+    if (isProgramActivityEvent(ev)) {
+      $('#viewEditBtn, #viewDeleteBtn, #viewDuplicateBtn').hide();
+    } else {
+      $('#viewEditBtn, #viewDeleteBtn, #viewDuplicateBtn').show();
+    }
+
     $('#viewEventModal').modal('show');
   }
 
@@ -1270,6 +1281,10 @@ $(function () {
     eventClick: function(info) {
       let ev = info.event;
       openEventDetails(ev);
+
+      if (isProgramActivityEvent(ev)) {
+        return;
+      }
 
       // Reset first
       $('#createdByWrapper').hide();

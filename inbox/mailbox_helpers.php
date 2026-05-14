@@ -806,6 +806,250 @@ function mailboxSyncMessageRecipients(mysqli $conn, int $messageId, array $recip
     $insertStmt->close();
 }
 
+function mailboxFindDirectThreadBetweenUsers(mysqli $conn, int $firstUserId, int $secondUserId): int
+{
+    if ($firstUserId <= 0 || $secondUserId <= 0 || $firstUserId === $secondUserId) {
+        return 0;
+    }
+
+    $stmt = $conn->prepare("
+        SELECT cm.id
+        FROM contact_messages cm
+        INNER JOIN users sender_user
+            ON sender_user.id IN (?, ?)
+           AND (
+               LOWER(sender_user.email) = LOWER(cm.user_email)
+               OR LOWER(sender_user.username) = LOWER(cm.user_name)
+           )
+        INNER JOIN contact_message_recipients cmr
+            ON cmr.message_id = cm.id
+           AND cmr.user_id IN (?, ?)
+        LEFT JOIN (
+            SELECT message_id, MAX(sent_at) AS latest_reply_at
+            FROM contact_replies
+            GROUP BY message_id
+        ) reply_summary ON reply_summary.message_id = cm.id
+        WHERE COALESCE(cm.conversation_type, 'direct') = 'direct'
+          AND (
+              (sender_user.id = ? AND cmr.user_id = ?)
+              OR (sender_user.id = ? AND cmr.user_id = ?)
+          )
+          AND NOT EXISTS (
+              SELECT 1
+              FROM contact_message_recipients extra_recipient
+              WHERE extra_recipient.message_id = cm.id
+                AND extra_recipient.user_id NOT IN (?, ?)
+          )
+        ORDER BY COALESCE(reply_summary.latest_reply_at, cm.sent_at) DESC, cm.id DESC
+        LIMIT 1
+    ");
+
+    if (!$stmt) {
+        return 0;
+    }
+
+    $stmt->bind_param(
+        'iiiiiiiiii',
+        $firstUserId,
+        $secondUserId,
+        $firstUserId,
+        $secondUserId,
+        $firstUserId,
+        $secondUserId,
+        $secondUserId,
+        $firstUserId,
+        $firstUserId,
+        $secondUserId
+    );
+    $stmt->execute();
+    $row = db_stmt_fetch_one_assoc($stmt);
+    $stmt->close();
+
+    return (int) ($row['id'] ?? 0);
+}
+
+function mailboxAppendDirectThreadMessage(
+    mysqli $conn,
+    int $messageId,
+    int $senderUserId,
+    string $message,
+    ?string $attachmentCsv = null
+): int {
+    if ($messageId <= 0 || $senderUserId <= 0) {
+        return 0;
+    }
+
+    $stmt = $conn->prepare("
+        INSERT INTO contact_replies (message_id, user_id, reply, sent_at, updated_at, attachment)
+        VALUES (?, ?, ?, NOW(), NOW(), ?)
+    ");
+    if (!$stmt) {
+        return 0;
+    }
+
+    $attachmentParam = trim((string) $attachmentCsv) !== '' ? (string) $attachmentCsv : null;
+    $stmt->bind_param('iiss', $messageId, $senderUserId, $message, $attachmentParam);
+    $stmt->execute();
+    $replyId = (int) $stmt->insert_id;
+    $stmt->close();
+
+    return $replyId;
+}
+
+function mailboxVisibleDirectThreadIdsForMessage(mysqli $conn, int $messageId, int $currentUserId, string $folder = 'inbox'): array
+{
+    if ($messageId <= 0 || $currentUserId <= 0) {
+        return [$messageId];
+    }
+
+    $pairStmt = $conn->prepare("
+        SELECT sender_user.id AS sender_user_id,
+               cmr.user_id AS recipient_user_id
+        FROM contact_messages cm
+        INNER JOIN users sender_user
+            ON LOWER(sender_user.email) = LOWER(cm.user_email)
+            OR LOWER(sender_user.username) = LOWER(cm.user_name)
+        INNER JOIN contact_message_recipients cmr
+            ON cmr.message_id = cm.id
+           AND cmr.user_id IS NOT NULL
+        WHERE cm.id = ?
+          AND COALESCE(cm.conversation_type, 'direct') = 'direct'
+          AND (
+              SELECT COUNT(DISTINCT counted_recipient.user_id)
+              FROM contact_message_recipients counted_recipient
+              WHERE counted_recipient.message_id = cm.id
+                AND counted_recipient.user_id IS NOT NULL
+          ) = 1
+        LIMIT 1
+    ");
+
+    if (!$pairStmt) {
+        return [$messageId];
+    }
+
+    $pairStmt->bind_param('i', $messageId);
+    $pairStmt->execute();
+    $pair = db_stmt_fetch_one_assoc($pairStmt);
+    $pairStmt->close();
+
+    $senderUserId = (int) ($pair['sender_user_id'] ?? 0);
+    $recipientUserId = (int) ($pair['recipient_user_id'] ?? 0);
+    if ($senderUserId <= 0 || $recipientUserId <= 0 || $senderUserId === $recipientUserId) {
+        return [$messageId];
+    }
+
+    $firstUserId = min($senderUserId, $recipientUserId);
+    $secondUserId = max($senderUserId, $recipientUserId);
+    $folderPredicate = mailboxTrashPredicate(mailboxGetFolder($folder), 'mr');
+    $visibilityPredicate = mailboxVisibilityPredicate($currentUserId, 'cm', 'mr');
+
+    $stmt = $conn->prepare("
+        SELECT cm.id
+        FROM contact_messages cm
+        INNER JOIN users sender_user
+            ON sender_user.id IN (?, ?)
+           AND (
+               LOWER(sender_user.email) = LOWER(cm.user_email)
+               OR LOWER(sender_user.username) = LOWER(cm.user_name)
+           )
+        INNER JOIN contact_message_recipients cmr
+            ON cmr.message_id = cm.id
+           AND cmr.user_id IN (?, ?)
+        LEFT JOIN message_reads mr
+            ON mr.message_id = cm.id AND mr.user_id = ?
+        WHERE COALESCE(cm.conversation_type, 'direct') = 'direct'
+          AND (
+              (sender_user.id = ? AND cmr.user_id = ?)
+              OR (sender_user.id = ? AND cmr.user_id = ?)
+          )
+          AND (
+              SELECT COUNT(DISTINCT counted_recipient.user_id)
+              FROM contact_message_recipients counted_recipient
+              WHERE counted_recipient.message_id = cm.id
+                AND counted_recipient.user_id IS NOT NULL
+          ) = 1
+          AND NOT EXISTS (
+              SELECT 1
+              FROM contact_message_recipients extra_recipient
+              WHERE extra_recipient.message_id = cm.id
+                AND extra_recipient.user_id IS NOT NULL
+                AND extra_recipient.user_id NOT IN (?, ?)
+          )
+          AND {$folderPredicate}
+          AND {$visibilityPredicate}
+        ORDER BY cm.sent_at ASC, cm.id ASC
+    ");
+
+    if (!$stmt) {
+        return [$messageId];
+    }
+
+    $stmt->bind_param(
+        'iiiiiiiiiii',
+        $firstUserId,
+        $secondUserId,
+        $firstUserId,
+        $secondUserId,
+        $currentUserId,
+        $firstUserId,
+        $secondUserId,
+        $secondUserId,
+        $firstUserId,
+        $firstUserId,
+        $secondUserId
+    );
+    $stmt->execute();
+    $ids = array_map(static fn(array $row): int => (int) ($row['id'] ?? 0), db_stmt_fetch_all_assoc($stmt));
+    $stmt->close();
+
+    $ids = array_values(array_unique(array_filter($ids, static fn(int $id): bool => $id > 0)));
+    return $ids !== [] ? $ids : [$messageId];
+}
+
+function mailboxDedupeDirectThreadRowsForUser(array $messages, int $currentUserId): array
+{
+    if ($messages === [] || $currentUserId <= 0) {
+        return $messages;
+    }
+
+    $seenDirectPairs = [];
+    $filtered = [];
+
+    foreach ($messages as $message) {
+        if (mailboxIsGroupThread($message)) {
+            $filtered[] = $message;
+            continue;
+        }
+
+        $recipientCount = isset($message['recipient_count']) ? (int) $message['recipient_count'] : 1;
+        if ($recipientCount !== 1) {
+            $filtered[] = $message;
+            continue;
+        }
+
+        $senderUserId = (int) ($message['sender_user_id'] ?? 0);
+        $recipientUserId = (int) ($message['recipient_user_id'] ?? 0);
+        $otherUserId = $senderUserId === $currentUserId ? $recipientUserId : $senderUserId;
+
+        if ($otherUserId <= 0 || $otherUserId === $currentUserId) {
+            $filtered[] = $message;
+            continue;
+        }
+
+        $first = min($currentUserId, $otherUserId);
+        $second = max($currentUserId, $otherUserId);
+        $pairKey = $first . ':' . $second;
+        if (isset($seenDirectPairs[$pairKey])) {
+            continue;
+        }
+
+        $seenDirectPairs[$pairKey] = true;
+        $filtered[] = $message;
+    }
+
+    return $filtered;
+}
+
 function mailboxDeleteConversationForEveryone(mysqli $conn, int $messageId): bool
 {
     $attachmentsToDelete = [];

@@ -50,6 +50,12 @@ if ($userType === 'admin') {
                    WHERE cmr.message_id = cm.id
                ) AS recipient_names,
                (
+                   SELECT COUNT(DISTINCT cmr.user_id)
+                   FROM contact_message_recipients cmr
+                   WHERE cmr.message_id = cm.id
+                     AND cmr.user_id IS NOT NULL
+               ) AS recipient_count,
+               (
                    SELECT u.id
                    FROM contact_message_recipients cmr
                    INNER JOIN users u ON u.id = cmr.user_id
@@ -138,6 +144,12 @@ if ($userType === 'admin') {
                    WHERE cmr.message_id = cm.id
                ) AS recipient_names,
                (
+                   SELECT COUNT(DISTINCT cmr.user_id)
+                   FROM contact_message_recipients cmr
+                   WHERE cmr.message_id = cm.id
+                     AND cmr.user_id IS NOT NULL
+               ) AS recipient_count,
+               (
                    SELECT u.id
                    FROM contact_message_recipients cmr
                    INNER JOIN users u ON u.id = cmr.user_id
@@ -207,6 +219,7 @@ if ($userType === 'admin') {
 $stmt->execute();
 $messages = db_stmt_fetch_all_assoc($stmt);
 $stmt->close();
+$messages = mailboxDedupeDirectThreadRowsForUser($messages, (int) $userId);
 $latestPreviews = mailboxLatestThreadPreviews(
     $conn,
     array_column($messages, 'id'),
@@ -1131,6 +1144,10 @@ $composeCsrfToken = security_get_csrf_token();
       white-space: normal;
       line-height: 1.5;
       font-size: 0.95rem;
+    }
+
+    .mailbox-app .chat-action-line {
+      margin-top: 0.35rem;
     }
 
     .mailbox-app .chat-mention-chip {

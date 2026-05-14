@@ -41,6 +41,12 @@ if ($userType === 'admin') {
                    )
                )) AS recipient_names,
                (
+                   SELECT COUNT(DISTINCT cmr.user_id)
+                   FROM contact_message_recipients cmr
+                   WHERE cmr.message_id = cm.id
+                     AND cmr.user_id IS NOT NULL
+               ) AS recipient_count,
+               (
                    SELECT u.id
                    FROM contact_message_recipients cmr
                    INNER JOIN users u ON u.id = cmr.user_id
@@ -130,6 +136,12 @@ if ($userType === 'admin') {
                    )
                )) AS recipient_names,
                (
+                   SELECT COUNT(DISTINCT cmr.user_id)
+                   FROM contact_message_recipients cmr
+                   WHERE cmr.message_id = cm.id
+                     AND cmr.user_id IS NOT NULL
+               ) AS recipient_count,
+               (
                    SELECT u.id
                    FROM contact_message_recipients cmr
                    INNER JOIN users u ON u.id = cmr.user_id
@@ -198,6 +210,7 @@ if ($userType === 'admin') {
 
 $stmt->execute();
 $messages = db_stmt_fetch_all_assoc($stmt);
+$messages = mailboxDedupeDirectThreadRowsForUser($messages, (int) $userId);
 $latestPreviews = mailboxLatestThreadPreviews(
     $conn,
     array_column($messages, 'id'),

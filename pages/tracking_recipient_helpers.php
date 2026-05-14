@@ -291,38 +291,83 @@ function tracking_send_document_recipient_kodus_alerts(mysqli $conn, array $emai
 
         mailboxEnsureSchema($conn);
 
-        $stmt = $conn->prepare("
-            INSERT INTO contact_messages (user_email, user_name, subject, message, attachment, sent_at)
-            VALUES (?, ?, ?, ?, NULL, NOW())
-        ");
+        $directRecipient = count($recipients) === 1 ? $recipients[0] : null;
+        $appendedReplyId = 0;
+        if (
+            $actorUserId > 0
+            && is_array($directRecipient)
+            && (int) ($directRecipient['user_id'] ?? 0) > 0
+            && (int) ($directRecipient['user_id'] ?? 0) !== $actorUserId
+        ) {
+            $messageId = mailboxFindDirectThreadBetweenUsers(
+                $conn,
+                $actorUserId,
+                (int) $directRecipient['user_id']
+            );
 
-        if ($stmt) {
-            $stmt->bind_param('ssss', $senderEmail, $senderName, $subject, $message);
-            if ($stmt->execute()) {
-                $messageId = (int) $stmt->insert_id;
+            if ($messageId > 0) {
+                $appendedReplyId = mailboxAppendDirectThreadMessage(
+                    $conn,
+                    $messageId,
+                    $actorUserId,
+                    $message,
+                    null
+                );
             }
-            $stmt->close();
+        }
+
+        if ($appendedReplyId <= 0) {
+            $stmt = $conn->prepare("
+                INSERT INTO contact_messages (user_email, user_name, subject, message, attachment, sent_at)
+                VALUES (?, ?, ?, ?, NULL, NOW())
+            ");
+
+            if ($stmt) {
+                $stmt->bind_param('ssss', $senderEmail, $senderName, $subject, $message);
+                if ($stmt->execute()) {
+                    $messageId = (int) $stmt->insert_id;
+                }
+                $stmt->close();
+            }
         }
 
         if ($messageId > 0) {
-            mailboxSyncMessageRecipients($conn, $messageId, $recipients);
+            if ($appendedReplyId <= 0) {
+                mailboxSyncMessageRecipients($conn, $messageId, $recipients);
+            }
 
             if ($actorUserId > 0) {
                 $readStmt = $conn->prepare("
-                    INSERT INTO message_reads (message_id, user_id, is_read, read_at, last_read_reply_id)
-                    VALUES (?, ?, 1, NOW(), 0)
-                    ON DUPLICATE KEY UPDATE is_read = 1, read_at = NOW(), last_read_reply_id = 0
+                    INSERT INTO message_reads (message_id, user_id, is_read, read_at, last_read_reply_id, is_trashed, trashed_at)
+                    VALUES (?, ?, 1, NOW(), ?, 0, NULL)
+                    ON DUPLICATE KEY UPDATE is_read = 1, read_at = NOW(), last_read_reply_id = VALUES(last_read_reply_id), is_trashed = 0, trashed_at = NULL
                 ");
                 if ($readStmt) {
-                    $readStmt->bind_param('ii', $messageId, $actorUserId);
+                    $lastReadReplyId = $appendedReplyId > 0 ? $appendedReplyId : 0;
+                    $readStmt->bind_param('iii', $messageId, $actorUserId, $lastReadReplyId);
                     $readStmt->execute();
                     $readStmt->close();
                 }
             }
 
+            if ($appendedReplyId > 0 && is_array($directRecipient)) {
+                $recipientUserId = (int) ($directRecipient['user_id'] ?? 0);
+                $recipientReadStmt = $conn->prepare("
+                    INSERT INTO message_reads (message_id, user_id, is_read, is_trashed, read_at, trashed_at)
+                    VALUES (?, ?, 0, 0, NULL, NULL)
+                    ON DUPLICATE KEY UPDATE is_read = 0, is_trashed = 0, read_at = NULL, trashed_at = NULL
+                ");
+                if ($recipientReadStmt) {
+                    $recipientReadStmt->bind_param('ii', $messageId, $recipientUserId);
+                    $recipientReadStmt->execute();
+                    $recipientReadStmt->close();
+                }
+            }
+
             kodus_socket_broadcast('kodus.mailbox', 'mail.changed', [
-                'action' => 'message_created',
+                'action' => $appendedReplyId > 0 ? 'reply_created' : 'message_created',
                 'message_id' => $messageId,
+                'reply_id' => $appendedReplyId,
                 'actor_id' => $actorUserId,
                 'recipient_count' => count($recipients),
             ]);

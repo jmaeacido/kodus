@@ -49,6 +49,7 @@ $sendCopy  = isset($_POST['send_copy']);
 $returnTo  = trim((string) ($_POST['return_to'] ?? 'messenger/'));
 $recipientInputRaw = $_POST['recipient'] ?? [];
 $deferMail = isset($_POST['defer_mail']) && (string) $_POST['defer_mail'] === '1';
+$senderId = (int) ($_SESSION['user_id'] ?? 0);
 
 if (!is_array($recipientInputRaw)) {
     $recipientInputRaw = [$recipientInputRaw];
@@ -144,8 +145,7 @@ $messageId = $stmt->insert_id;
 $stmt->close();
 
 // Mark sender as read
-if (!empty($_SESSION['user_id'])) {
-    $senderId = $_SESSION['user_id'];
+if ($senderId > 0) {
     $stmt = $conn->prepare("
         INSERT INTO message_reads (message_id, user_id, is_read, read_at, last_read_reply_id)
         VALUES (?, ?, 1, NOW(), 0)
@@ -258,15 +258,107 @@ try {
 
     foreach ($recipients as $r) $mail->addAddress($r['email'], $r['username']);
 
-    // Save recipients in the normalized recipient table
-    mailboxSyncMessageRecipients($conn, (int) $messageId, $recipients);
+    $directRecipient = count($recipients) === 1 ? $recipients[0] : null;
+    $existingDirectMessageId = 0;
+    $appendedReplyId = 0;
+    if (
+        $senderId > 0
+        && is_array($directRecipient)
+        && (int) ($directRecipient['user_id'] ?? 0) > 0
+        && (int) ($directRecipient['user_id'] ?? 0) !== $senderId
+    ) {
+        $existingDirectMessageId = mailboxFindDirectThreadBetweenUsers(
+            $conn,
+            $senderId,
+            (int) $directRecipient['user_id']
+        );
+    }
 
-    kodus_socket_broadcast('kodus.mailbox', 'mail.changed', [
-        'action' => 'message_created',
-        'message_id' => (int) $messageId,
-        'actor_id' => (int) ($_SESSION['user_id'] ?? 0),
-        'recipient_count' => count($recipients),
-    ]);
+    if ($existingDirectMessageId > 0) {
+        if (!empty($filenamesForDB)) {
+            $replyUploadDir = __DIR__ . '/inbox/uploads/reply_attachments/';
+            if (!is_dir($replyUploadDir)) {
+                mkdir($replyUploadDir, 0775, true);
+            }
+
+            $movedUploadPaths = [];
+            foreach ($filenamesForDB as $filename) {
+                $sourcePath = __DIR__ . '/inbox/uploads/contact_attachments/' . $filename;
+                $targetPath = $replyUploadDir . $filename;
+                if (is_file($sourcePath)) {
+                    if (!@rename($sourcePath, $targetPath)) {
+                        @copy($sourcePath, $targetPath);
+                        @unlink($sourcePath);
+                    }
+                }
+                $movedUploadPaths[] = $targetPath;
+            }
+            $uploadedFiles = $movedUploadPaths;
+        }
+
+        $appendedReplyId = mailboxAppendDirectThreadMessage(
+            $conn,
+            $existingDirectMessageId,
+            $senderId,
+            $message,
+            $attachmentsDB
+        );
+
+        if ($appendedReplyId > 0) {
+            $deleteDraftStmt = $conn->prepare('DELETE FROM contact_messages WHERE id = ? LIMIT 1');
+            if ($deleteDraftStmt) {
+                $deleteDraftStmt->bind_param('i', $messageId);
+                $deleteDraftStmt->execute();
+                $deleteDraftStmt->close();
+            }
+
+            $messageId = $existingDirectMessageId;
+
+            $senderReadStmt = $conn->prepare("
+                INSERT INTO message_reads (message_id, user_id, is_read, is_trashed, read_at, last_read_reply_id, trashed_at)
+                VALUES (?, ?, 1, 0, NOW(), ?, NULL)
+                ON DUPLICATE KEY UPDATE is_read = 1, is_trashed = 0, read_at = NOW(), last_read_reply_id = VALUES(last_read_reply_id), trashed_at = NULL
+            ");
+            if ($senderReadStmt) {
+                $senderReadStmt->bind_param('iii', $messageId, $senderId, $appendedReplyId);
+                $senderReadStmt->execute();
+                $senderReadStmt->close();
+            }
+
+            $recipientUserId = (int) ($directRecipient['user_id'] ?? 0);
+            $recipientReadStmt = $conn->prepare("
+                INSERT INTO message_reads (message_id, user_id, is_read, is_trashed, read_at, trashed_at)
+                VALUES (?, ?, 0, 0, NULL, NULL)
+                ON DUPLICATE KEY UPDATE is_read = 0, is_trashed = 0, read_at = NULL, trashed_at = NULL
+            ");
+            if ($recipientReadStmt) {
+                $recipientReadStmt->bind_param('ii', $messageId, $recipientUserId);
+                $recipientReadStmt->execute();
+                $recipientReadStmt->close();
+            }
+
+            kodus_socket_broadcast('kodus.mailbox', 'mail.changed', [
+                'action' => 'reply_created',
+                'message_id' => (int) $messageId,
+                'reply_id' => $appendedReplyId,
+                'actor_id' => $senderId,
+                'receiver_ids' => [$recipientUserId],
+                'source' => 'direct_compose',
+            ]);
+        }
+    }
+
+    // Save recipients in the normalized recipient table
+    if ($appendedReplyId <= 0) {
+        mailboxSyncMessageRecipients($conn, (int) $messageId, $recipients);
+
+        kodus_socket_broadcast('kodus.mailbox', 'mail.changed', [
+            'action' => 'message_created',
+            'message_id' => (int) $messageId,
+            'actor_id' => (int) ($_SESSION['user_id'] ?? 0),
+            'recipient_count' => count($recipients),
+        ]);
+    }
 
     $mail->addReplyTo($userEmail, $userName);
     if ($sendCopy) $mail->addCC($userEmail);

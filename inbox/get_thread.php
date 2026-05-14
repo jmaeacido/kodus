@@ -196,15 +196,51 @@ if ($isGroupThread) {
     }
 }
 
+$threadMessageIds = $isGroupThread
+    ? [(int) $id]
+    : mailboxVisibleDirectThreadIdsForMessage($conn, (int) $id, (int) $userId, $currentFolder);
+if (!in_array((int) $id, $threadMessageIds, true)) {
+    $threadMessageIds[] = (int) $id;
+}
+$threadMessageIds = array_values(array_unique(array_filter($threadMessageIds, static fn(int $messageId): bool => $messageId > 0)));
+
+$threadRootMessages = [(int) $id => $message];
+if (count($threadMessageIds) > 1) {
+    $rootPlaceholders = implode(',', array_fill(0, count($threadMessageIds), '?'));
+    $rootTypes = str_repeat('i', count($threadMessageIds));
+    $rootStmt = $conn->prepare("
+        SELECT cm.*,
+               sender_user.picture AS sender_picture,
+               sender_user.id AS sender_user_id,
+               sender_user.first_name AS sender_first_name,
+               sender_user.sso_avatar_url AS sender_sso_avatar_url
+        FROM contact_messages cm
+        LEFT JOIN users sender_user ON sender_user.email = cm.user_email
+        WHERE cm.id IN ($rootPlaceholders)
+        ORDER BY cm.sent_at ASC, cm.id ASC
+    ");
+    if ($rootStmt) {
+        $rootStmt->bind_param($rootTypes, ...$threadMessageIds);
+        $rootStmt->execute();
+        $threadRootMessages = [];
+        foreach (db_stmt_fetch_all_assoc($rootStmt) as $rootRow) {
+            $threadRootMessages[(int) ($rootRow['id'] ?? 0)] = $rootRow;
+        }
+        $rootStmt->close();
+    }
+}
+
+$replyPlaceholders = implode(',', array_fill(0, count($threadMessageIds), '?'));
+$replyTypes = str_repeat('i', count($threadMessageIds));
 $stmt = $conn->prepare("
     SELECT r.*, u.username, u.first_name, u.userType, u.picture, u.sso_avatar_url, deleter.username AS deleted_by_username, deleter.first_name AS deleted_by_first_name
     FROM contact_replies r
     JOIN users u ON r.user_id = u.id
     LEFT JOIN users deleter ON deleter.id = r.deleted_by_user_id
-    WHERE r.message_id = ?
+    WHERE r.message_id IN ($replyPlaceholders)
     ORDER BY r.sent_at ASC, r.id ASC
 ");
-$stmt->bind_param('i', $id);
+$stmt->bind_param($replyTypes, ...$threadMessageIds);
 $stmt->execute();
 $replies = db_stmt_fetch_all_assoc($stmt);
 $stmt->close();
@@ -324,9 +360,13 @@ $chatMetaCopy = $currentFolder === 'trash'
     ? 'Restore this chat to send new updates.'
     : '';
 
-$latestReplyId = 0;
+$latestReplyIdsByMessage = array_fill_keys($threadMessageIds, 0);
 foreach ($replies as $replyForCursor) {
-    $latestReplyId = max($latestReplyId, (int) ($replyForCursor['id'] ?? 0));
+    $replyMessageId = (int) ($replyForCursor['message_id'] ?? 0);
+    if (!array_key_exists($replyMessageId, $latestReplyIdsByMessage)) {
+        continue;
+    }
+    $latestReplyIdsByMessage[$replyMessageId] = max($latestReplyIdsByMessage[$replyMessageId], (int) ($replyForCursor['id'] ?? 0));
 }
 
 $stmt = $conn->prepare("
@@ -334,8 +374,12 @@ $stmt = $conn->prepare("
     VALUES (?, ?, 1, NOW(), ?)
     ON DUPLICATE KEY UPDATE is_read=1, read_at=NOW(), last_read_reply_id = VALUES(last_read_reply_id)
 ");
-$stmt->bind_param('iii', $id, $userId, $latestReplyId);
-$stmt->execute();
+foreach ($latestReplyIdsByMessage as $readMessageId => $latestReplyId) {
+    $readMessageId = (int) $readMessageId;
+    $latestReplyId = (int) $latestReplyId;
+    $stmt->bind_param('iii', $readMessageId, $userId, $latestReplyId);
+    $stmt->execute();
+}
 $stmt->close();
 
 function messengerBuildSeenReceiptLookup(mysqli $conn, array $message, array $replies, int $currentUserId, bool $originalIsMine): array
@@ -483,7 +527,10 @@ function messengerBuildSeenReceiptLookup(mysqli $conn, array $message, array $re
     return ['message' => '', 'replies' => [(int) $latestMine['reply_id'] => $label]];
 }
 
-$seenReceiptLookup = messengerBuildSeenReceiptLookup($conn, $message, $replies, (int) $userId, $originalIsMine);
+$currentMessageReplies = array_values(array_filter($replies, static function (array $reply) use ($id): bool {
+    return (int) ($reply['message_id'] ?? 0) === (int) $id;
+}));
+$seenReceiptLookup = messengerBuildSeenReceiptLookup($conn, $message, $currentMessageReplies, (int) $userId, $originalIsMine);
 
 function renderAttachments($attachmentCsv, $basePath, $type = 'contact')
 {
@@ -623,14 +670,33 @@ function renderReactionBar(array $summary, int $messageId, ?int $replyId): strin
 
 function renderChatMessageText(string $text): string
 {
-    $escaped = htmlspecialchars($text, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-    $highlighted = preg_replace(
-        '/(^|[\s(])(@(?:everyone|[\p{L}\p{N}_.-]+))/u',
-        '$1<span class="chat-mention-chip">$2</span>',
-        $escaped
-    );
+    $lines = preg_split('/\R/', $text);
+    if ($lines === false) {
+        $lines = [$text];
+    }
 
-    return nl2br($highlighted ?? $escaped);
+    $renderedLines = [];
+    foreach ($lines as $line) {
+        if (preg_match('/^\s*Open KODUS:\s*(\S+)\s*$/i', $line, $matches)) {
+            $rawUrl = trim((string) ($matches[1] ?? ''));
+            if ($rawUrl !== '') {
+                $href = preg_match('/^https?:\/\//i', $rawUrl) ? $rawUrl : app_url(ltrim($rawUrl, '/'));
+                $renderedLines[] = '<div class="chat-action-line"><a class="btn btn-sm btn-primary" href="'
+                    . htmlspecialchars($href, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8')
+                    . '"><i class="fas fa-external-link-alt mr-1"></i>Open KODUS</a></div>';
+                continue;
+            }
+        }
+
+        $escaped = htmlspecialchars($line, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+        $renderedLines[] = preg_replace(
+            '/(^|[\s(])(@(?:everyone|[\p{L}\p{N}_.-]+))/u',
+            '$1<span class="chat-mention-chip">$2</span>',
+            $escaped
+        ) ?? $escaped;
+    }
+
+    return implode('<br>', $renderedLines);
 }
 
 function renderQuotedReplyPreview(array $row): string
@@ -815,14 +881,123 @@ function renderOriginalMessageBubble($message, $originalReplyClass, $originalAva
     return ob_get_clean();
 }
 
-$messageReactionSummary = mailboxFetchReactionSummary($conn, (int) $message['id'], null, $userId);
+$messageReactionSummary = [];
+foreach ($threadRootMessages as $rootMessage) {
+    $rootMessageId = (int) ($rootMessage['id'] ?? 0);
+    if ($rootMessageId <= 0) {
+        continue;
+    }
+    $messageReactionSummary[$rootMessageId] = mailboxFetchReactionSummary($conn, $rootMessageId, null, $userId);
+}
 $replyReactionSummary = [];
 foreach ($replies as $reply) {
+    $replyMessageId = (int) ($reply['message_id'] ?? 0);
+    $replyId = (int) ($reply['id'] ?? 0);
+    if ($replyMessageId <= 0 || $replyId <= 0) {
+        continue;
+    }
     $replyReactionSummary[(int) ($reply['id'] ?? 0)] = mailboxFetchReactionSummary(
         $conn,
-        (int) $message['id'],
-        (int) ($reply['id'] ?? 0),
+        $replyMessageId,
+        $replyId,
         $userId
+    );
+}
+
+$timelineItems = [];
+foreach ($threadRootMessages as $rootMessage) {
+    $rootMessageId = (int) ($rootMessage['id'] ?? 0);
+    if ($rootMessageId <= 0) {
+        continue;
+    }
+    $sentAt = (string) ($rootMessage['sent_at'] ?? '');
+    $timelineItems[] = [
+        'type' => 'message',
+        'message_id' => $rootMessageId,
+        'sent_at' => $sentAt,
+        'sort_ts' => strtotime($sentAt) ?: 0,
+        'sort_id' => $rootMessageId,
+        'row' => $rootMessage,
+    ];
+}
+foreach ($replies as $reply) {
+    $sentAt = (string) ($reply['sent_at'] ?? '');
+    $timelineItems[] = [
+        'type' => 'reply',
+        'message_id' => (int) ($reply['message_id'] ?? 0),
+        'sent_at' => $sentAt,
+        'sort_ts' => strtotime($sentAt) ?: 0,
+        'sort_id' => (int) ($reply['id'] ?? 0),
+        'row' => $reply,
+    ];
+}
+usort($timelineItems, static function (array $a, array $b): int {
+    $timeCompare = ((int) ($a['sort_ts'] ?? 0)) <=> ((int) ($b['sort_ts'] ?? 0));
+    if ($timeCompare !== 0) {
+        return $timeCompare;
+    }
+
+    if (($a['type'] ?? '') !== ($b['type'] ?? '')) {
+        return ($a['type'] ?? '') === 'message' ? -1 : 1;
+    }
+
+    return ((int) ($a['sort_id'] ?? 0)) <=> ((int) ($b['sort_id'] ?? 0));
+});
+
+function renderTimelineItem(
+    array $item,
+    int $userId,
+    string $userType,
+    int $selectedMessageId,
+    string $currentUserEmail,
+    string $currentUserName,
+    array $messageReactionSummary,
+    array $replyReactionSummary,
+    array $seenReceiptLookup
+): string {
+    if (($item['type'] ?? '') === 'reply') {
+        $reply = $item['row'] ?? [];
+        $replyId = (int) ($reply['id'] ?? 0);
+        return renderReply(
+            $reply,
+            $userId,
+            $userType,
+            $replyReactionSummary[$replyId] ?? [],
+            (int) ($reply['message_id'] ?? 0),
+            (string) ($seenReceiptLookup['replies'][$replyId] ?? '')
+        );
+    }
+
+    $rootMessage = $item['row'] ?? [];
+    $rootIsMine = mailboxOwnerMatchesCurrentUser(
+        (string) ($rootMessage['user_email'] ?? ''),
+        (string) ($rootMessage['user_name'] ?? ''),
+        $currentUserEmail,
+        $currentUserName
+    );
+    $rootDisplayName = $rootIsMine
+        ? mailboxDisplayName([
+            'first_name' => $_SESSION['first_name'] ?? '',
+            'username' => $_SESSION['username'] ?? '',
+            'email' => $_SESSION['email'] ?? '',
+        ], 'You')
+        : mailboxDisplayName([
+            'first_name' => $rootMessage['sender_first_name'] ?? '',
+            'user_name' => $rootMessage['user_name'] ?? '',
+            'user_email' => $rootMessage['user_email'] ?? '',
+        ], (string) ($rootMessage['user_email'] ?? 'Someone'));
+    global $base_url;
+    $rootAvatarUrl = avatar_resolve_url($rootMessage['sender_picture'] ?? '', $rootMessage['sender_sso_avatar_url'] ?? '', $base_url, dirname(__DIR__));
+    $rootClass = $rootIsMine ? 'reply mine' : 'reply theirs';
+    $rootMessageId = (int) ($rootMessage['id'] ?? 0);
+
+    return renderOriginalMessageBubble(
+        $rootMessage,
+        $rootClass,
+        $rootAvatarUrl,
+        $rootDisplayName,
+        $messageReactionSummary[$rootMessageId] ?? [],
+        $rootMessageId === $selectedMessageId ? (string) ($seenReceiptLookup['message'] ?? '') : ''
     );
 }
 
@@ -831,15 +1006,12 @@ if ($onlyConversation) {
     ?>
     <div id="conversationWrapper" class="mt-4">
       <div class="conversation-scroll">
-        <?= renderMessengerSeparator($message['sent_at'] ?? '') ?>
-        <?php $previousMessageTime = (string) ($message['sent_at'] ?? ''); ?>
-        <?= renderOriginalMessageBubble($message, $originalReplyClass, $originalAvatarUrl, $originalDisplayName, $messageReactionSummary, (string) ($seenReceiptLookup['message'] ?? '')) ?>
-        <?php foreach ($replies as $reply): ?>
-            <?php if (shouldRenderMessengerSeparator($reply['sent_at'] ?? '', $previousMessageTime)): ?>
-                <?= renderMessengerSeparator($reply['sent_at'] ?? '') ?>
+        <?php foreach ($timelineItems as $item): ?>
+            <?php if (shouldRenderMessengerSeparator($item['sent_at'] ?? '', $previousMessageTime)): ?>
+                <?= renderMessengerSeparator($item['sent_at'] ?? '') ?>
             <?php endif; ?>
-            <?php $previousMessageTime = (string) ($reply['sent_at'] ?? $previousMessageTime); ?>
-            <?= renderReply($reply, $userId, (string) $userType, $replyReactionSummary[(int) ($reply['id'] ?? 0)] ?? [], (int) $message['id'], (string) ($seenReceiptLookup['replies'][(int) ($reply['id'] ?? 0)] ?? '')) ?>
+            <?php $previousMessageTime = (string) ($item['sent_at'] ?? $previousMessageTime); ?>
+            <?= renderTimelineItem($item, (int) $userId, (string) $userType, (int) $id, $currentUserEmail, $currentUserName, $messageReactionSummary, $replyReactionSummary, $seenReceiptLookup) ?>
         <?php endforeach; ?>
         <div class="chat-typing-indicator reply theirs" id="threadTypingIndicator" hidden>
           <span class="chat-typing-dots"><span></span><span></span><span></span></span>
@@ -953,15 +1125,13 @@ if ($onlyConversation) {
 
   <div id="conversationWrapper" class="mt-4">
     <div class="conversation-scroll">
-      <?php $previousMessageTime = (string) ($message['sent_at'] ?? ''); ?>
-      <?= renderMessengerSeparator($previousMessageTime) ?>
-      <?= renderOriginalMessageBubble($message, $originalReplyClass, $originalAvatarUrl, $originalDisplayName, $messageReactionSummary, (string) ($seenReceiptLookup['message'] ?? '')) ?>
-      <?php foreach ($replies as $reply): ?>
-          <?php if (shouldRenderMessengerSeparator($reply['sent_at'] ?? '', $previousMessageTime)): ?>
-              <?= renderMessengerSeparator($reply['sent_at'] ?? '') ?>
+      <?php $previousMessageTime = null; ?>
+      <?php foreach ($timelineItems as $item): ?>
+          <?php if (shouldRenderMessengerSeparator($item['sent_at'] ?? '', $previousMessageTime)): ?>
+              <?= renderMessengerSeparator($item['sent_at'] ?? '') ?>
           <?php endif; ?>
-          <?php $previousMessageTime = (string) ($reply['sent_at'] ?? $previousMessageTime); ?>
-          <?= renderReply($reply, $userId, (string) $userType, $replyReactionSummary[(int) ($reply['id'] ?? 0)] ?? [], (int) $message['id'], (string) ($seenReceiptLookup['replies'][(int) ($reply['id'] ?? 0)] ?? '')) ?>
+          <?php $previousMessageTime = (string) ($item['sent_at'] ?? $previousMessageTime); ?>
+          <?= renderTimelineItem($item, (int) $userId, (string) $userType, (int) $id, $currentUserEmail, $currentUserName, $messageReactionSummary, $replyReactionSummary, $seenReceiptLookup) ?>
       <?php endforeach; ?>
       <div class="chat-typing-indicator reply theirs" id="threadTypingIndicator" hidden>
         <span class="chat-typing-dots"><span></span><span></span><span></span></span>

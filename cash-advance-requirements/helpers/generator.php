@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 require_once dirname(__DIR__, 2) . '/vendor/autoload.php';
 require_once dirname(__DIR__, 2) . '/project_variable_helpers.php';
+require_once dirname(__DIR__, 2) . '/mebis-consolidator/helpers/parser.php';
 
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use PhpOffice\PhpSpreadsheet\RichText\RichText;
@@ -53,6 +54,77 @@ function cash_advance_templates(): array
             'output' => 'Time Tally Sheet.xlsx',
         ],
     ];
+}
+
+function cash_advance_default_particular_text(array $context): string
+{
+    return sprintf(
+        'CA re: Risk Resiliency Program thru Cash for Training and Work (RRP-CFTW) in the Municipality of %s, %s',
+        (string) ($context['municipality'] ?? ''),
+        (string) ($context['province'] ?? '')
+    );
+}
+
+function cash_advance_default_atp_statement(): string
+{
+    return 'The following eligible beneficiaries are hereby authorized to receive Cash Assistance through Risk Resiliency Program through Cash-for-Training and Work (RRP-CFTW) Project LAWA at BINHI (Local Adaptation to Water Access and Breaking Insufficiency through Nutritious Harvest for the Impoverished).';
+}
+
+function cash_advance_default_tts_certification(): string
+{
+    return 'This is to certify that the names listed above have rendered service under our supervision for 8 hours per day and for a number of days as indicated above on the conduct  of Cash for Training and Work Program of DSWD Caraga';
+}
+
+function cash_advance_particular_text(array $context): string
+{
+    $manual = $context['manual'] ?? [];
+    $value = trim((string) ($manual['custom_particulars'] ?? ''));
+    return $value !== '' ? cash_advance_replace_context_tokens($value, $context) : cash_advance_default_particular_text($context);
+}
+
+function cash_advance_atp_statement(array $context): string
+{
+    $manual = $context['manual'] ?? [];
+    $value = trim((string) ($manual['custom_atp_statement'] ?? ''));
+    return $value !== '' ? cash_advance_replace_context_tokens($value, $context) : cash_advance_default_atp_statement();
+}
+
+function cash_advance_tts_certification(array $context): string
+{
+    $manual = $context['manual'] ?? [];
+    $value = trim((string) ($manual['custom_tts_certification'] ?? ''));
+    return $value !== '' ? cash_advance_replace_context_tokens($value, $context) : cash_advance_default_tts_certification();
+}
+
+function cash_advance_replace_context_tokens(string $value, array $context): string
+{
+    return strtr($value, [
+        '<Province>' => (string) ($context['province'] ?? ''),
+        '<PROVINCE>' => strtoupper((string) ($context['province'] ?? '')),
+        '<Municipality>' => (string) ($context['municipality'] ?? ''),
+        '<MUNICIPALITY>' => strtoupper((string) ($context['municipality'] ?? '')),
+        '{province}' => (string) ($context['province'] ?? ''),
+        '{municipality}' => (string) ($context['municipality'] ?? ''),
+    ]);
+}
+
+function cash_advance_replace_cells_containing(Spreadsheet $spreadsheet, string $needle, string $replacement): void
+{
+    if ($needle === '') {
+        return;
+    }
+
+    foreach ($spreadsheet->getWorksheetIterator() as $sheet) {
+        foreach ($sheet->getCellCollection()->getCoordinates() as $coordinate) {
+            $cell = $sheet->getCell($coordinate);
+            $value = $cell->getValue();
+            if (!is_string($value) || strpos($value, $needle) === false) {
+                continue;
+            }
+
+            $cell->setValue(str_replace($needle, $replacement, $value));
+        }
+    }
 }
 
 function cash_advance_manual_fields(): array
@@ -259,6 +331,441 @@ function cash_advance_build_dataset(mysqli $conn, string $province, string $muni
         'barangays' => $items,
         'barangay_names' => array_map(static fn(array $item): string => (string) $item['name'], $items),
     ];
+}
+
+function cash_advance_build_dataset_from_rows(
+    mysqli $conn,
+    array $rows,
+    string $province,
+    string $municipality,
+    int $year,
+    ?float $manualBeneficiaryRate = null
+): array
+{
+    if ($rows === []) {
+        throw new RuntimeException('No beneficiaries were found in the uploaded workbook.');
+    }
+
+    if ($manualBeneficiaryRate !== null) {
+        if ($manualBeneficiaryRate <= 0) {
+            throw new RuntimeException('Please enter a valid amount per beneficiary for the uploaded workbook.');
+        }
+
+        $dailyWageRate = $manualBeneficiaryRate;
+        $payoutDays = 1;
+        $beneficiaryRate = $manualBeneficiaryRate;
+    } else {
+        $dailyWageRate = project_variable_get_number($conn, 'daily_wage_rate', $year, 0);
+        $payoutDays = (int) round(project_variable_get_number($conn, 'working_days', $year, 20));
+        $payoutDays = $payoutDays > 0 ? $payoutDays : 20;
+        if ($dailyWageRate <= 0) {
+            throw new RuntimeException('Missing project variable for daily wage rate in the selected fiscal year.');
+        }
+
+        $beneficiaryRate = (float) $dailyWageRate * $payoutDays;
+    }
+
+    $barangays = [];
+    foreach ($rows as $row) {
+        $barangay = trim((string) ($row['barangay'] ?? ''));
+        if ($barangay === '') {
+            $barangay = 'Unspecified Barangay';
+        }
+
+        if (!isset($barangays[$barangay])) {
+            $barangays[$barangay] = [
+                'name' => $barangay,
+                'beneficiaries' => [],
+                'count' => 0,
+                'amount' => 0.0,
+            ];
+        }
+
+        $barangays[$barangay]['beneficiaries'][] = [
+            'id' => (int) ($row['id'] ?? 0),
+            'last_name' => trim((string) ($row['last_name'] ?? '')),
+            'first_name' => trim((string) ($row['first_name'] ?? '')),
+            'middle_name' => trim((string) ($row['middle_name'] ?? '')),
+            'extension' => trim((string) ($row['extension'] ?? '')),
+            'barangay' => $barangay,
+        ];
+        $barangays[$barangay]['count']++;
+        $barangays[$barangay]['amount'] = $barangays[$barangay]['count'] * $beneficiaryRate;
+    }
+
+    $items = array_values($barangays);
+    $totalBeneficiaries = count($rows);
+    $totalAmount = $totalBeneficiaries * $beneficiaryRate;
+
+    return [
+        'year' => $year,
+        'province' => $province,
+        'municipality' => $municipality,
+        'daily_wage_rate' => $dailyWageRate,
+        'payout_days' => $payoutDays,
+        'beneficiary_rate' => $beneficiaryRate,
+        'total_beneficiaries' => $totalBeneficiaries,
+        'total_amount' => $totalAmount,
+        'barangays' => $items,
+        'barangay_names' => array_map(static fn(array $item): string => (string) $item['name'], $items),
+    ];
+}
+
+function cash_advance_validate_uploaded_meb_file(array $file): array
+{
+    if (($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+        throw new RuntimeException('Please upload a valid workbook.');
+    }
+
+    $tmpName = (string) ($file['tmp_name'] ?? '');
+    if ($tmpName === '' || !is_uploaded_file($tmpName)) {
+        throw new RuntimeException('The uploaded workbook was not received correctly.');
+    }
+
+    $originalName = (string) ($file['name'] ?? '');
+    $extension = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
+    if (!in_array($extension, ['xlsx', 'xlsm'], true)) {
+        throw new RuntimeException('The uploaded workbook must be an .xlsx or .xlsm file.');
+    }
+
+    $detectedMime = function_exists('security_detect_upload_mime')
+        ? security_detect_upload_mime($tmpName)
+        : 'application/octet-stream';
+    $allowedMimeByExtension = [
+        'xlsx' => [
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'application/zip',
+            'application/x-zip-compressed',
+            'application/octet-stream',
+        ],
+        'xlsm' => [
+            'application/vnd.ms-excel.sheet.macroEnabled.12',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'application/zip',
+            'application/x-zip-compressed',
+            'application/octet-stream',
+        ],
+    ];
+
+    if (!in_array($detectedMime, $allowedMimeByExtension[$extension] ?? [], true)) {
+        throw new RuntimeException('The uploaded workbook file type is not allowed.');
+    }
+
+    return [
+        'tmp_name' => $tmpName,
+        'name' => $originalName,
+    ];
+}
+
+function cash_advance_simple_header_aliases(): array
+{
+    return [
+        'last_name' => [
+            'last name',
+            'lastname',
+            'surname',
+            'family name',
+            'familyname',
+            'beneficiary last name',
+            'beneficiary surname',
+        ],
+        'first_name' => [
+            'first name',
+            'firstname',
+            'given name',
+            'givenname',
+            'forename',
+            'beneficiary first name',
+            'beneficiary given name',
+        ],
+        'middle_name' => [
+            'middle name',
+            'middlename',
+            'mid name',
+            'mid',
+            'mid.',
+            'middle initial',
+            'mid initial',
+            'mid. initial',
+            'mi',
+            'm i',
+            'beneficiary middle name',
+        ],
+        'extension' => [
+            'ext',
+            'ext name',
+            'extname',
+            'ext.',
+            'extension',
+            'extension name',
+            'name extension',
+            'suffix',
+            'name suffix',
+            'qualifier',
+        ],
+        'barangay' => [
+            'barangay',
+            'barangay name',
+            'brgy',
+            'brgy name',
+            'brgy.',
+            'brgy. name',
+            'bgy',
+            'bgy name',
+            'village',
+            'community',
+            'area barangay',
+        ],
+        'municipality' => [
+            'municipality',
+            'municipality name',
+            'lgu',
+            'lgu name',
+            'city',
+            'city name',
+            'city municipality',
+            'municipality city',
+            'municipality city name',
+            'mun city',
+            'municity',
+            'mun',
+            'town',
+            'local government unit',
+        ],
+        'province' => [
+            'province',
+            'province name',
+            'prov',
+            'prov.',
+            'provincial',
+            'area province',
+        ],
+    ];
+}
+
+function cash_advance_find_simple_header_map(Worksheet $sheet): ?array
+{
+    $aliases = cash_advance_simple_header_aliases();
+    $required = ['last_name', 'first_name', 'middle_name', 'extension', 'barangay', 'municipality', 'province'];
+
+    for ($row = 1; $row <= min(30, $sheet->getHighestDataRow()); $row++) {
+        $highestColumn = $sheet->getHighestDataColumn($row);
+        $values = $sheet->rangeToArray('A' . $row . ':' . $highestColumn . $row, null, true, false)[0] ?? [];
+        $map = [];
+
+        foreach ($values as $index => $value) {
+            $normalized = mebis_normalize_header_label((string) $value);
+            if ($normalized === '') {
+                continue;
+            }
+
+            foreach ($aliases as $field => $labels) {
+                if (in_array($normalized, $labels, true) && !array_key_exists($field, $map)) {
+                    $map[$field] = $index;
+                }
+            }
+        }
+
+        $complete = true;
+        foreach ($required as $field) {
+            if (!array_key_exists($field, $map)) {
+                $complete = false;
+                break;
+            }
+        }
+
+        if ($complete) {
+            $map['header_row'] = $row;
+            return $map;
+        }
+    }
+
+    return null;
+}
+
+function cash_advance_find_simple_sheet($spreadsheet): array
+{
+    foreach ($spreadsheet->getWorksheetIterator() as $sheet) {
+        $headerMap = cash_advance_find_simple_header_map($sheet);
+        if ($headerMap !== null) {
+            return [$sheet, $headerMap];
+        }
+    }
+
+    throw new RuntimeException('The uploaded workbook must contain an MEB sheet or columns for Last Name, First Name, Middle Name, Ext., Barangay, Municipality, and Province.');
+}
+
+function cash_advance_detect_simple_sheet_name(string $path, string $originalName): ?string
+{
+    $sheetNames = mebis_candidate_sheet_names($path, $originalName);
+    if ($sheetNames === []) {
+        return null;
+    }
+
+    foreach ($sheetNames as $sheetName) {
+        $spreadsheet = mebis_load_spreadsheet($path, $originalName, [(string) $sheetName], true);
+
+        try {
+            $sheet = mebis_find_sheet_by_name($spreadsheet, (string) $sheetName);
+            if ($sheet instanceof Worksheet && cash_advance_find_simple_header_map($sheet) !== null) {
+                return (string) $sheetName;
+            }
+        } finally {
+            $spreadsheet->disconnectWorksheets();
+            unset($spreadsheet);
+        }
+    }
+
+    return null;
+}
+
+function cash_advance_choose_uploaded_meb_sheet_name(string $path, string $originalName): ?string
+{
+    $sheetNames = mebis_candidate_sheet_names($path, $originalName);
+    foreach ($sheetNames as $sheetName) {
+        if (strcasecmp((string) $sheetName, 'MEB') === 0) {
+            return (string) $sheetName;
+        }
+    }
+
+    return $sheetNames === [] ? mebis_detect_uploaded_meb_sheet($path, $originalName) : null;
+}
+
+function cash_advance_build_dataset_from_uploaded_meb(mysqli $conn, array $file, int $year, float $manualBeneficiaryRate): array
+{
+    $upload = cash_advance_validate_uploaded_meb_file($file);
+    $path = (string) $upload['tmp_name'];
+    $originalName = (string) $upload['name'];
+
+    $targetSheetName = cash_advance_choose_uploaded_meb_sheet_name($path, $originalName);
+    $isMebWorkbook = $targetSheetName !== null;
+    if (!$isMebWorkbook) {
+        $targetSheetName = cash_advance_detect_simple_sheet_name($path, $originalName);
+    }
+
+    $spreadsheet = mebis_load_spreadsheet($path, $originalName, $targetSheetName !== null ? [$targetSheetName] : null, true);
+
+    try {
+        if ($isMebWorkbook) {
+            $sheet = mebis_find_sheet_by_name($spreadsheet, (string) $targetSheetName);
+            if ($sheet === null) {
+                throw new RuntimeException(sprintf('The workbook "%s" does not contain an MEB sheet.', $originalName));
+            }
+
+            $province = mebis_location_from_row($sheet, 2, ['province']);
+            $municipality = mebis_location_from_row($sheet, 3, ['municipality', 'city']);
+            if ($province === '' || $municipality === '') {
+                throw new RuntimeException(sprintf('The workbook "%s" is missing province or municipality labels.', $originalName));
+            }
+
+            $headerMap = mebis_find_header_map($sheet);
+            if (($headerMap['name_mode'] ?? 'split') !== 'split') {
+                throw new RuntimeException(sprintf('The workbook "%s" must have separate last name, first name, middle name, and ext columns.', $originalName));
+            }
+        } else {
+            if ($targetSheetName !== null) {
+                $sheet = mebis_find_sheet_by_name($spreadsheet, (string) $targetSheetName);
+                $headerMap = $sheet instanceof Worksheet ? cash_advance_find_simple_header_map($sheet) : null;
+                if (!$sheet instanceof Worksheet || $headerMap === null) {
+                    throw new RuntimeException('The uploaded workbook must contain an MEB sheet or columns for Last Name, First Name, Middle Name, Ext., Barangay, Municipality, and Province.');
+                }
+            } else {
+                [$sheet, $headerMap] = cash_advance_find_simple_sheet($spreadsheet);
+            }
+
+            $province = '';
+            $municipality = '';
+        }
+
+        $rows = [];
+        $highestRow = $sheet->getHighestDataRow();
+        $dataStartRow = ((int) $headerMap['header_row']) + 1;
+
+        for ($row = $dataStartRow; $row <= $highestRow; $row++) {
+            if (mebis_is_hidden_row($sheet, $row)) {
+                continue;
+            }
+
+            $highestColumn = $sheet->getHighestDataColumn($row);
+            $rowValues = $sheet->rangeToArray('A' . $row . ':' . $highestColumn . $row, null, true, false)[0] ?? [];
+            $entryNumber = $isMebWorkbook ? mebis_row_value($rowValues, $headerMap, 'entry_no') : (string) (count($rows) + 1);
+            $lastName = mebis_row_value($rowValues, $headerMap, 'last_name');
+            $firstName = mebis_row_value($rowValues, $headerMap, 'first_name');
+            $middleName = mebis_row_value($rowValues, $headerMap, 'middle_name');
+            $extensionName = $isMebWorkbook
+                ? mebis_row_value($rowValues, $headerMap, 'extName')
+                : mebis_row_value($rowValues, $headerMap, 'extension');
+            $barangayName = $isMebWorkbook
+                ? mebis_row_value($rowValues, $headerMap, 'barangay_name')
+                : mebis_row_value($rowValues, $headerMap, 'barangay');
+
+            if ($isMebWorkbook && $entryNumber === '' && $lastName === '' && $firstName === '') {
+                continue;
+            }
+
+            if (!$isMebWorkbook && $lastName === '' && $firstName === '' && $middleName === '' && $extensionName === '' && $barangayName === '') {
+                continue;
+            }
+
+            if ($isMebWorkbook && !is_numeric($entryNumber)) {
+                continue;
+            }
+
+            if (!$isMebWorkbook && ($lastName === '' || $firstName === '')) {
+                continue;
+            }
+
+            $rowProvince = $isMebWorkbook ? $province : mebis_row_value($rowValues, $headerMap, 'province');
+            $rowMunicipality = $isMebWorkbook ? $municipality : mebis_row_value($rowValues, $headerMap, 'municipality');
+            if (!$isMebWorkbook) {
+                if ($rowMunicipality === '') {
+                    throw new RuntimeException('A beneficiary row in the uploaded workbook is missing municipality.');
+                }
+
+                if ($rowProvince === '') {
+                    throw new RuntimeException('A beneficiary row in the uploaded workbook is missing province.');
+                }
+
+                if ($barangayName === '') {
+                    throw new RuntimeException('A beneficiary row in the uploaded workbook is missing barangay.');
+                }
+
+                if ($municipality === '') {
+                    $municipality = $rowMunicipality;
+                } elseif (strcasecmp($municipality, $rowMunicipality) !== 0) {
+                    throw new RuntimeException('The uploaded workbook must contain beneficiaries for one municipality only.');
+                }
+
+                if ($province === '') {
+                    $province = $rowProvince;
+                } elseif (strcasecmp($province, $rowProvince) !== 0) {
+                    throw new RuntimeException('The uploaded workbook must contain beneficiaries for one province only.');
+                }
+            }
+
+            $rows[] = [
+                'id' => is_numeric($entryNumber) ? (int) $entryNumber : count($rows) + 1,
+                'last_name' => $lastName,
+                'first_name' => $firstName,
+                'middle_name' => $middleName,
+                'extension' => $extensionName,
+                'barangay' => $barangayName,
+            ];
+        }
+
+        if (!$isMebWorkbook && $municipality === '') {
+            throw new RuntimeException('The uploaded workbook did not contain a municipality value.');
+        }
+
+        if (!$isMebWorkbook && $province === '') {
+            throw new RuntimeException('The uploaded workbook did not contain a province value.');
+        }
+
+        return cash_advance_build_dataset_from_rows($conn, $rows, $province, $municipality, $year, $manualBeneficiaryRate);
+    } finally {
+        $spreadsheet->disconnectWorksheets();
+        unset($spreadsheet);
+    }
 }
 
 function cash_advance_format_date_range(?string $from, ?string $to): string
@@ -485,6 +992,21 @@ function cash_advance_replace_cell_markers(string $value, array $context, ?strin
 
     $result = strtr($value, $map);
     $result = str_replace(
+        'CA re: Risk Resiliency Program thru Cash for Training and Work (RRP-CFTW) in the Municipality of ' . (string) ($context['municipality'] ?? '') . ', ' . (string) ($context['province'] ?? ''),
+        cash_advance_particular_text($context),
+        $result
+    );
+    $result = str_replace(
+        cash_advance_default_atp_statement(),
+        cash_advance_atp_statement($context),
+        $result
+    );
+    $result = str_replace(
+        cash_advance_default_tts_certification(),
+        cash_advance_tts_certification($context),
+        $result
+    );
+    $result = str_replace(
         'Date :  ',
         'Date : ' . $generatedDate,
         $result
@@ -510,6 +1032,7 @@ function cash_advance_apply_direct_manual_cells(Spreadsheet $spreadsheet, string
         $sheet = $spreadsheet->getSheet(0);
         $sheet->setCellValue('C8', $doSdoPayee);
         $sheet->setCellValue('C10', (string) ($manual['request_ca_c10'] ?? ''));
+        $sheet->setCellValue('D16', cash_advance_particular_text($context));
         $sheet->setCellValue('D20', (string) ($context['payout_date'] ?? ''));
         $sheet->setCellValue('D22', cash_advance_amount_in_words($totalAmount));
         $sheet->setCellValue('C25', '(' . cash_advance_money($totalAmount) . ')');
@@ -517,6 +1040,7 @@ function cash_advance_apply_direct_manual_cells(Spreadsheet $spreadsheet, string
         $sheet = $spreadsheet->getSheet(0);
         $sheet->setCellValue('D6', $doSdoPayee);
         $sheet->setCellValue('K4', 'Date : ' . $generatedDate);
+        $sheet->setCellValue('D14', cash_advance_particular_text($context));
         $sheet->setCellValue('L14', cash_advance_money($totalAmount));
         $sheet->setCellValue('L22', cash_advance_money($totalAmount));
     } elseif ($templateKey === 'disbursement_voucher') {
@@ -524,6 +1048,7 @@ function cash_advance_apply_direct_manual_cells(Spreadsheet $spreadsheet, string
         $sheet->setCellValue('AB5', 'Date : ' . $generatedDate);
         $sheet->setCellValue('AB6', 'DV No. : ' . (string) ($manual['dv_number'] ?? ''));
         $sheet->setCellValue('E11', $doSdoPayee);
+        $sheet->setCellValue('A16', cash_advance_particular_text($context));
         $sheet->setCellValue('AB16', $totalAmount);
         $sheet->setCellValue('AB22', $totalAmount);
     } elseif ($templateKey === 'payroll') {
@@ -533,8 +1058,13 @@ function cash_advance_apply_direct_manual_cells(Spreadsheet $spreadsheet, string
             $approvedRow = cash_advance_find_label_row($summarySheet, 'Approved for Payment') ?: 28;
             $summarySheet->setCellValue('I' . $approvedRow, $doSdoPayee);
         }
-    } elseif ($templateKey === 'time_tally_sheet' && trim((string) ($manual['time_tally_mswdo'] ?? '')) === '') {
-        cash_advance_apply_time_tally_mswdo_border($spreadsheet);
+    } elseif ($templateKey === 'authority_to_pay') {
+        cash_advance_replace_cells_containing($spreadsheet, cash_advance_default_atp_statement(), cash_advance_atp_statement($context));
+    } elseif ($templateKey === 'time_tally_sheet') {
+        cash_advance_replace_cells_containing($spreadsheet, cash_advance_default_tts_certification(), cash_advance_tts_certification($context));
+        if (trim((string) ($manual['time_tally_mswdo'] ?? '')) === '') {
+            cash_advance_apply_time_tally_mswdo_border($spreadsheet);
+        }
     }
 }
 
@@ -1200,6 +1730,10 @@ function cash_advance_generate_zip(array $context, array $barangays): array
 
     try {
         foreach (cash_advance_templates() as $templateKey => $template) {
+            if ($templateKey === 'time_tally_sheet' && empty($context['include_time_tally'])) {
+                continue;
+            }
+
             $outputName = cash_advance_download_basename((string) $context['municipality']) . ' - ' . $template['output'];
             $outputPath = $workDir . DIRECTORY_SEPARATOR . $outputName;
             cash_advance_generate_workbook($templateKey, $template, $context, $barangays, $outputPath);

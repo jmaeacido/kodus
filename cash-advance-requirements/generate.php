@@ -30,19 +30,59 @@ try {
     }
 
     $selectedYear = (int) $_SESSION['selected_year'];
-    $locations = cash_advance_location_options($conn, $selectedYear);
-    $location = cash_advance_decode_location(trim((string) ($_POST['location'] ?? '')), $locations);
+    $source = (string) ($_POST['source'] ?? 'database');
+    if (!in_array($source, ['database', 'upload'], true)) {
+        $source = 'database';
+    }
 
     $manualValues = [];
     foreach (array_keys(cash_advance_manual_fields()) as $fieldName) {
         $manualValues[$fieldName] = cash_advance_post_value($_POST, $fieldName);
     }
 
-    $dataset = cash_advance_build_dataset($conn, $location['province'], $location['municipality'], $selectedYear);
+    $includeTimeTally = true;
+    if ($source === 'upload') {
+        $manualBeneficiaryRate = (float) str_replace(',', '', trim((string) ($_POST['upload_beneficiary_amount'] ?? '')));
+        if ($manualBeneficiaryRate <= 0) {
+            throw new RuntimeException('Please enter a valid amount per beneficiary for the uploaded workbook.');
+        }
+
+        $isRrpCftw = (string) ($_POST['upload_rrp_cftw'] ?? 'yes') === 'yes';
+        $includeTimeTally = (string) ($_POST['upload_include_tts'] ?? 'yes') === 'yes';
+        if (!$isRrpCftw) {
+            $manualValues['custom_particulars'] = cash_advance_post_value($_POST, 'custom_particulars');
+            $manualValues['custom_atp_statement'] = cash_advance_post_value($_POST, 'custom_atp_statement');
+            $manualValues['custom_tts_certification'] = cash_advance_post_value($_POST, 'custom_tts_certification');
+
+            if ($manualValues['custom_particulars'] === '') {
+                throw new RuntimeException('Please enter the Activity/Purpose/Particulars for the uploaded package.');
+            }
+
+            if ($manualValues['custom_atp_statement'] === '') {
+                throw new RuntimeException('Please enter the Authority to Pay statement for the uploaded package.');
+            }
+
+            if ($includeTimeTally && $manualValues['custom_tts_certification'] === '') {
+                throw new RuntimeException('Please enter the Time Tally Sheet certification or exclude TTS from the package.');
+            }
+        }
+
+        $dataset = cash_advance_build_dataset_from_uploaded_meb($conn, $_FILES['meb_file'] ?? [], $selectedYear, $manualBeneficiaryRate);
+        $payoutDate = '';
+        $implementationDate = '';
+    } else {
+        $locations = cash_advance_location_options($conn, $selectedYear);
+        $location = cash_advance_decode_location(trim((string) ($_POST['location'] ?? '')), $locations);
+        $dataset = cash_advance_build_dataset($conn, $location['province'], $location['municipality'], $selectedYear);
+        $payoutDate = cash_advance_payout_schedule_date($conn, $location['province'], $location['municipality'], $selectedYear);
+        $implementationDate = cash_advance_latest_implementation_date($conn, $location['province'], $location['municipality']);
+    }
+
     $context = array_merge($dataset, [
         'manual' => $manualValues,
-        'payout_date' => cash_advance_payout_schedule_date($conn, $location['province'], $location['municipality'], $selectedYear),
-        'implementation_date' => cash_advance_latest_implementation_date($conn, $location['province'], $location['municipality']),
+        'payout_date' => $payoutDate,
+        'implementation_date' => $implementationDate,
+        'include_time_tally' => $includeTimeTally,
         'user_initials' => cash_advance_user_initials($_SESSION),
     ]);
 
@@ -54,8 +94,8 @@ try {
         'Generate Cash Advance Requirements',
         sprintf(
             'Generated cash advance requirement package for %s, %s fiscal year %d with %d beneficiaries across %d barangay(s), total amount %s.',
-            (string) $location['municipality'],
-            (string) $location['province'],
+            (string) $context['municipality'],
+            (string) $context['province'],
             $selectedYear,
             (int) $context['total_beneficiaries'],
             count($context['barangays']),

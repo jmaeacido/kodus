@@ -10,6 +10,14 @@
   // }
   
   include('../sidenav.php');
+  require_once __DIR__ . '/helpers/generator_history.php';
+
+  crossmatch_template_history_ensure_schema($conn);
+  $crossmatchGeneratedFiles = crossmatch_template_list_outputs(
+      $conn,
+      (int) ($_SESSION['user_id'] ?? 0),
+      (string) ($_SESSION['user_type'] ?? 'user')
+  );
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -222,6 +230,48 @@
               </div>
             </div>
 
+            <div class="card">
+              <div class="card-header d-flex align-items-center">
+                <h4 class="m-0 flex-grow-1">Generated Template Files</h4>
+              </div>
+              <div class="card-body p-0">
+                <div class="dedup-generated-files">
+                  <table class="table table-hover mb-0">
+                    <thead>
+                      <tr>
+                        <th>Filename</th>
+                        <th>Municipality</th>
+                        <th>Rows</th>
+                        <th>Source Workbook</th>
+                        <th>Created</th>
+                        <th class="text-right pr-3">Download</th>
+                      </tr>
+                    </thead>
+                    <tbody id="generated-template-files-body">
+                      <?php if ($crossmatchGeneratedFiles === []): ?>
+                        <tr><td colspan="6" class="text-center text-muted py-4">No generated template files yet.</td></tr>
+                      <?php else: ?>
+                        <?php foreach ($crossmatchGeneratedFiles as $entry): ?>
+                          <tr>
+                            <td><?= htmlspecialchars((string) $entry['filename'], ENT_QUOTES, 'UTF-8') ?></td>
+                            <td><?= htmlspecialchars((string) $entry['municipality_name'], ENT_QUOTES, 'UTF-8') ?></td>
+                            <td><?= number_format((int) ($entry['rows'] ?? 0)) ?></td>
+                            <td><?= htmlspecialchars((string) $entry['source_file'], ENT_QUOTES, 'UTF-8') ?></td>
+                            <td><?= htmlspecialchars((string) ($entry['created_at'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
+                            <td class="text-right pr-3">
+                              <a href="template_generated_file.php?id=<?= urlencode((string) $entry['token']) ?>" class="btn btn-sm btn-outline-success">
+                                <i class="fas fa-download mr-1"></i> Download
+                              </a>
+                            </td>
+                          </tr>
+                        <?php endforeach; ?>
+                      <?php endif; ?>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
       </div><!-- /.container-fluid -->
     </div>
     <!-- /.content -->
@@ -250,6 +300,30 @@ document.getElementById('mode').addEventListener('change', function(){
 });
 
 const crossmatchTemplateForm = document.getElementById('crossmatchTemplateGenerateForm');
+function refreshGeneratedTemplateFiles() {
+  const body = document.getElementById('generated-template-files-body');
+  if (!body) {
+    return Promise.resolve();
+  }
+
+  return fetch('fetch_generated_template_files.php', {
+    headers: {
+      'X-Requested-With': 'XMLHttpRequest',
+      'Accept': 'text/html'
+    },
+    credentials: 'same-origin'
+  })
+    .then(response => {
+      if (!response.ok) {
+        throw new Error('Unable to refresh generated template files.');
+      }
+      return response.text();
+    })
+    .then(html => {
+      body.innerHTML = html;
+    });
+}
+
 if (crossmatchTemplateForm) {
   crossmatchTemplateForm.addEventListener('submit', function(event) {
     event.preventDefault();
@@ -290,11 +364,11 @@ if (crossmatchTemplateForm) {
         const links = (payload.outputs || []).map(output => (
           `<a class="btn btn-sm btn-outline-success m-1" href="${output.url}"><i class="fas fa-download mr-1"></i>${output.filename}</a>`
         )).join('');
-        Swal.fire({
+        return refreshGeneratedTemplateFiles().then(() => Swal.fire({
           icon: 'success',
           title: 'Templates Ready',
           html: `<p>${payload.message}</p><div>${links}</div>`
-        });
+        }));
       })
       .catch(error => {
         Swal.fire({ icon: 'error', title: 'Generation Failed', text: error.message || 'Unable to generate templates.' });

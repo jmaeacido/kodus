@@ -12,11 +12,28 @@ use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 
 function crossmatch_template_outputs_dir(): string
 {
-    $dir = dirname(__DIR__) . '/outputs';
-    if (!is_dir($dir)) {
-        mkdir($dir, 0777, true);
+    $preferredDir = dirname(__DIR__) . '/outputs';
+    if (crossmatch_template_prepare_outputs_dir($preferredDir)) {
+        return $preferredDir;
     }
-    return $dir;
+
+    $fallbackDir = rtrim(sys_get_temp_dir(), DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'kodus-crossmatch-template-outputs';
+    if (crossmatch_template_prepare_outputs_dir($fallbackDir)) {
+        return $fallbackDir;
+    }
+
+    throw new RuntimeException('The crossmatch template output folder is not writable.');
+}
+
+function crossmatch_template_prepare_outputs_dir(string $dir): bool
+{
+    if (!is_dir($dir) && !@mkdir($dir, 0775, true) && !is_dir($dir)) {
+        return false;
+    }
+
+    @chmod($dir, 02775);
+
+    return is_writable($dir);
 }
 
 function crossmatch_template_output_headers(): array

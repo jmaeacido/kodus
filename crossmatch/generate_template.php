@@ -9,7 +9,7 @@ require_once __DIR__ . '/../security.php';
 security_bootstrap_session();
 require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/../auth_helpers.php';
-require_once __DIR__ . '/helpers/template_generator.php';
+require_once __DIR__ . '/helpers/generator_history.php';
 
 security_require_method(['POST']);
 security_require_csrf_token();
@@ -57,6 +57,7 @@ function crossmatch_template_uploaded_files(array $files): array
 }
 
 try {
+    crossmatch_template_history_ensure_schema($conn);
     $files = crossmatch_template_uploaded_files($_FILES['template_files'] ?? []);
     $outputs = [];
     $batchState = [];
@@ -67,10 +68,19 @@ try {
         $filename = sprintf('%03d_%s_crossmatch batch %02d.xlsx', $index + 1, dedup_template_filename_label($municipality), $batch);
         $path = crossmatch_template_outputs_dir() . '/' . $filename;
         crossmatch_template_write_workbook($dataset, $path);
+        $token = bin2hex(random_bytes(16));
+        crossmatch_template_add_history_entry($conn, [
+            'token' => $token,
+            'filename' => $filename,
+            'municipality_name' => $municipality,
+            'row_count' => count($dataset['rows'] ?? []),
+            'source_file' => $file['name'],
+            'created_by' => $_SESSION['user_id'] ?? null,
+        ]);
         $outputs[] = [
             'filename' => $filename,
             'rows' => count($dataset['rows'] ?? []),
-            'url' => 'template_generated_file.php?file=' . rawurlencode($filename),
+            'url' => 'template_generated_file.php?id=' . rawurlencode($token),
         ];
     }
 

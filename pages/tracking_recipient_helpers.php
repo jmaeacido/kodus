@@ -123,6 +123,16 @@ function tracking_send_document_recipient_emails(mysqli $conn, array $emails, ar
     $actor = app_notification_actor_name_from_session();
     $subjectTracking = $trackingNumber !== '' ? " {$trackingNumber}" : '';
     $subject = "KODUS {$context}{$subjectTracking}";
+    $isUpdateNotice = stripos($context, 'updated') !== false;
+    $bodyIntro = $isUpdateNotice
+        ? 'A document routed to you or your office in KODUS has been updated.'
+        : 'A document has been routed to you or your office in KODUS.';
+    $shellIntro = $isUpdateNotice
+        ? 'A KODUS document routed with you listed as a recipient was updated.'
+        : 'A KODUS document was routed with you listed as a recipient.';
+    $altIntro = $isUpdateNotice
+        ? 'A KODUS document routed to you was updated.'
+        : 'A KODUS document was routed to you.';
 
     $rows = [
         'Tracking Number' => $trackingNumber !== '' ? $trackingNumber : 'Pending',
@@ -137,7 +147,7 @@ function tracking_send_document_recipient_emails(mysqli $conn, array $emails, ar
     }
 
     $body = '<p>Hello,</p>'
-        . '<p>A document has been routed to you or your office in KODUS.</p>'
+        . '<p>' . htmlspecialchars($bodyIntro, ENT_QUOTES, 'UTF-8') . '</p>'
         . notification_render_detail_rows($rows)
         . notification_render_action_button($url, 'Open KODUS');
 
@@ -153,12 +163,12 @@ function tracking_send_document_recipient_emails(mysqli $conn, array $emails, ar
             $mail->Body = notification_render_email_shell(
                 'Document Routing Notice',
                 $context,
-                'A KODUS document was routed with you listed as a recipient.',
+                $shellIntro,
                 $body,
                 '#0d6efd',
                 'KODUS Document Tracking'
             );
-            $mail->AltBody = "A KODUS document was routed to you.\n\n"
+            $mail->AltBody = $altIntro . "\n\n"
                 . "Tracking Number: " . ($trackingNumber !== '' ? $trackingNumber : 'Pending') . "\n"
                 . "Description: " . ($description !== '' ? $description : 'No description provided') . "\n"
                 . "Receiving Office / Personnel: " . ($receivingOffice !== '' ? $receivingOffice : 'Not specified') . "\n"
@@ -253,9 +263,16 @@ function tracking_send_document_recipient_kodus_alerts(mysqli $conn, array $emai
         $senderName = trim((string) ($_SESSION['username'] ?? $actor)) ?: $actor;
         $subjectTracking = $trackingNumber !== '' ? " {$trackingNumber}" : '';
         $subject = "KODUS {$context}{$subjectTracking}";
+        $isUpdateNotice = stripos($context, 'updated') !== false;
+        $messageIntro = $isUpdateNotice
+            ? "A document routed to you or your office in KODUS has been updated."
+            : "A document has been routed to you or your office in KODUS.";
+        $notificationMessage = $isUpdateNotice
+            ? "{$actor} updated a document routed to you or your office."
+            : "{$actor} routed a document to you or your office.";
 
         $messageLines = [
-            "A document has been routed to you or your office in KODUS.",
+            $messageIntro,
             "",
             "Tracking Number: " . ($trackingNumber !== '' ? $trackingNumber : 'Pending'),
             "Description: " . ($description !== '' ? $description : 'No description provided'),
@@ -276,7 +293,7 @@ function tracking_send_document_recipient_kodus_alerts(mysqli $conn, array $emai
             $notificationId = app_notification_create($conn, [
                 'category' => 'document_tracking',
                 'title' => $subject,
-                'message' => "{$actor} routed a document to you or your office.",
+                'message' => $notificationMessage,
                 'url' => $url,
                 'icon_class' => 'fas fa-share',
                 'color_class' => 'text-primary',

@@ -175,7 +175,7 @@ try {
             'success' => true,
             'message' => 'Document updated successfully.',
         ];
-        if ($recipientData['emails'] !== [] && trim((string) ($existingRecord['receiving_office'] ?? '')) !== trim((string) $receiving_office)) {
+        if ($recipientData['emails'] !== [] && $changes !== []) {
             tracking_finish_json_response_then_send_document_recipient_notices($conn, $response, $recipientData['emails'], [
                 'context' => 'Updated outgoing document',
                 'tracking_number' => (string) ($existingRecord['tracking_number'] ?? ''),

@@ -338,7 +338,7 @@ if ($logsStmt) {
             <p class="mb-0">Review recorded actions, trace account activity, and narrow results by user, action, or date range.</p>
           </div>
           <div class="mt-3 mt-lg-0">
-            <span class="summary-badge">
+            <span class="summary-badge" id="auditLogRecordCount">
               <i class="fas fa-history"></i>
               <?php echo number_format(count($logs)); ?> record<?php echo count($logs) === 1 ? '' : 's'; ?>
             </span>
@@ -415,26 +415,7 @@ if ($logsStmt) {
                     <th>Created At</th>
                   </tr>
                 </thead>
-                <tbody>
-                <?php if ($logs !== []): ?>
-                  <?php foreach ($logs as $log): ?>
-                    <tr>
-                      <td class="meta-cell"><?php echo htmlspecialchars((string) ($log['id'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></td>
-                      <td class="meta-cell"><?php echo htmlspecialchars((string) ($log['display_user'] ?? 'System'), ENT_QUOTES, 'UTF-8'); ?></td>
-                      <td class="meta-cell"><?php echo htmlspecialchars((string) ($log['action'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></td>
-                      <td class="details-cell"><?php echo nl2br(htmlspecialchars((string) ($log['details'] ?? ''), ENT_QUOTES, 'UTF-8')); ?></td>
-                      <td class="meta-cell"><?php echo htmlspecialchars((string) ($log['ip_address'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></td>
-                      <td class="meta-cell" data-order="<?php echo htmlspecialchars((string) strtotime((string) ($log['created_at'] ?? '')), ENT_QUOTES, 'UTF-8'); ?>">
-                        <?php echo htmlspecialchars((string) ($log['created_at'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>
-                      </td>
-                    </tr>
-                  <?php endforeach; ?>
-                <?php else: ?>
-                  <tr>
-                    <td colspan="6" class="text-center">No audit log records found for the selected filters.</td>
-                  </tr>
-                <?php endif; ?>
-                </tbody>
+                <tbody></tbody>
               </table>
             </div>
           </div>
@@ -461,7 +442,69 @@ if ($logsStmt) {
 <script src="<?php echo $app_root; ?>dist/js/adminlte.min.js"></script>
 <script>
 $(document).ready(function () {
-  $('#auditLogsTable').DataTable({
+  function escapeHtml(value) {
+    return $('<div>').text(value == null ? '' : String(value)).html();
+  }
+
+  function renderText(value, type) {
+    if (type !== 'display') {
+      return value == null ? '' : value;
+    }
+
+    return escapeHtml(value);
+  }
+
+  function renderDetails(value, type) {
+    if (type !== 'display') {
+      return value == null ? '' : value;
+    }
+
+    return escapeHtml(value).replace(/\n/g, '<br>');
+  }
+
+  function updateRecordCount(count) {
+    const total = Number(count || 0);
+    $('#auditLogRecordCount').html(
+      '<i class="fas fa-history"></i> ' +
+      total.toLocaleString() +
+      ' record' +
+      (total === 1 ? '' : 's')
+    );
+  }
+
+  const table = $('#auditLogsTable').DataTable({
+    ajax: {
+      url: '<?php echo $app_root; ?>admin/audit_logs_data.php',
+      data: function (params) {
+        params.user = <?php echo json_encode($selectedUserId, JSON_UNESCAPED_SLASHES); ?>;
+        params.action = <?php echo json_encode($selectedAction, JSON_UNESCAPED_SLASHES); ?>;
+        params.date_from = <?php echo json_encode($selectedDateFrom, JSON_UNESCAPED_SLASHES); ?>;
+        params.date_to = <?php echo json_encode($selectedDateTo, JSON_UNESCAPED_SLASHES); ?>;
+      },
+      dataSrc: function (json) {
+        const rows = Array.isArray(json.data) ? json.data : [];
+        updateRecordCount(rows.length);
+        return rows;
+      }
+    },
+    columns: [
+      { data: 'id', className: 'meta-cell', render: renderText },
+      { data: 'user', className: 'meta-cell', render: renderText },
+      { data: 'action', className: 'meta-cell', render: renderText },
+      { data: 'details', className: 'details-cell', render: renderDetails },
+      { data: 'ip_address', className: 'meta-cell', render: renderText },
+      {
+        data: 'created_at',
+        className: 'meta-cell',
+        render: function (value, type, row) {
+          if (type === 'sort' || type === 'type') {
+            return row.created_at_sort || 0;
+          }
+
+          return renderText(value, type);
+        }
+      }
+    ],
     paging: true,
     lengthChange: true,
     searching: true,
@@ -474,6 +517,17 @@ $(document).ready(function () {
     lengthMenu: [[5, 10, 25, 50, 100, -1], [5, 10, 25, 50, 100, 'All']],
     order: [[5, 'desc'], [0, 'desc']]
   });
+
+  if (window.KODUSLiveRefresh) {
+    window.KODUSLiveRefresh.watchDataTable({
+      table: table,
+      socket: {
+        key: 'admin-audit-logs',
+        channel: 'kodus.audit_logs',
+        events: ['audit_logs.changed']
+      }
+    });
+  }
 });
 </script>
 </body>

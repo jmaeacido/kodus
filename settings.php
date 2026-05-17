@@ -185,6 +185,13 @@ $currentArea = trim((string) ($user['area'] ?? ''));
         .strength-weak { background: #dc3545; }
         .strength-medium { background: #fd7e14; }
         .strength-strong { background: #28a745; }
+        .password-policy-panel { margin-top: 0.75rem; padding: 0.85rem 1rem; border: 1px solid rgba(13, 110, 253, 0.14); border-radius: 0.75rem; background: rgba(13, 110, 253, 0.04); }
+        .password-policy-panel p { margin-bottom: 0.5rem; font-size: 0.85rem; font-weight: 700; }
+        .password-policy-list { margin: 0; padding-left: 1.15rem; font-size: 0.85rem; }
+        .password-policy-list li { margin-bottom: 0.3rem; color: #6c757d; transition: color 0.2s ease; }
+        .password-policy-list li.is-valid { color: #28a745; }
+        .password-policy-list li:last-child { margin-bottom: 0; }
+        .toggle-password { cursor: pointer; min-width: 44px; justify-content: center; }
         .theme-choice-group { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.9rem; }
         .theme-choice { position: relative; border: 1px solid rgba(108, 117, 125, 0.22); border-radius: 0.9rem; padding: 1rem; cursor: pointer; transition: border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease; background: rgba(108, 117, 125, 0.05); }
         .theme-choice:hover { transform: translateY(-1px); border-color: rgba(13, 110, 253, 0.4); }
@@ -204,6 +211,7 @@ $currentArea = trim((string) ($user['area'] ?? ''));
         body[data-theme="light"] .settings-count-badge { color: #0f172a; background: rgba(255, 255, 255, 0.92); border-color: rgba(13, 110, 253, 0.12); }
         body[data-theme="light"] .settings-stat, body[data-theme="light"] .theme-choice { background: #ffffff; border-color: rgba(13, 110, 253, 0.12); }
         body[data-theme="light"] .settings-subsection { background: #ffffff; border-color: rgba(13, 110, 253, 0.12); }
+        body[data-theme="light"] .password-policy-panel { background: #ffffff; border-color: rgba(13, 110, 253, 0.12); }
         @media (max-width: 767.98px) { .settings-hero { text-align: center; } }
     </style>
 </head>
@@ -420,10 +428,27 @@ $currentArea = trim((string) ($user['area'] ?? ''));
                                     <div class="settings-section-title">Password Update</div>
                                     <div class="form-group mb-2">
                                         <label for="password">New Password</label>
-                                        <input type="password" name="password" id="password" class="form-control" autocomplete="new-password">
+                                        <div class="input-group">
+                                            <input type="password" name="password" id="password" class="form-control" autocomplete="new-password">
+                                            <div class="input-group-append">
+                                                <button type="button" class="btn btn-outline-secondary toggle-password" data-target="password" aria-label="Show password">
+                                                    <span class="fas fa-eye" aria-hidden="true"></span>
+                                                </button>
+                                            </div>
+                                        </div>
                                         <small class="form-text text-muted">Leave blank if you do not want to change your password.</small>
                                         <div class="strength-meter"><div id="strengthBar" class="strength-bar"></div></div>
-                                        <small class="form-text text-muted" id="passwordStrengthText">Use at least 8 characters with uppercase, number, and special character.</small>
+                                        <small class="form-text text-muted" id="passwordStrengthText">Use at least <?= htmlspecialchars((string) security_password_min_length(), ENT_QUOTES, 'UTF-8') ?> characters with uppercase, lowercase, number, and special character.</small>
+                                        <div class="password-policy-panel d-none" id="passwordPolicyPanel" aria-live="polite">
+                                            <p>New password must include:</p>
+                                            <ul class="password-policy-list" id="passwordPolicyList">
+                                                <li data-rule="length">At least <?= htmlspecialchars((string) security_password_min_length(), ENT_QUOTES, 'UTF-8') ?> characters</li>
+                                                <li data-rule="lower">One lowercase letter</li>
+                                                <li data-rule="upper">One uppercase letter</li>
+                                                <li data-rule="number">One number</li>
+                                                <li data-rule="symbol">One special character</li>
+                                            </ul>
+                                        </div>
                                     </div>
                                 </div>
                                 <div class="card-footer d-flex justify-content-between align-items-center flex-wrap">
@@ -468,6 +493,14 @@ $(function () {
     const $customPosition = $('#customPosition');
     const $positionAbr = $('#positionAbr');
     const $positionAbrHelp = $('#positionAbrHelp');
+    const passwordMinLength = <?= json_encode(security_password_min_length()) ?>;
+    const passwordRules = [
+        { rule: 'length', test: value => value.length >= passwordMinLength },
+        { rule: 'lower', test: value => /[a-z]/.test(value) },
+        { rule: 'upper', test: value => /[A-Z]/.test(value) },
+        { rule: 'number', test: value => /\d/.test(value) },
+        { rule: 'symbol', test: value => /[^a-zA-Z0-9]/.test(value) }
+    ];
 
     function generateCustomPositionAbbreviation(value) {
         const trimmedValue = String(value || '').trim().replace(/\s+/g, ' ');
@@ -517,6 +550,41 @@ $(function () {
         $positionAbrHelp.text('Filled automatically from the selected position.');
     }
 
+    function updatePasswordChecklist() {
+        const passwordInput = $('#password')[0];
+        const value = passwordInput ? passwordInput.value : '';
+        const bar = $('#strengthBar');
+        const score = passwordRules.filter(item => item.test(value)).length;
+        const meetsAllRules = score === passwordRules.length;
+        const hasPassword = value.length > 0;
+        const widths = [0, 20, 40, 60, 80, 100];
+        let strengthClass = '';
+        let message = `Use at least ${passwordMinLength} characters with uppercase, lowercase, number, and special character.`;
+
+        if (hasPassword && score <= 2) {
+            strengthClass = 'strength-weak';
+            message = 'Weak password. Complete the missing requirements below.';
+        } else if (hasPassword && score < passwordRules.length) {
+            strengthClass = 'strength-medium';
+            message = 'Password still needs the missing criteria below.';
+        } else if (hasPassword) {
+            strengthClass = 'strength-strong';
+            message = 'Strong password. This is ready to use.';
+        }
+
+        bar.css('width', widths[score] + '%').attr('class', 'strength-bar ' + strengthClass);
+        passwordStrengthText.text(message);
+        $('#passwordPolicyPanel').toggleClass('d-none', !hasPassword && document.activeElement !== passwordInput);
+
+        passwordRules.forEach(item => {
+            $(`#passwordPolicyList [data-rule="${item.rule}"]`).toggleClass('is-valid', item.test(value));
+        });
+
+        if (passwordInput) {
+            passwordInput.setCustomValidity(!hasPassword || meetsAllRules ? '' : 'Password does not meet the required strength.');
+        }
+    }
+
     function updateThemeChoiceState() {
         $('.theme-choice').removeClass('active');
         $('input[name="theme_preference"]:checked').closest('.theme-choice').addClass('active');
@@ -547,6 +615,7 @@ $(function () {
 
     $('#settingsForm').on('submit', function () {
         const form = this;
+        updatePasswordChecklist();
 
         if ($position.val() === '__custom__') {
             const hasCustomPosition = $.trim($customPosition.val()) !== '';
@@ -556,7 +625,8 @@ $(function () {
         }
 
         if (!form.checkValidity()) {
-            return;
+            form.reportValidity();
+            return false;
         }
 
         Swal.fire({
@@ -574,27 +644,22 @@ $(function () {
         return false;
     });
 
-    $('#password').on('input', function () {
-        const val = $(this).val();
-        const bar = $('#strengthBar');
-        let strength = 0;
-        if (val.length >= 8) strength++;
-        if (/[A-Z]/.test(val)) strength++;
-        if (/[0-9]/.test(val)) strength++;
-        if (/[^a-zA-Z0-9]/.test(val)) strength++;
+    $('#password').on('input focus blur', updatePasswordChecklist);
+    updatePasswordChecklist();
 
-        const percents = [0, 25, 50, 75, 100];
-        const classes = ['', 'strength-weak', 'strength-medium', 'strength-medium', 'strength-strong'];
-        const labels = [
-            'Use at least 8 characters with uppercase, number, and special character.',
-            'Weak password. Add more complexity before saving.',
-            'Fair password. Consider adding another unique character.',
-            'Good password. One more improvement will make it stronger.',
-            'Strong password. This is ready to use.'
-        ];
+    $('.toggle-password').on('click', function () {
+        const target = document.getElementById(this.dataset.target);
+        const icon = this.querySelector('span');
+        if (!target || !icon) {
+            return;
+        }
 
-        bar.css('width', percents[strength] + '%').attr('class', 'strength-bar ' + classes[strength]);
-        passwordStrengthText.text(labels[strength]);
+        const isPassword = target.type === 'password';
+        target.type = isPassword ? 'text' : 'password';
+        this.setAttribute('aria-label', isPassword ? 'Hide password' : 'Show password');
+        icon.classList.toggle('fa-eye', !isPassword);
+        icon.classList.toggle('fa-eye-slash', isPassword);
+        target.focus();
     });
 
     $('#removePhotoBtn').click(function () {

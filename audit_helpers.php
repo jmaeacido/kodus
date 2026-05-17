@@ -1,6 +1,7 @@
 <?php
 
 require_once __DIR__ . '/security.php';
+require_once __DIR__ . '/socket_helpers.php';
 
 function audit_log(mysqli $conn, ?int $userId, string $action, string $details, ?string $ipAddress = null): void
 {
@@ -21,8 +22,34 @@ function audit_log(mysqli $conn, ?int $userId, string $action, string $details, 
     }
 
     $stmt->bind_param('isss', $userId, $action, $details, $ipAddress);
-    $stmt->execute();
+    $inserted = $stmt->execute();
+    $auditLogId = $inserted ? (int) $conn->insert_id : 0;
     $stmt->close();
+
+    if ($inserted) {
+        kodus_socket_broadcast('kodus.audit_logs', 'audit_logs.changed', [
+            'action' => $action,
+            'audit_log_id' => $auditLogId,
+            'user_id' => $userId,
+        ]);
+
+        if ($action !== 'Page Visit') {
+            kodus_socket_broadcast('kodus.tables', 'tables.changed', [
+                'source_channel' => 'kodus.audit_logs',
+                'source_event' => 'audit_log.inserted',
+                'action' => $action,
+                'audit_log_id' => $auditLogId,
+                'user_id' => $userId,
+            ]);
+            kodus_socket_broadcast('kodus.ui', 'ui.changed', [
+                'source_channel' => 'kodus.audit_logs',
+                'source_event' => 'audit_log.inserted',
+                'action' => $action,
+                'audit_log_id' => $auditLogId,
+                'user_id' => $userId,
+            ]);
+        }
+    }
 }
 
 function audit_describe_value(mixed $value): string

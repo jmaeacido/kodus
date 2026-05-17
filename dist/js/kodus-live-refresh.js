@@ -359,11 +359,130 @@
     };
   }
 
+  function watchAllLiveSurfaces(options) {
+    options = options || {};
+    var reloadDelayMs = Number(options.reloadDelayMs || 500);
+    var reloadTimer = null;
+
+    function findDataTables() {
+      if (!window.jQuery || !window.jQuery.fn || !window.jQuery.fn.dataTable) {
+        return [];
+      }
+
+      var $ = window.jQuery;
+      var tables = [];
+      $('table').each(function() {
+        try {
+          if ($.fn.dataTable.isDataTable(this)) {
+            tables.push($(this).DataTable());
+          }
+        } catch (error) {}
+      });
+
+      return tables;
+    }
+
+    function dataTableHasAjaxSource(table) {
+      try {
+        var settings = table && typeof table.settings === 'function' ? table.settings()[0] : null;
+        if (!settings) {
+          return false;
+        }
+
+        return !!(settings.ajax || settings.sAjaxSource || (settings.oInit && settings.oInit.ajax));
+      } catch (error) {
+        return false;
+      }
+    }
+
+    function reloadInitializedDataTables(payload) {
+      var reloadedCount = 0;
+      var requiresPageReload = false;
+
+      findDataTables().forEach(function(table) {
+        try {
+          if (dataTableHasAjaxSource(table) && table.ajax && typeof table.ajax.reload === 'function') {
+            table.ajax.reload(null, false);
+            reloadedCount += 1;
+            return;
+          }
+
+          requiresPageReload = true;
+        } catch (error) {
+          debugSocket('KODUS global table reload failed.', error, payload);
+        }
+      });
+
+      return {
+        reloadedCount: reloadedCount,
+        requiresPageReload: requiresPageReload
+      };
+    }
+
+    function pageHasRealtimeSurface() {
+      return !!document.querySelector([
+        'table',
+        'canvas',
+        'svg',
+        '.card',
+        '.small-box',
+        '.info-box',
+        '.direct-chat',
+        '.timeline',
+        '.callout',
+        '.alert',
+        '[class*="hero"]',
+        '[id*="dashboard"]',
+        '[class*="dashboard"]',
+        '[data-kodus-live-surface]'
+      ].join(','));
+    }
+
+    function reloadPageSoon() {
+      if (reloadTimer !== null || !pageHasRealtimeSurface()) {
+        return;
+      }
+
+      reloadTimer = window.setTimeout(function() {
+        reloadTimer = null;
+        window.location.reload();
+      }, reloadDelayMs);
+    }
+
+    var throttledRefresh = throttle(function(payload) {
+      var result = reloadInitializedDataTables(payload);
+      if (result.requiresPageReload || pageHasRealtimeSurface()) {
+        reloadPageSoon();
+      }
+    }, 500);
+
+    return watchSocket({
+      key: options.key || 'kodus-global-live-surfaces',
+      channel: options.channel || '',
+      events: options.events || ['tables.changed', 'ui.changed'],
+      onMessage: throttledRefresh
+    });
+  }
+
+  function watchAllTables(options) {
+    return watchAllLiveSurfaces(options);
+  }
+
   window.KODUSLiveRefresh = {
     watch: watch,
     watchSocket: watchSocket,
     watchDataTable: watchDataTable,
+    watchAllTables: watchAllTables,
+    watchAllLiveSurfaces: watchAllLiveSurfaces,
     connectSocket: socketBridge.connect,
     isSocketEnabled: socketBridge.isEnabled
   };
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', function() {
+      watchAllLiveSurfaces();
+    }, { once: true });
+  } else {
+    watchAllLiveSurfaces();
+  }
 })(window);

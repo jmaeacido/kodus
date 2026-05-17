@@ -81,6 +81,8 @@ function kodus_socket_frontend_config(): array
 
 function kodus_socket_broadcast(string $channel, string $event, array $data = []): bool
 {
+    static $broadcastingGenericChange = false;
+
     $config = kodus_socket_config();
     $broadcastUrl = trim((string) ($config['broadcast_url'] ?? ''));
     if (empty($config['enabled']) || $broadcastUrl === '') {
@@ -142,6 +144,27 @@ function kodus_socket_broadcast(string $channel, string $event, array $data = []
     if ($response === false || $status < 200 || $status >= 300) {
         error_log('KODUS socket broadcast failed: HTTP ' . $status);
         return false;
+    }
+
+    if (
+        !$broadcastingGenericChange &&
+        $channel !== 'kodus.tables' &&
+        $channel !== 'kodus.ui' &&
+        $channel !== 'kodus.audit_logs' &&
+        preg_match('/\\.changed$/', $event) === 1
+    ) {
+        $broadcastingGenericChange = true;
+        kodus_socket_broadcast('kodus.tables', 'tables.changed', [
+            'source_channel' => $channel,
+            'source_event' => $event,
+            'data' => $data,
+        ]);
+        kodus_socket_broadcast('kodus.ui', 'ui.changed', [
+            'source_channel' => $channel,
+            'source_event' => $event,
+            'data' => $data,
+        ]);
+        $broadcastingGenericChange = false;
     }
 
     return true;

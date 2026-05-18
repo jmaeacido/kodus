@@ -67,9 +67,17 @@ $activityStmt->execute();
 $activityRows = db_stmt_fetch_all_assoc($activityStmt);
 $activityStmt->close();
 $actualProjectMap = programActivityFetchActualProjectsByMetadataIds($conn, array_map(static fn(array $row): int => (int) ($row['id'] ?? 0), $activityRows));
+$photoLinkMap = programActivityFetchPhotoLinksByMetadataIds($conn, array_map(static fn(array $row): int => (int) ($row['id'] ?? 0), $activityRows));
 
 foreach ($activityRows as $row) {
     $actualProjectRows = $actualProjectMap[(int) ($row['id'] ?? 0)] ?? [];
+    $photoLinks = array_map(static function (array $entry): array {
+        return [
+            'folder_key' => (string) ($entry['folder_key'] ?? ''),
+            'folder_label' => (string) ($entry['folder_label'] ?? ''),
+            'drive_link' => (string) ($entry['drive_link'] ?? ''),
+        ];
+    }, $photoLinkMap[(int) ($row['id'] ?? 0)] ?? []);
 
     foreach ($actualProjectRows as $index => $actualProjectRow) {
         $status = strtolower(trim((string) ($actualProjectRow['status'] ?? 'pending')));
@@ -127,6 +135,7 @@ foreach ($activityRows as $row) {
                 'aquatic_resource' => trim((string) ($actualProjectRow['aquatic_resource'] ?? '')),
                 'aquatic_resource_quantity' => trim((string) ($actualProjectRow['aquatic_resource_quantity'] ?? '')),
                 'drive_link' => trim((string) ($actualProjectRow['drive_link'] ?? '')),
+                'photo_links' => $photoLinks,
             ],
         ];
     }

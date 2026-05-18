@@ -234,11 +234,22 @@ $actualProjectMap = programActivityFetchActualProjectsByMetadataIds(
     $conn,
     array_map(static fn(array $row): int => (int) ($row['metadata_id'] ?? 0), $result)
 );
+$photoLinkMap = programActivityFetchPhotoLinksByMetadataIds(
+    $conn,
+    array_map(static fn(array $row): int => (int) ($row['metadata_id'] ?? 0), $result)
+);
 
 $rows = [];
 foreach ($result as $row) {
     $targetEntries = $targetEntryMap[(int) ($row['target_id'] ?? 0)] ?? [];
     $actualEntries = $actualProjectMap[(int) ($row['metadata_id'] ?? 0)] ?? [];
+    $photoLinks = array_map(static function (array $entry): array {
+        return [
+            'folder_key' => (string) ($entry['folder_key'] ?? ''),
+            'folder_label' => (string) ($entry['folder_label'] ?? ''),
+            'drive_link' => (string) ($entry['drive_link'] ?? ''),
+        ];
+    }, $photoLinkMap[(int) ($row['metadata_id'] ?? 0)] ?? []);
 
     $targetProjectRowIds = array_map(static fn(array $entry): string => (string) ($entry['row_id'] ?? ''), $targetEntries);
     $targetProjectTokens = array_map(static fn(array $entry): string => (string) ($entry['project_name'] ?? ''), $targetEntries);
@@ -319,6 +330,7 @@ foreach ($result as $row) {
         'coverage_land_areas' => $actualCoverageLandAreas,
         'coverage_land_ownerships' => $actualCoverageLandOwnerships,
         'coverage_drive_links' => $actualCoverageDriveLinks,
+        'photo_links' => $photoLinks,
         'coverage_rows' => $coverageRows,
         'coverage_actual_accomplishments' => $coverageActualAccomplishments,
         'coverage_actual_statuses' => $coverageActualStatuses,

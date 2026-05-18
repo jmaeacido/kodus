@@ -587,6 +587,10 @@ if ($result !== []) {
             $conn,
             array_map(static fn(array $locationRow): int => (int) ($locationRow['metadata_id'] ?? 0), $locationRows)
         );
+        $photoLinkMap = programActivityFetchPhotoLinksByMetadataIds(
+            $conn,
+            array_map(static fn(array $locationRow): int => (int) ($locationRow['metadata_id'] ?? 0), $locationRows)
+        );
 
         $targetPuroks = [];
         $targetProjects = [];
@@ -604,11 +608,13 @@ if ($result !== []) {
         $actualCoverageLandOwnerships = [];
         $coverageActualAccomplishments = [];
         $displayProjects = [];
+        $photoLinksByBarangay = [];
         $computedProjectBarangayCount = 0;
 
         foreach ($locationRows as $locationRow) {
             $barangayTargetEntries = $targetEntryMap[(int) ($locationRow['target_id'] ?? 0)] ?? [];
             $barangayActualEntries = $actualProjectMap[(int) ($locationRow['metadata_id'] ?? 0)] ?? [];
+            $barangayPhotoLinks = $photoLinkMap[(int) ($locationRow['metadata_id'] ?? 0)] ?? [];
             $barangayDisplayProjects = [];
 
             foreach ($barangayTargetEntries as $entry) {
@@ -642,6 +648,19 @@ if ($result !== []) {
                 foreach ($barangayDisplayProjects as $projectName) {
                     $displayProjects[] = $projectName;
                 }
+            }
+
+            if ($barangayPhotoLinks !== []) {
+                $photoLinksByBarangay[] = [
+                    'barangay' => (string) ($locationRow['barangay'] ?? ''),
+                    'links' => array_map(static function (array $entry): array {
+                        return [
+                            'folder_key' => (string) ($entry['folder_key'] ?? ''),
+                            'folder_label' => (string) ($entry['folder_label'] ?? ''),
+                            'drive_link' => (string) ($entry['drive_link'] ?? ''),
+                        ];
+                    }, $barangayPhotoLinks),
+                ];
             }
         }
 
@@ -724,6 +743,7 @@ if ($result !== []) {
             'coverage_land_areas' => implode('||', $actualCoverageLandAreas),
             'coverage_land_ownerships' => implode('||', $actualCoverageLandOwnerships),
             'coverage_actual_accomplishments' => implode('||', $coverageActualAccomplishments),
+            'photo_links_by_barangay' => $photoLinksByBarangay,
             'project_names' => implode(', ', $displayProjects),
             'readiness' => '<span class="badge badge-' . $completeness['class'] . '">' . $completeness['label'] . ' (' . $completeness['score'] . '%)</span>',
             'validation_snapshot' => '<span class="badge badge-' . $validation['class'] . '">' . $validation['label'] . '</span>',

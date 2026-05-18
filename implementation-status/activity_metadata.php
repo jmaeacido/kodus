@@ -66,6 +66,18 @@ function ensureProgramActivityActualProjectIndex(mysqli $conn, string $indexName
     }
 }
 
+function programActivityPhotoFolderOptions(): array
+{
+    return [
+        'site_validation' => 'Site Validation',
+        'cft_stage_1' => 'CFT Stage 1',
+        'before_implementation' => 'Before Implementation',
+        'during_implementation' => 'During Implementation',
+        'after_implementation' => 'After Implementation',
+        'cft_stage_3' => 'CFT Stage 3',
+    ];
+}
+
 function programActivityProjectCodeLocationCode(string $value): string
 {
     $sanitized = strtoupper(preg_replace('/[^A-Z0-9]/', '', (string) $value));
@@ -174,11 +186,17 @@ function programActivityBackfillProjectCodes(mysqli $conn, bool $force = false):
     }
     $result->free();
 
-    if ($updates !== []) {
-        $updateStmt = $conn->prepare("
-            UPDATE program_activity_actual_projects
-            SET project_code = ?
-            WHERE id = ?
+	if ($updates !== []) {
+		$updateIds = array_values(array_filter(array_map(static fn(array $update): int => (int) ($update['id'] ?? 0), $updates)));
+		if ($updateIds !== []) {
+			$idList = implode(',', $updateIds);
+			$conn->query("UPDATE program_activity_actual_projects SET project_code = NULL WHERE id IN ({$idList})");
+		}
+
+		$updateStmt = $conn->prepare("
+			UPDATE program_activity_actual_projects
+			SET project_code = ?
+			WHERE id = ?
         ");
 
         if (!$updateStmt) {
@@ -549,6 +567,24 @@ function ensureProgramActivityMetadata(mysqli $conn, ?int $defaultFiscalYear = n
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
     ");
 
+    $conn->query("
+        CREATE TABLE IF NOT EXISTS program_activity_photo_links (
+            id BIGINT NOT NULL AUTO_INCREMENT,
+            program_activity_id INT NOT NULL,
+            folder_key VARCHAR(64) NOT NULL,
+            folder_label VARCHAR(128) NOT NULL,
+            drive_link VARCHAR(2048) NOT NULL,
+            sort_order INT NOT NULL DEFAULT 0,
+            created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            KEY idx_program_activity_photo_parent (program_activity_id, folder_key, sort_order),
+            CONSTRAINT fk_program_activity_photo_parent
+                FOREIGN KEY (program_activity_id) REFERENCES program_activity_metadata (id)
+                ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+    ");
+
     $actualProjectColumns = [];
     $actualProjectColumnStmt = $conn->prepare("
         SELECT COLUMN_NAME
@@ -571,6 +607,92 @@ function ensureProgramActivityMetadata(mysqli $conn, ?int $defaultFiscalYear = n
     programActivityBackfillProjectCodes($conn);
 
     $initialized = true;
+}
+
+function programActivityReplacePhotoLinks(mysqli $conn, int $programActivityId, array $rows): void
+{
+    $deleteStmt = $conn->prepare('DELETE FROM program_activity_photo_links WHERE program_activity_id = ?');
+    if ($deleteStmt) {
+        $deleteStmt->bind_param('i', $programActivityId);
+        $deleteStmt->execute();
+        $deleteStmt->close();
+    }
+
+    if ($rows === []) {
+        return;
+    }
+
+    $insertStmt = $conn->prepare("
+        INSERT INTO program_activity_photo_links (
+            program_activity_id,
+            folder_key,
+            folder_label,
+            drive_link,
+            sort_order
+        ) VALUES (?, ?, ?, ?, ?)
+    ");
+
+    if (!$insertStmt) {
+        throw new RuntimeException('Unable to prepare program activity photo insert: ' . $conn->error);
+    }
+
+    foreach ($rows as $index => $row) {
+        $programActivityIdParam = $programActivityId;
+        $folderKey = (string) ($row['folder_key'] ?? '');
+        $folderLabel = (string) ($row['folder_label'] ?? '');
+        $driveLink = (string) ($row['drive_link'] ?? '');
+        $sortOrder = (int) ($row['sort_order'] ?? $index);
+
+        $insertStmt->bind_param(
+            'isssi',
+            $programActivityIdParam,
+            $folderKey,
+            $folderLabel,
+            $driveLink,
+            $sortOrder
+        );
+        $insertStmt->execute();
+    }
+
+    $insertStmt->close();
+}
+
+function programActivityFetchPhotoLinksByMetadataIds(mysqli $conn, array $metadataIds): array
+{
+    $metadataIds = array_values(array_filter(array_map('intval', $metadataIds), static fn(int $value): bool => $value > 0));
+    if ($metadataIds === []) {
+        return [];
+    }
+
+    $placeholders = implode(',', array_fill(0, count($metadataIds), '?'));
+    $types = str_repeat('i', count($metadataIds));
+    $stmt = $conn->prepare("
+        SELECT
+            program_activity_id,
+            folder_key,
+            folder_label,
+            drive_link,
+            sort_order
+        FROM program_activity_photo_links
+        WHERE program_activity_id IN ($placeholders)
+        ORDER BY program_activity_id ASC, sort_order ASC, id ASC
+    ");
+
+    if (!$stmt) {
+        return [];
+    }
+
+    $stmt->bind_param($types, ...$metadataIds);
+    $stmt->execute();
+    $rows = db_stmt_fetch_all_assoc($stmt);
+    $stmt->close();
+
+    $grouped = [];
+    foreach ($rows as $row) {
+        $grouped[(int) ($row['program_activity_id'] ?? 0)][] = $row;
+    }
+
+    return $grouped;
 }
 
 function programActivityReplaceActualProjects(mysqli $conn, int $programActivityId, array $rows): void

@@ -59,6 +59,206 @@ $canManageActivities = auth_can_manage_program_activities();
       flex-direction: column;
       gap: 12px;
     }
+	    .photo-link-list {
+	      display: flex;
+	      flex-direction: column;
+	      gap: 14px;
+	      margin-top: 10px;
+	    }
+	    .photo-folder-select-wrap {
+	      display: grid;
+	      grid-template-columns: minmax(220px, 360px);
+	      gap: 6px;
+	      max-width: 100%;
+	    }
+	    .photo-folder-select-label {
+	      margin-bottom: 0;
+	      color: rgba(248, 249, 250, 0.78);
+	      font-size: .78rem;
+	      font-weight: 800;
+	      letter-spacing: .04em;
+	      text-transform: uppercase;
+	    }
+	    .activity-edit-shell .photo-folder-select {
+	      background-color: rgba(9, 16, 28, 0.62);
+	      border-color: rgba(255, 255, 255, 0.14);
+	      color: #f8f9fa;
+	    }
+	    .activity-edit-shell .photo-folder-select:focus {
+	      background-color: rgba(9, 16, 28, 0.78);
+	      border-color: rgba(125, 196, 255, 0.45);
+	      color: #f8f9fa;
+	      box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.18);
+	    }
+	    .activity-edit-shell .photo-folder-select option {
+	      background-color: #182230;
+	      color: #f8f9fa;
+	    }
+	    .photo-folder-input-group {
+	      padding: 12px;
+	      border: 1px solid rgba(255, 255, 255, 0.1);
+	      border-radius: 14px;
+	      background: rgba(255, 255, 255, 0.04);
+	    }
+	    .photo-folder-input-group[hidden] {
+	      display: none;
+	    }
+    .photo-link-item {
+      display: grid;
+      grid-template-columns: minmax(260px, 1fr) auto;
+      gap: 10px;
+      align-items: center;
+      margin-top: 8px;
+    }
+    .photo-link-preview-grid,
+    .photo-gallery-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: 10px;
+      margin-top: 10px;
+    }
+    .photo-album-card {
+      position: relative;
+      min-height: 160px;
+    }
+    .photo-album-card::before,
+    .photo-album-card::after {
+      content: "";
+      position: absolute;
+      inset: 8px 8px auto auto;
+      width: calc(100% - 12px);
+      height: 100%;
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.12);
+      transform: translate(5px, -5px);
+      z-index: -1;
+    }
+    .photo-album-count {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      padding: 3px 7px;
+      border-radius: 999px;
+      background: rgba(0, 0, 0, 0.68);
+      color: #fff;
+      font-size: .72rem;
+      font-weight: 800;
+    }
+    .photo-drive-card {
+      display: block;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 12px;
+      overflow: hidden;
+      background: rgba(255, 255, 255, 0.06);
+      color: inherit;
+      text-decoration: none;
+    }
+    .photo-drive-card:hover {
+      color: inherit;
+      text-decoration: none;
+      border-color: rgba(122, 183, 255, 0.7);
+    }
+    .photo-drive-card img {
+      display: block;
+      width: 100%;
+      aspect-ratio: 4 / 3;
+      object-fit: cover;
+      background: rgba(0, 0, 0, 0.2);
+    }
+    .photo-drive-card span {
+      display: block;
+      padding: 7px 9px;
+      font-size: .75rem;
+      font-weight: 700;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .photo-folder-group {
+      margin-top: 14px;
+    }
+    .photo-folder-title {
+      display: block;
+      font-size: .82rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+      color: rgba(255, 255, 255, 0.76);
+    }
+    .photo-link-actions {
+      display: inline-flex;
+      gap: 6px;
+      align-items: center;
+    }
+    .photo-coordinate-result {
+      grid-column: 1 / -1;
+      min-height: 22px;
+      font-size: .78rem;
+    }
+    .photo-coordinate-result .btn {
+      margin-left: 6px;
+    }
+    .photo-gallery-viewer {
+      position: fixed;
+      inset: 0;
+      z-index: 1095;
+      display: none;
+      pointer-events: none;
+    }
+    .photo-gallery-viewer.is-open {
+      display: block;
+    }
+    .photo-gallery-panel {
+      position: absolute;
+      right: 24px;
+      bottom: 24px;
+      width: min(760px, calc(100vw - 32px));
+      max-height: min(720px, calc(100vh - 32px));
+      display: grid;
+      grid-template-rows: auto minmax(220px, 1fr) auto;
+      border-radius: 16px;
+      background: #111827;
+      color: #f9fafb;
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.38);
+      overflow: hidden;
+      pointer-events: auto;
+    }
+    .photo-gallery-header,
+    .photo-gallery-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 10px 12px;
+      background: rgba(255, 255, 255, 0.06);
+    }
+    .photo-gallery-stage {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 12px;
+      min-height: 280px;
+    }
+    .photo-gallery-stage img {
+      max-width: 100%;
+      max-height: calc(100vh - 190px);
+      object-fit: contain;
+      border-radius: 10px;
+      background: rgba(0, 0, 0, 0.25);
+    }
+    .photo-gallery-nav {
+      border: 0;
+      width: 40px;
+      height: 40px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.16);
+      color: #fff;
+    }
+    .photo-gallery-nav:disabled {
+      opacity: .35;
+    }
     .coverage-entry-item {
       border: 1px solid rgba(255, 255, 255, 0.1);
       border-radius: 16px;
@@ -235,6 +435,14 @@ $canManageActivities = auth_can_manage_program_activities();
       }
       .coverage-coordinate-row {
         grid-template-columns: 1fr;
+      }
+      .photo-link-item {
+        grid-template-columns: 1fr;
+      }
+      .photo-gallery-panel {
+        right: 12px;
+        bottom: 12px;
+        width: calc(100vw - 24px);
       }
     }
     .project-item .form-control {
@@ -1043,13 +1251,38 @@ $canManageActivities = auth_can_manage_program_activities();
       background: rgba(255, 255, 255, 0.84);
       border-color: rgba(13, 110, 253, 0.1);
     }
-    body[data-theme="light"] .barangay-panel-section-title {
-      color: #405261;
-    }
-    body[data-theme="light"] .barangay-pane-toggle {
-      color: #1f2d3d;
-      background: rgba(255, 255, 255, 0.74);
-      border-color: rgba(13, 110, 253, 0.12);
+	    body[data-theme="light"] .barangay-panel-section-title {
+	      color: #405261;
+	    }
+	    body[data-theme="light"] .photo-folder-select-label {
+	      color: #405261;
+	    }
+	    body[data-theme="light"] .photo-folder-input-group {
+	      background: rgba(248, 250, 252, 0.95);
+	      border-color: rgba(13, 110, 253, 0.12);
+	    }
+	    body[data-theme="light"] .photo-folder-title {
+	      color: #405261;
+	    }
+	    body[data-theme="light"] .activity-edit-shell .photo-folder-select {
+	      background-color: #ffffff;
+	      border-color: rgba(13, 110, 253, 0.14);
+	      color: #1f2d3d;
+	    }
+	    body[data-theme="light"] .activity-edit-shell .photo-folder-select:focus {
+	      background-color: #ffffff;
+	      border-color: rgba(13, 110, 253, 0.35);
+	      color: #1f2d3d;
+	      box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.12);
+	    }
+	    body[data-theme="light"] .activity-edit-shell .photo-folder-select option {
+	      background-color: #ffffff;
+	      color: #1f2d3d;
+	    }
+	    body[data-theme="light"] .barangay-pane-toggle {
+	      color: #1f2d3d;
+	      background: rgba(255, 255, 255, 0.74);
+	      border-color: rgba(13, 110, 253, 0.12);
     }
     body[data-theme="light"] .forum-card {
       background: linear-gradient(180deg, rgba(248, 250, 252, 0.95), rgba(255,255,255,0.98));
@@ -1259,9 +1492,21 @@ $(document).ready(function() {
     const BENEFICIARY_WAGE_RATE = 435;
     const BENEFICIARY_WORK_DAYS = 20;
     const BENEFICIARY_RATE = BENEFICIARY_WAGE_RATE * BENEFICIARY_WORK_DAYS;
+    const PHOTO_FOLDER_OPTIONS = [
+        { key: 'site_validation', label: 'Site Validation' },
+        { key: 'cft_stage_1', label: 'CFT Stage 1' },
+        { key: 'before_implementation', label: 'Before Implementation' },
+        { key: 'during_implementation', label: 'During Implementation' },
+        { key: 'after_implementation', label: 'After Implementation' },
+        { key: 'cft_stage_3', label: 'CFT Stage 3' }
+    ];
 
     function escapeHtml(value) {
         return $('<div>').text(value ?? '').html();
+    }
+
+    function escapeAttribute(value) {
+        return escapeHtml(value).replace(/"/g, '&quot;');
     }
 
     function updateSummary(rows) {
@@ -1286,6 +1531,334 @@ $(document).ready(function() {
             .split(raw.includes('||') ? /\|\|/ : /\s*,\s*/)
             .map(item => item.trim())
             .filter(Boolean);
+    }
+
+    function getPhotoFolderLabel(folderKey) {
+        const option = PHOTO_FOLDER_OPTIONS.find(item => item.key === folderKey);
+        return option ? option.label : 'Photo Documentation';
+    }
+
+    function extractGoogleDriveFileId(url) {
+        const value = String(url || '').trim();
+        const patterns = [
+            /drive\.google\.com\/file\/d\/([A-Za-z0-9_-]{10,})/i,
+            /drive\.google\.com\/open\?id=([A-Za-z0-9_-]{10,})/i,
+            /drive\.google\.com\/uc\?(?:[^#]*&)?id=([A-Za-z0-9_-]{10,})/i,
+            /docs\.google\.com\/(?:document|spreadsheets|presentation|forms)\/d\/([A-Za-z0-9_-]{10,})/i
+        ];
+
+        for (const pattern of patterns) {
+            const match = value.match(pattern);
+            if (match && match[1]) {
+                return match[1];
+            }
+        }
+
+        try {
+            const parsedUrl = new URL(value);
+            return parsedUrl.searchParams.get('id') || '';
+        } catch (error) {
+            return '';
+        }
+    }
+
+    function googleDriveThumbnailUrl(url) {
+        const fileId = extractGoogleDriveFileId(url);
+        return fileId ? `https://drive.google.com/thumbnail?id=${encodeURIComponent(fileId)}&sz=w1000` : '';
+    }
+
+    function isGoogleDriveUrl(url) {
+        try {
+            const host = new URL(String(url || '').trim()).hostname.toLowerCase();
+            return host === 'drive.google.com'
+                || host === 'docs.google.com'
+                || host.endsWith('.drive.google.com')
+                || host.endsWith('.docs.google.com');
+        } catch (error) {
+            return false;
+        }
+    }
+
+    function renderPhotoDriveCard(url, label = 'Google Drive photo', galleryLinks = null, count = 1) {
+        const trimmedUrl = String(url || '').trim();
+        if (!trimmedUrl) {
+            return '';
+        }
+
+        const thumbnailUrl = googleDriveThumbnailUrl(trimmedUrl);
+        const safeUrl = escapeAttribute(trimmedUrl);
+        const safeLabel = escapeHtml(label);
+        const cleanGalleryLinks = Array.isArray(galleryLinks)
+            ? galleryLinks.map(link => String(link || '').trim()).filter(Boolean)
+            : [trimmedUrl];
+        const galleryPayload = escapeAttribute(JSON.stringify(cleanGalleryLinks));
+        const albumClass = cleanGalleryLinks.length > 1 ? ' photo-album-card' : '';
+        const countBadge = cleanGalleryLinks.length > 1 ? `<b class="photo-album-count">${cleanGalleryLinks.length}</b>` : '';
+        const media = thumbnailUrl
+            ? `<img src="${escapeAttribute(thumbnailUrl)}" alt="${safeLabel}" loading="lazy">`
+            : '<span>Open Drive photo</span>';
+
+        return `<a class="photo-drive-card${albumClass}" href="${safeUrl}" target="_blank" rel="noopener noreferrer" data-photo-gallery="${galleryPayload}" data-photo-title="${safeLabel}">${media}${countBadge}<span>${safeLabel}</span></a>`;
+    }
+
+    function renderPhotoLinkPreview(url, folderKey = '') {
+        const trimmedUrl = String(url || '').trim();
+        if (!trimmedUrl) {
+            return '<span class="text-muted small">Paste a Google Drive photo share URL to preview it.</span>';
+        }
+
+        if (!isGoogleDriveUrl(trimmedUrl)) {
+            return '<span class="text-warning small">Use a Google Drive share URL.</span>';
+        }
+
+        return `<div class="photo-link-preview-grid">${renderPhotoDriveCard(trimmedUrl, getPhotoFolderLabel(folderKey))}</div>`;
+    }
+
+    function normalizePhotoLinks(photoLinks) {
+        return Array.isArray(photoLinks) ? photoLinks : [];
+    }
+
+    function renderPhotoLinkItem(driveLink = '') {
+        return `
+            <div class="photo-link-item">
+                <input type="url" class="form-control form-control-sm photo-drive-link" value="${escapeAttribute(driveLink)}" placeholder="https://drive.google.com/file/d/...">
+                <div class="photo-link-actions">
+                    <button type="button" class="btn btn-info btn-sm detect-photo-gps-btn">Detect GPS</button>
+                    <button type="button" class="btn btn-danger btn-sm remove-photo-link-btn">-</button>
+                </div>
+                <div class="photo-coordinate-result text-muted"></div>
+            </div>
+        `;
+    }
+
+    function photoLinksForFolder(photoLinks, folderKey) {
+        return normalizePhotoLinks(photoLinks)
+            .filter(link => String(link.folder_key || '').trim() === folderKey)
+            .map(link => String(link.drive_link || '').trim())
+            .filter(Boolean);
+    }
+
+    function renderPhotoFolderPreview(folderKey, links) {
+        const cards = links
+            .map((url, index) => renderPhotoDriveCard(url, `${getPhotoFolderLabel(folderKey)} ${index + 1}`, [url]))
+            .join('');
+
+        return cards
+            ? `<div class="photo-link-preview-grid">${cards}</div>`
+            : '<span class="text-muted small">Photo previews will appear here after Google Drive links are added.</span>';
+    }
+
+	    function renderPhotoFolderInputGroup(option, photoLinks, activeFolderKey) {
+	        const links = photoLinksForFolder(photoLinks, option.key);
+	        const rows = links.length ? links : [''];
+	        const isActive = option.key === activeFolderKey;
+
+	        return `
+	            <div class="photo-folder-input-group" data-photo-folder="${escapeAttribute(option.key)}"${isActive ? '' : ' hidden'}>
+	                <span class="photo-folder-title">${escapeHtml(option.label)}</span>
+	                <div class="photo-folder-link-rows">
+	                    ${rows.map(link => renderPhotoLinkItem(link)).join('')}
+	                </div>
+                <button type="button" class="btn btn-success btn-sm mt-2 add-photo-link-btn">Add Link</button>
+                <div class="photo-folder-preview">${renderPhotoFolderPreview(option.key, links)}</div>
+            </div>
+        `;
+	    }
+
+	    function renderPhotoLinkInputs(photoLinks) {
+	        const normalizedLinks = normalizePhotoLinks(photoLinks);
+	        const activeFolder = PHOTO_FOLDER_OPTIONS.find(option => photoLinksForFolder(normalizedLinks, option.key).length)
+	            || PHOTO_FOLDER_OPTIONS[0];
+	        const activeFolderKey = activeFolder ? activeFolder.key : '';
+	        const options = PHOTO_FOLDER_OPTIONS.map(option => {
+	            const count = photoLinksForFolder(normalizedLinks, option.key).length;
+	            const label = count > 0 ? `${option.label} (${count})` : option.label;
+	            return `<option value="${escapeAttribute(option.key)}"${option.key === activeFolderKey ? ' selected' : ''}>${escapeHtml(label)}</option>`;
+	        }).join('');
+
+	        return `
+	            <div class="photo-folder-select-wrap">
+	                <label class="photo-folder-select-label">Photo folder</label>
+	                <select class="custom-select custom-select-sm photo-folder-select">
+	                    ${options}
+	                </select>
+	            </div>
+	            ${PHOTO_FOLDER_OPTIONS.map(option => renderPhotoFolderInputGroup(option, normalizedLinks, activeFolderKey)).join('')}
+	        `;
+	    }
+
+    function collectPhotoLinks($pane) {
+        const links = [];
+        $pane.find('.photo-folder-input-group').each(function() {
+            const folderKey = String($(this).attr('data-photo-folder') || '').trim();
+            $(this).find('.photo-drive-link').each(function() {
+                const driveLink = String($(this).val() || '').trim();
+                if (driveLink) {
+                    links.push({ folder_key: folderKey, drive_link: driveLink });
+                }
+            });
+        });
+        return links;
+    }
+
+    function renderPhotoAlbumCard(folderKey, links) {
+        const cleanLinks = (Array.isArray(links) ? links : []).map(url => String(url || '').trim()).filter(Boolean);
+        if (!cleanLinks.length) {
+            return '';
+        }
+
+        return renderPhotoDriveCard(
+            cleanLinks[0],
+            `${getPhotoFolderLabel(folderKey)} (${cleanLinks.length})`,
+            cleanLinks,
+            cleanLinks.length
+        );
+    }
+
+    function renderPhotoGallery(photoLinks, emptyText = 'No photo documentation links recorded yet') {
+        const groups = {};
+        normalizePhotoLinks(photoLinks).forEach(link => {
+            const folderKey = String(link.folder_key || '').trim();
+            const driveLink = String(link.drive_link || '').trim();
+            if (!folderKey || !driveLink) {
+                return;
+            }
+
+            if (!groups[folderKey]) {
+                groups[folderKey] = [];
+            }
+            groups[folderKey].push(driveLink);
+        });
+
+        const folderHtml = PHOTO_FOLDER_OPTIONS.map(option => {
+            const links = groups[option.key] || [];
+            if (!links.length) {
+                return '';
+            }
+
+            return `
+                <div class="photo-folder-group">
+                    <span class="photo-folder-title">${escapeHtml(option.label)}</span>
+                    <div class="photo-gallery-grid">
+                        ${renderPhotoAlbumCard(option.key, links)}
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        return folderHtml || `<span class="kodus-detail-empty">${escapeHtml(emptyText)}</span>`;
+    }
+
+    function renderPhotoGalleryByBarangay(photoLinksByBarangay) {
+        const barangayGroups = Array.isArray(photoLinksByBarangay) ? photoLinksByBarangay : [];
+        const sections = barangayGroups.map(group => {
+            const gallery = renderPhotoGallery(group.links || '', '');
+            if (!String(gallery || '').trim()) {
+                return '';
+            }
+
+            return `
+                <div class="photo-folder-group">
+                    <span class="photo-folder-title">${escapeHtml(group.barangay || 'Barangay')}</span>
+                    ${gallery}
+                </div>
+            `;
+        }).join('');
+
+        return sections || '<span class="kodus-detail-empty">No photo documentation links recorded yet</span>';
+    }
+
+    let activePhotoGallery = { links: [], index: 0, title: '' };
+
+    function ensurePhotoGalleryViewer() {
+        let $viewer = $('#photoGalleryViewer');
+        if ($viewer.length) {
+            return $viewer;
+        }
+
+        $('body').append(`
+            <div class="photo-gallery-viewer" id="photoGalleryViewer" aria-live="polite">
+                <div class="photo-gallery-panel" role="dialog" aria-label="Photo gallery">
+                    <div class="photo-gallery-header">
+                        <strong id="photoGalleryTitle">Photo Gallery</strong>
+                        <button type="button" class="btn btn-sm btn-outline-light photo-gallery-close" aria-label="Close">&times;</button>
+                    </div>
+                    <div class="photo-gallery-stage">
+                        <button type="button" class="photo-gallery-nav photo-gallery-prev" aria-label="Previous photo"><i class="fas fa-chevron-left" aria-hidden="true"></i></button>
+                        <img id="photoGalleryImage" src="" alt="">
+                        <button type="button" class="photo-gallery-nav photo-gallery-next" aria-label="Next photo"><i class="fas fa-chevron-right" aria-hidden="true"></i></button>
+                    </div>
+                    <div class="photo-gallery-footer">
+                        <span id="photoGalleryCounter"></span>
+                        <a id="photoGalleryOpenLink" class="btn btn-sm btn-primary" href="#" target="_blank" rel="noopener noreferrer">Open Drive Link</a>
+                    </div>
+                </div>
+            </div>
+        `);
+        return $('#photoGalleryViewer');
+    }
+
+    function updatePhotoGalleryViewer() {
+        const $viewer = ensurePhotoGalleryViewer();
+        const links = activePhotoGallery.links;
+        const index = Math.max(0, Math.min(activePhotoGallery.index, links.length - 1));
+        const currentUrl = links[index] || '';
+        const thumbnailUrl = googleDriveThumbnailUrl(currentUrl) || currentUrl;
+
+        activePhotoGallery.index = index;
+        $viewer.find('#photoGalleryTitle').text(activePhotoGallery.title || 'Photo Gallery');
+        $viewer.find('#photoGalleryImage').attr('src', thumbnailUrl).attr('alt', activePhotoGallery.title || 'Photo Gallery');
+        $viewer.find('#photoGalleryCounter').text(`${index + 1} of ${links.length}`);
+        $viewer.find('#photoGalleryOpenLink').attr('href', currentUrl);
+        $viewer.find('.photo-gallery-prev').prop('disabled', index <= 0);
+        $viewer.find('.photo-gallery-next').prop('disabled', index >= links.length - 1);
+    }
+
+    function openPhotoGallery(links, startIndex = 0, title = 'Photo Gallery') {
+        const cleanLinks = (Array.isArray(links) ? links : []).map(link => String(link || '').trim()).filter(Boolean);
+        if (!cleanLinks.length) {
+            return;
+        }
+
+        activePhotoGallery = {
+            links: cleanLinks,
+            index: Math.max(0, Math.min(startIndex, cleanLinks.length - 1)),
+            title
+        };
+        ensurePhotoGalleryViewer().addClass('is-open');
+        updatePhotoGalleryViewer();
+    }
+
+    function closePhotoGallery() {
+        $('#photoGalleryViewer').removeClass('is-open');
+    }
+
+    function movePhotoGallery(direction) {
+        if (!$('#photoGalleryViewer').hasClass('is-open')) {
+            return;
+        }
+        activePhotoGallery.index += direction;
+        updatePhotoGalleryViewer();
+    }
+
+    function handlePhotoGalleryKeydown(event) {
+        if (!$('#photoGalleryViewer').hasClass('is-open')) {
+            return;
+        }
+
+        if (event.key === 'Escape') {
+            event.preventDefault();
+            event.stopPropagation();
+            closePhotoGallery();
+        } else if (event.key === 'ArrowLeft') {
+            event.preventDefault();
+            event.stopPropagation();
+            movePhotoGallery(-1);
+        } else if (event.key === 'ArrowRight') {
+            event.preventDefault();
+            event.stopPropagation();
+            movePhotoGallery(1);
+        }
     }
 
     const COVERAGE_TYPE_OPTIONS = {
@@ -2964,6 +3537,8 @@ $(document).ready(function() {
                         splitMultiValue(data.coverage_land_ownerships),
                         'No coverage accomplishment entries recorded yet'
                     )}
+                    <span class="kodus-detail-label mt-3">Photo Documentation</span>
+                    ${renderPhotoGalleryByBarangay(data.photo_links_by_barangay || [])}
                 </div>
             </div>
         `;
@@ -3129,6 +3704,13 @@ $(document).ready(function() {
                                                 row.coverage_drive_links || [],
                                                 row.coverage_actual_statuses || []
                                             )}
+                                    </div>
+                                </div>
+                                <div class="barangay-panel-section">
+                                    <span class="barangay-panel-section-title">Photo Documentation</span>
+                                    <div class="section-note">Choose the folder first, then paste one or more Google Drive photo share URLs. Drive files must be shared with view access for KODUS users to see the previews.</div>
+                                    <div class="photo-link-list">
+                                        ${renderPhotoLinkInputs(row.photo_links || [])}
                                     </div>
                                 </div>
                                 ${renderBinhiSupplementalInputs(row)}
@@ -3404,6 +3986,25 @@ $(document).ready(function() {
                                 return false;
                             }
 
+                            const photoLinks = collectPhotoLinks($(this));
+                            const hasPhotoValidationError = photoLinks.some((link) => {
+                                if (!link.folder_key || !PHOTO_FOLDER_OPTIONS.some(option => option.key === link.folder_key)) {
+                                    Swal.showValidationMessage(`${barangayName}: choose a valid folder for each photo link.`);
+                                    hasRowValidationError = true;
+                                    return true;
+                                }
+                                if (!link.drive_link || !isGoogleDriveUrl(link.drive_link)) {
+                                    Swal.showValidationMessage(`${barangayName}: photo links must be Google Drive share URLs.`);
+                                    hasRowValidationError = true;
+                                    return true;
+                                }
+                                return false;
+                            });
+
+                            if (hasPhotoValidationError) {
+                                return false;
+                            }
+
                             let hasAquaticValidationError = false;
                             $(this).find('.coverage-entry-item').each(function() {
                                 const latitude = normalizeCoordinateInputValue($(this).find('.coverage-latitude').val());
@@ -3513,6 +4114,7 @@ $(document).ready(function() {
                                 coverage_drive_links: $(this).find('.coverage-drive-link').map(function() {
                                     return $(this).val().trim();
                                 }).get(),
+                                photo_links: photoLinks,
                                 blgu_forum_from: blguFrom,
                                 blgu_forum_to: blguTo,
                                 ...stagePayload
@@ -3761,6 +4363,164 @@ $(document).ready(function() {
         reindexCoverageEntries($list);
         syncCoverageActualTotals($paneRow);
     });
+
+    $(document).on('click', '.add-photo-link-btn', function() {
+        const $group = $(this).closest('.photo-folder-input-group');
+        $group.find('.photo-folder-link-rows').append(renderPhotoLinkItem(''));
+        updatePhotoFolderPreview($group);
+    });
+
+	    $(document).on('click', '.remove-photo-link-btn', function() {
+	        const $group = $(this).closest('.photo-folder-input-group');
+	        const $rows = $group.find('.photo-folder-link-rows');
+	        $(this).closest('.photo-link-item').remove();
+	        if (!$rows.find('.photo-link-item').length) {
+            $rows.append(renderPhotoLinkItem(''));
+        }
+	        updatePhotoFolderPreview($group);
+	    });
+
+	    $(document).on('change', '.photo-folder-select', function() {
+	        const selectedFolder = String($(this).val() || '').trim();
+	        const $list = $(this).closest('.photo-link-list');
+	        $list.find('.photo-folder-input-group').each(function() {
+	            const $group = $(this);
+	            const folderKey = String($group.attr('data-photo-folder') || '').trim();
+	            $group.prop('hidden', folderKey !== selectedFolder);
+	        });
+	    });
+
+	    function updatePhotoFolderPreview($group) {
+	        const folderKey = String($group.attr('data-photo-folder') || '').trim();
+	        const links = $group.find('.photo-drive-link').map(function() {
+	            return String($(this).val() || '').trim();
+        }).get().filter(Boolean);
+        $group.find('.photo-folder-preview').html(renderPhotoFolderPreview(folderKey, links));
+    }
+
+    $(document).on('input change', '.photo-drive-link', function() {
+        updatePhotoFolderPreview($(this).closest('.photo-folder-input-group'));
+    });
+
+    function applyDetectedCoordinatesToCoverage($pane, latitude, longitude) {
+        let $targetRow = $();
+        $pane.find('.coverage-entry-item').each(function() {
+            const $item = $(this);
+            const currentLatitude = String($item.find('.coverage-latitude').val() || '').trim();
+            const currentLongitude = String($item.find('.coverage-longitude').val() || '').trim();
+            if (!currentLatitude && !currentLongitude) {
+                $targetRow = $item;
+                return false;
+            }
+        });
+
+        if (!$targetRow.length) {
+            $targetRow = $pane.find('.coverage-entry-item').first();
+        }
+
+        if (!$targetRow.length) {
+            return false;
+        }
+
+        $targetRow.find('.coverage-latitude').val(latitude).trigger('input');
+        $targetRow.find('.coverage-longitude').val(longitude).trigger('input');
+
+        if (normalizeCoverageStatus($targetRow.find('.coverage-status').val()) === 'pending') {
+            copyTargetValuesToCoverageEntry($targetRow);
+            $targetRow.find('.coverage-status').val('confirmed');
+            updateCoverageEntryState($targetRow);
+            syncCoverageActualTotals($pane);
+        }
+
+        return true;
+    }
+
+    $(document).on('click', '.detect-photo-gps-btn', function() {
+        const $button = $(this);
+        const $item = $button.closest('.photo-link-item');
+        const $pane = $button.closest('.edit-grid-row');
+        const $result = $item.find('.photo-coordinate-result');
+        const driveLink = String($item.find('.photo-drive-link').val() || '').trim();
+
+        if (!driveLink || !isGoogleDriveUrl(driveLink)) {
+            $result.removeClass('text-muted text-success').addClass('text-warning').text('Paste a Google Drive photo URL first.');
+            return;
+        }
+
+        $button.prop('disabled', true).text('Detecting...');
+        $result.removeClass('text-warning text-success').addClass('text-muted').text('Reading photo coordinates...');
+
+        $.ajax({
+            url: 'extract-photo-coordinates.php',
+            type: 'POST',
+            dataType: 'json',
+            data: {
+                drive_link: driveLink,
+                csrf_token: window.KODUS_CSRF_TOKEN
+            }
+        }).done(function(response) {
+            if (!response.success) {
+                throw new Error(response.message || 'Could not detect coordinates.');
+            }
+
+            const latitude = normalizeCoordinateInputValue(response.latitude);
+            const longitude = normalizeCoordinateInputValue(response.longitude);
+            if (!latitude || !longitude) {
+                throw new Error('The detected coordinates were not valid.');
+            }
+
+            $result
+                .removeClass('text-muted text-warning')
+                .addClass('text-success')
+                .html(`Detected ${escapeHtml(latitude)}, ${escapeHtml(longitude)} <button type="button" class="btn btn-xs btn-primary apply-photo-gps-btn" data-latitude="${escapeAttribute(latitude)}" data-longitude="${escapeAttribute(longitude)}">Apply GPS</button>`);
+        }).fail(function(xhr) {
+            const message = xhr.responseJSON?.message || 'Could not detect coordinates from this photo.';
+            $result.removeClass('text-muted text-success').addClass('text-warning').text(message);
+        }).always(function() {
+            $button.prop('disabled', false).text('Detect GPS');
+        });
+    });
+
+    $(document).on('click', '.apply-photo-gps-btn', function() {
+        const $button = $(this);
+        const $pane = $button.closest('.edit-grid-row');
+        const latitude = normalizeCoordinateInputValue($button.attr('data-latitude'));
+        const longitude = normalizeCoordinateInputValue($button.attr('data-longitude'));
+        const applied = applyDetectedCoordinatesToCoverage($pane, latitude, longitude);
+        const $result = $button.closest('.photo-coordinate-result');
+
+        if (applied) {
+            $result.removeClass('text-muted text-warning').addClass('text-success').append(' Applied to coverage coordinates.');
+        } else {
+            $result.removeClass('text-muted text-success').addClass('text-warning').text('No coverage row is available for these coordinates.');
+        }
+    });
+
+    $(document).on('click', '.photo-drive-card', function(event) {
+        const payload = $(this).attr('data-photo-gallery') || '';
+        if (!payload) {
+            return;
+        }
+
+        try {
+            const links = JSON.parse(payload);
+            if (Array.isArray(links) && links.length) {
+                event.preventDefault();
+                openPhotoGallery(links, 0, $(this).attr('data-photo-title') || 'Photo Gallery');
+            }
+        } catch (error) {
+            // Fall back to the normal Drive link.
+        }
+    });
+
+    $(document).on('click', '.photo-gallery-close', closePhotoGallery);
+    $(document).on('click', '.photo-gallery-prev', function() {
+        movePhotoGallery(-1);
+    });
+    $(document).on('click', '.photo-gallery-next', function() {
+        movePhotoGallery(1);
+    });
+    window.addEventListener('keydown', handlePhotoGalleryKeydown, true);
 
     $(document).on('change', '.coverage-aquatic-resource', function() {
         syncCoverageAquaticFields($(this).closest('.coverage-entry-item'));

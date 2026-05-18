@@ -127,6 +127,17 @@ function generateActualProjectId(): string
     }
 }
 
+function isProgramActivityGoogleDriveUrl(string $url): bool
+{
+    $host = strtolower((string) (parse_url($url, PHP_URL_HOST) ?? ''));
+    $isDriveSubdomain = substr($host, -17) === '.drive.google.com';
+    $isDocsSubdomain = substr($host, -16) === '.docs.google.com';
+
+    return in_array($host, ['drive.google.com', 'docs.google.com'], true)
+        || $isDriveSubdomain
+        || $isDocsSubdomain;
+}
+
 try {
     $stmt = $conn->prepare("
     INSERT INTO program_activity_metadata (
@@ -304,6 +315,8 @@ foreach ($rows as $row) {
     $coverageLandOwnershipsInput = is_array($row['coverage_land_ownerships'] ?? null) ? $row['coverage_land_ownerships'] : [];
     $coverageDriveLinksInput = is_array($row['coverage_drive_links'] ?? null) ? $row['coverage_drive_links'] : [];
     $coverageStatusesInput = is_array($row['coverage_actual_statuses'] ?? null) ? $row['coverage_actual_statuses'] : [];
+    $photoLinksInput = is_array($row['photo_links'] ?? null) ? $row['photo_links'] : [];
+    $photoFolderOptions = programActivityPhotoFolderOptions();
     $coverageCount = max(
         count($coveragePuroksInput),
         count($actualProjectIdsInput),
@@ -364,6 +377,7 @@ foreach ($rows as $row) {
     $normalizedCoverageDriveLinks = [];
     $coverageActualAccomplishments = [];
     $coverageStatuses = [];
+    $photoLinkRows = [];
 
     for ($coverageIndex = 0; $coverageIndex < $coverageCount; $coverageIndex++) {
         $coveragePurok = preg_replace('/\s+/', ' ', trim((string) ($coveragePuroksInput[$coverageIndex] ?? '')));
@@ -579,6 +593,42 @@ foreach ($rows as $row) {
         $normalizedCoverageDriveLinks[] = $coverageDriveLink;
         $coverageActualAccomplishments[] = $coverageActualAccomplishment;
         $coverageStatuses[] = $coverageStatus;
+    }
+
+    foreach ($photoLinksInput as $photoIndex => $photoLinkInput) {
+        if (!is_array($photoLinkInput)) {
+            continue;
+        }
+
+        $folderKey = preg_replace('/[^a-z0-9_]/', '', strtolower(trim((string) ($photoLinkInput['folder_key'] ?? ''))));
+        $driveLink = trim((string) ($photoLinkInput['drive_link'] ?? ''));
+
+        if ($folderKey === '' && $driveLink === '') {
+            continue;
+        }
+
+        if (!isset($photoFolderOptions[$folderKey])) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'message' => $barangay . ': choose a valid photo folder before saving a Google Drive photo link.']);
+            $stmt->close();
+            $targetLookupStmt->close();
+            exit;
+        }
+
+        if ($driveLink === '' || filter_var($driveLink, FILTER_VALIDATE_URL) === false || !isProgramActivityGoogleDriveUrl($driveLink)) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'message' => $barangay . ': photo links must be valid Google Drive share URLs.']);
+            $stmt->close();
+            $targetLookupStmt->close();
+            exit;
+        }
+
+        $photoLinkRows[] = [
+            'folder_key' => $folderKey,
+            'folder_label' => $photoFolderOptions[$folderKey],
+            'drive_link' => $driveLink,
+            'sort_order' => $photoIndex,
+        ];
     }
     $fundObligationPartnerBeneficiaries = isset($row['fund_obligation_partner_beneficiaries']) ? (int) $row['fund_obligation_partner_beneficiaries'] : 0;
     $fundDisbursementServedPartnerBeneficiaries = isset($row['fund_disbursement_served_partner_beneficiaries']) ? (int) $row['fund_disbursement_served_partner_beneficiaries'] : 0;
@@ -868,6 +918,7 @@ foreach ($rows as $row) {
 
         if ($metadataId > 0) {
             programActivityReplaceActualProjects($conn, $metadataId, $actualProjectRows);
+            programActivityReplacePhotoLinks($conn, $metadataId, $photoLinkRows);
             programActivityBackfillProjectCodes($conn, true);
         }
     }

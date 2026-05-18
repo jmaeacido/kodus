@@ -198,7 +198,7 @@ function security_content_security_policy(): string
         "form-action 'self'",
         "frame-ancestors 'self'",
         "object-src 'none'",
-        "img-src 'self' data: blob:",
+        "img-src 'self' data: blob: https://drive.google.com https://*.googleusercontent.com",
         "font-src 'self' data:",
         "style-src 'self' 'unsafe-inline'",
         trim("script-src 'self' 'unsafe-inline' 'unsafe-eval' " . $scriptSources),

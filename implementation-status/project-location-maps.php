@@ -8,7 +8,7 @@ security_set_content_security_policy(security_compile_content_security_policy([
     "form-action 'self'",
     "frame-ancestors 'self'",
     "object-src 'none'",
-    "img-src 'self' data: blob: https://*.tile.openstreetmap.org https://services.arcgisonline.com",
+    "img-src 'self' data: blob: https://*.tile.openstreetmap.org https://services.arcgisonline.com https://drive.google.com https://*.googleusercontent.com",
     "font-src 'self' data:",
     "style-src 'self' 'unsafe-inline'",
     trim("script-src 'self' 'unsafe-inline' 'unsafe-eval' " . implode(' ', $socketSources['script'])),
@@ -216,6 +216,137 @@ $selectedYear = (int) ($_SESSION['selected_year'] ?? date('Y'));
       text-transform: uppercase;
       letter-spacing: .04em;
       color: #16324f;
+    }
+    .photo-gallery-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+      gap: 10px;
+      margin-top: 10px;
+    }
+    .photo-drive-card {
+      position: relative;
+      display: block;
+      border: 1px solid rgba(13, 110, 253, 0.16);
+      border-radius: 12px;
+      overflow: hidden;
+      background: #fff;
+      color: inherit;
+      text-decoration: none;
+    }
+    .photo-drive-card:hover {
+      color: inherit;
+      text-decoration: none;
+      border-color: rgba(13, 110, 253, 0.55);
+    }
+    .photo-drive-card img {
+      display: block;
+      width: 100%;
+      aspect-ratio: 4 / 3;
+      object-fit: cover;
+      background: #e5e7eb;
+    }
+    .photo-drive-card span {
+      display: block;
+      padding: 7px 9px;
+      font-size: .75rem;
+      font-weight: 700;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .photo-album-card::before,
+    .photo-album-card::after {
+      content: "";
+      position: absolute;
+      inset: 8px 8px auto auto;
+      width: calc(100% - 12px);
+      height: 100%;
+      border-radius: 12px;
+      background: rgba(13, 110, 253, 0.16);
+      transform: translate(5px, -5px);
+      z-index: -1;
+    }
+    .photo-album-count {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      padding: 3px 7px;
+      border-radius: 999px;
+      background: rgba(0, 0, 0, 0.68);
+      color: #fff;
+      font-size: .72rem;
+      font-weight: 800;
+    }
+    .photo-folder-group {
+      margin-top: 12px;
+    }
+    .photo-folder-title {
+      display: block;
+      font-size: .78rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+      color: #5f7488;
+    }
+    .photo-gallery-viewer {
+      position: fixed;
+      inset: 0;
+      z-index: 1095;
+      display: none;
+      pointer-events: none;
+    }
+    .photo-gallery-viewer.is-open {
+      display: block;
+    }
+    .photo-gallery-panel {
+      position: absolute;
+      right: 24px;
+      bottom: 24px;
+      width: min(760px, calc(100vw - 32px));
+      max-height: min(720px, calc(100vh - 32px));
+      display: grid;
+      grid-template-rows: auto minmax(220px, 1fr) auto;
+      border-radius: 16px;
+      background: #111827;
+      color: #f9fafb;
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.38);
+      overflow: hidden;
+      pointer-events: auto;
+    }
+    .photo-gallery-header,
+    .photo-gallery-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 10px 12px;
+      background: rgba(255, 255, 255, 0.06);
+    }
+    .photo-gallery-stage {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      padding: 12px;
+      min-height: 280px;
+    }
+    .photo-gallery-stage img {
+      max-width: 100%;
+      max-height: calc(100vh - 190px);
+      object-fit: contain;
+      border-radius: 10px;
+    }
+    .photo-gallery-nav {
+      border: 0;
+      width: 40px;
+      height: 40px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.16);
+      color: #fff;
+    }
+    .photo-gallery-nav:disabled {
+      opacity: .35;
     }
     .project-filter-grid {
       display: grid;
@@ -433,14 +564,142 @@ $selectedYear = (int) ($_SESSION['selected_year'] ?? date('Y'));
       color: #16324f;
       font-weight: 700;
     }
-    .project-detail-modal .modal-body {
-      background: #ffffff;
-      padding: 1rem;
-    }
-    @media (max-width: 1199.98px) {
-      .project-map-layout {
-        grid-template-columns: 1fr;
-      }
+	    .project-detail-modal .modal-body {
+	      background: #ffffff;
+	      padding: 1rem;
+	    }
+	    body.dark-mode .project-detail-card,
+	    body[data-theme="dark"] .project-detail-card {
+	      background: #1f2937;
+	      color: #e8eef5;
+	      border-color: rgba(255, 255, 255, 0.08);
+	      box-shadow: 0 16px 32px rgba(0, 0, 0, 0.28);
+	    }
+	    body.dark-mode .project-detail-card .card-header,
+	    body[data-theme="dark"] .project-detail-card .card-header {
+	      background: rgba(17, 24, 39, 0.72);
+	      border-bottom-color: rgba(255, 255, 255, 0.08);
+	      color: #f8fafc;
+	    }
+	    body.dark-mode .project-detail-card .card-body,
+	    body[data-theme="dark"] .project-detail-card .card-body {
+	      background: #1f2937;
+	      color: #e8eef5;
+	    }
+	    body.dark-mode .project-detail-placeholder,
+	    body[data-theme="dark"] .project-detail-placeholder {
+	      background: rgba(125, 196, 255, 0.08);
+	      border-color: rgba(125, 196, 255, 0.22);
+	      color: #b4c3d3;
+	    }
+	    body.dark-mode .project-detail-section,
+	    body[data-theme="dark"] .project-detail-section {
+	      background: linear-gradient(180deg, rgba(31, 41, 55, 0.98), rgba(17, 24, 39, 0.96));
+	      border-color: rgba(125, 196, 255, 0.16);
+	    }
+	    body.dark-mode .project-detail-title,
+	    body.dark-mode .project-detail-section-title,
+	    body[data-theme="dark"] .project-detail-title,
+	    body[data-theme="dark"] .project-detail-section-title {
+	      color: #f8fafc;
+	    }
+	    body.dark-mode .project-detail-subtitle,
+	    body.dark-mode .project-detail-item dt,
+	    body.dark-mode .photo-folder-title,
+	    body[data-theme="dark"] .project-detail-subtitle,
+	    body[data-theme="dark"] .project-detail-item dt,
+	    body[data-theme="dark"] .photo-folder-title {
+	      color: #b4c3d3;
+	    }
+	    body.dark-mode .project-detail-item,
+	    body[data-theme="dark"] .project-detail-item {
+	      background: rgba(125, 196, 255, 0.08);
+	      border-color: rgba(125, 196, 255, 0.14);
+	    }
+	    body.dark-mode .project-detail-item dd,
+	    body[data-theme="dark"] .project-detail-item dd {
+	      color: #eef5ff;
+	    }
+	    body.dark-mode .project-detail-badge,
+	    body[data-theme="dark"] .project-detail-badge {
+	      background: rgba(125, 196, 255, 0.14);
+	      color: #d7ebff;
+	    }
+	    body.dark-mode .project-detail-badge--activity,
+	    body[data-theme="dark"] .project-detail-badge--activity {
+	      background: rgba(52, 211, 153, 0.14);
+	      color: #b7f7d8;
+	    }
+	    body.dark-mode .photo-drive-card,
+	    body[data-theme="dark"] .photo-drive-card {
+	      background: rgba(17, 24, 39, 0.9);
+	      border-color: rgba(125, 196, 255, 0.18);
+	      color: #e8eef5;
+	    }
+	    body.dark-mode .photo-drive-card:hover,
+	    body.dark-mode .photo-drive-card:focus,
+	    body[data-theme="dark"] .photo-drive-card:hover,
+	    body[data-theme="dark"] .photo-drive-card:focus {
+	      border-color: rgba(125, 196, 255, 0.48);
+	      color: #ffffff;
+	    }
+	    body.dark-mode .photo-drive-card img,
+	    body[data-theme="dark"] .photo-drive-card img {
+	      background: rgba(0, 0, 0, 0.25);
+	    }
+	    body.dark-mode .photo-album-card::before,
+	    body.dark-mode .photo-album-card::after,
+	    body[data-theme="dark"] .photo-album-card::before,
+	    body[data-theme="dark"] .photo-album-card::after {
+	      background: rgba(125, 196, 255, 0.16);
+	    }
+	    body.dark-mode .project-detail-modal .modal-content,
+	    body[data-theme="dark"] .project-detail-modal .modal-content {
+	      background: #1f2937;
+	      color: #e8eef5;
+	    }
+	    body.dark-mode .project-detail-modal .modal-header,
+	    body[data-theme="dark"] .project-detail-modal .modal-header {
+	      background: rgba(17, 24, 39, 0.98);
+	      border-bottom-color: rgba(255, 255, 255, 0.08);
+	    }
+	    body.dark-mode .project-detail-modal .modal-title,
+	    body[data-theme="dark"] .project-detail-modal .modal-title {
+	      color: #f8fafc;
+	    }
+	    body.dark-mode .project-detail-modal .modal-body,
+	    body[data-theme="dark"] .project-detail-modal .modal-body {
+	      background: #1f2937;
+	    }
+	    body.dark-mode .project-detail-modal .close,
+	    body[data-theme="dark"] .project-detail-modal .close {
+	      color: #f8fafc;
+	      text-shadow: none;
+	      opacity: .82;
+	    }
+	    body[data-theme="light"] .project-detail-card {
+	      background: #ffffff;
+	      color: #1f2d3d;
+	      border-color: rgba(13, 110, 253, 0.08);
+	    }
+	    body[data-theme="light"] .project-detail-card .card-header,
+	    body[data-theme="light"] .project-detail-card .card-body {
+	      background: #ffffff;
+	      color: #1f2d3d;
+	    }
+	    body[data-theme="light"] .project-detail-placeholder {
+	      background: rgba(13, 110, 253, 0.04);
+	      border-color: rgba(13, 110, 253, 0.2);
+	      color: #6b7280;
+	    }
+	    body[data-theme="light"] .photo-drive-card {
+	      background: #ffffff;
+	      color: #1f2d3d;
+	    }
+	    @media (max-width: 1199.98px) {
+	      .project-map-layout {
+	        grid-template-columns: 1fr;
+	      }
       .project-detail-card {
         position: static;
       }
@@ -775,6 +1034,155 @@ $(function() {
         return text !== '' ? escapeHtml(text) : `<span class="text-muted">${escapeHtml(fallback)}</span>`;
     }
 
+    const PHOTO_FOLDER_OPTIONS = [
+        { key: 'site_validation', label: 'Site Validation' },
+        { key: 'cft_stage_1', label: 'CFT Stage 1' },
+        { key: 'before_implementation', label: 'Before Implementation' },
+        { key: 'during_implementation', label: 'During Implementation' },
+        { key: 'after_implementation', label: 'After Implementation' },
+        { key: 'cft_stage_3', label: 'CFT Stage 3' }
+    ];
+
+    function escapeAttribute(value) {
+        return escapeHtml(value).replace(/"/g, '&quot;');
+    }
+
+    function getPhotoFolderLabel(folderKey) {
+        const option = PHOTO_FOLDER_OPTIONS.find(item => item.key === folderKey);
+        return option ? option.label : 'Photo Documentation';
+    }
+
+    function extractGoogleDriveFileId(url) {
+        const value = String(url || '').trim();
+        const patterns = [
+            /drive\.google\.com\/file\/d\/([A-Za-z0-9_-]{10,})/i,
+            /drive\.google\.com\/open\?id=([A-Za-z0-9_-]{10,})/i,
+            /drive\.google\.com\/uc\?(?:[^#]*&)?id=([A-Za-z0-9_-]{10,})/i
+        ];
+
+        for (const pattern of patterns) {
+            const match = value.match(pattern);
+            if (match && match[1]) {
+                return match[1];
+            }
+        }
+
+        try {
+            return new URL(value).searchParams.get('id') || '';
+        } catch (error) {
+            return '';
+        }
+    }
+
+    function googleDriveThumbnailUrl(url) {
+        const fileId = extractGoogleDriveFileId(url);
+        return fileId ? `https://drive.google.com/thumbnail?id=${encodeURIComponent(fileId)}&sz=w1000` : '';
+    }
+
+    function renderPhotoDriveCard(url, label, galleryLinks) {
+        const trimmedUrl = String(url || '').trim();
+        if (!trimmedUrl) {
+            return '';
+        }
+
+        const cleanGalleryLinks = (Array.isArray(galleryLinks) ? galleryLinks : [trimmedUrl]).map(link => String(link || '').trim()).filter(Boolean);
+        const thumbnailUrl = googleDriveThumbnailUrl(trimmedUrl);
+        const safeLabel = escapeHtml(label || 'Google Drive photo');
+        const countBadge = cleanGalleryLinks.length > 1 ? `<b class="photo-album-count">${cleanGalleryLinks.length}</b>` : '';
+        const albumClass = cleanGalleryLinks.length > 1 ? ' photo-album-card' : '';
+        const media = thumbnailUrl
+            ? `<img src="${escapeAttribute(thumbnailUrl)}" alt="${safeLabel}" loading="lazy">`
+            : '<span>Open Drive photo</span>';
+
+        return `<a class="photo-drive-card${albumClass}" href="${escapeAttribute(trimmedUrl)}" target="_blank" rel="noopener noreferrer" data-photo-gallery="${escapeAttribute(JSON.stringify(cleanGalleryLinks))}" data-photo-title="${safeLabel}">${media}${countBadge}<span>${safeLabel}</span></a>`;
+    }
+
+    function renderPhotoGallery(photoLinks) {
+        const links = Array.isArray(photoLinks) ? photoLinks : [];
+        const groups = {};
+        links.forEach(link => {
+            const folderKey = String(link.folder_key || '').trim();
+            const driveLink = String(link.drive_link || '').trim();
+            if (!folderKey || !driveLink) return;
+            if (!groups[folderKey]) groups[folderKey] = [];
+            groups[folderKey].push(driveLink);
+        });
+
+        const html = PHOTO_FOLDER_OPTIONS.map(option => {
+            const folderLinks = groups[option.key] || [];
+            if (!folderLinks.length) return '';
+            return `
+                <div class="photo-folder-group">
+                    <span class="photo-folder-title">${escapeHtml(option.label)}</span>
+                    <div class="photo-gallery-grid">
+                        ${renderPhotoDriveCard(folderLinks[0], `${option.label} (${folderLinks.length})`, folderLinks)}
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        return html || '<span class="text-muted">No photo documentation links recorded yet.</span>';
+    }
+
+    let activePhotoGallery = { links: [], index: 0, title: '' };
+
+    function ensurePhotoGalleryViewer() {
+        let $viewer = $('#photoGalleryViewer');
+        if ($viewer.length) return $viewer;
+        $('body').append(`
+            <div class="photo-gallery-viewer" id="photoGalleryViewer" aria-live="polite">
+                <div class="photo-gallery-panel" role="dialog" aria-label="Photo gallery">
+                    <div class="photo-gallery-header">
+                        <strong id="photoGalleryTitle">Photo Gallery</strong>
+                        <button type="button" class="btn btn-sm btn-outline-light photo-gallery-close" aria-label="Close">&times;</button>
+                    </div>
+                    <div class="photo-gallery-stage">
+                        <button type="button" class="photo-gallery-nav photo-gallery-prev" aria-label="Previous photo"><i class="fas fa-chevron-left" aria-hidden="true"></i></button>
+                        <img id="photoGalleryImage" src="" alt="">
+                        <button type="button" class="photo-gallery-nav photo-gallery-next" aria-label="Next photo"><i class="fas fa-chevron-right" aria-hidden="true"></i></button>
+                    </div>
+                    <div class="photo-gallery-footer">
+                        <span id="photoGalleryCounter"></span>
+                        <a id="photoGalleryOpenLink" class="btn btn-sm btn-primary" href="#" target="_blank" rel="noopener noreferrer">Open Drive Link</a>
+                    </div>
+                </div>
+            </div>
+        `);
+        return $('#photoGalleryViewer');
+    }
+
+    function updatePhotoGalleryViewer() {
+        const $viewer = ensurePhotoGalleryViewer();
+        const links = activePhotoGallery.links;
+        const index = Math.max(0, Math.min(activePhotoGallery.index, links.length - 1));
+        const currentUrl = links[index] || '';
+        activePhotoGallery.index = index;
+        $viewer.find('#photoGalleryTitle').text(activePhotoGallery.title || 'Photo Gallery');
+        $viewer.find('#photoGalleryImage').attr('src', googleDriveThumbnailUrl(currentUrl) || currentUrl).attr('alt', activePhotoGallery.title || 'Photo Gallery');
+        $viewer.find('#photoGalleryCounter').text(`${index + 1} of ${links.length}`);
+        $viewer.find('#photoGalleryOpenLink').attr('href', currentUrl);
+        $viewer.find('.photo-gallery-prev').prop('disabled', index <= 0);
+        $viewer.find('.photo-gallery-next').prop('disabled', index >= links.length - 1);
+    }
+
+    function openPhotoGallery(links, title) {
+        const cleanLinks = (Array.isArray(links) ? links : []).map(link => String(link || '').trim()).filter(Boolean);
+        if (!cleanLinks.length) return;
+        activePhotoGallery = { links: cleanLinks, index: 0, title: title || 'Photo Gallery' };
+        ensurePhotoGalleryViewer().addClass('is-open');
+        updatePhotoGalleryViewer();
+    }
+
+    function closePhotoGallery() {
+        $('#photoGalleryViewer').removeClass('is-open');
+    }
+
+    function movePhotoGallery(direction) {
+        if (!$('#photoGalleryViewer').hasClass('is-open')) return;
+        activePhotoGallery.index += direction;
+        updatePhotoGalleryViewer();
+    }
+
     function titleCaseStatus(value) {
         const normalized = String(value || '').trim();
         if (normalized === '') {
@@ -873,6 +1281,10 @@ $(function() {
                 <div class="project-detail-grid">
                     ${extraEntries.map(([label, value, fallback]) => buildDetailGridItem(label, value, fallback)).join('')}
                 </div>
+            </div>
+            <div class="project-detail-section">
+                <h5 class="project-detail-section-title">Photo Documentation</h5>
+                ${renderPhotoGallery(details.photo_links || [])}
             </div>
         `;
 
@@ -1100,6 +1512,38 @@ $(function() {
         event.preventDefault();
         const projectId = String($(this).data('projectId') || '');
         selectMarkerById(projectId, { openPopup: true, focusMap: true, showModal: true });
+    });
+
+    $(document).on('click', '.photo-drive-card', function(event) {
+        const payload = $(this).attr('data-photo-gallery') || '';
+        if (!payload) return;
+        try {
+            const links = JSON.parse(payload);
+            if (Array.isArray(links) && links.length) {
+                event.preventDefault();
+                openPhotoGallery(links, $(this).attr('data-photo-title') || 'Photo Gallery');
+            }
+        } catch (error) {
+            // Keep the normal Drive link behavior.
+        }
+    });
+
+    $(document).on('click', '.photo-gallery-close', closePhotoGallery);
+    $(document).on('click', '.photo-gallery-prev', function() {
+        movePhotoGallery(-1);
+    });
+    $(document).on('click', '.photo-gallery-next', function() {
+        movePhotoGallery(1);
+    });
+    $(document).on('keydown', function(event) {
+        if (!$('#photoGalleryViewer').hasClass('is-open')) return;
+        if (event.key === 'Escape') {
+            closePhotoGallery();
+        } else if (event.key === 'ArrowLeft') {
+            movePhotoGallery(-1);
+        } else if (event.key === 'ArrowRight') {
+            movePhotoGallery(1);
+        }
     });
 
     $(window).on('resize', function() {
